@@ -1,0 +1,292 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<hibernate-mapping xmlns="urn:nhibernate-mapping-2.2"
+   assembly="Model"
+   namespace="Model">
+
+  <class name ="Authorization">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+    </composite-id>
+    <property name="CreateTime" />
+    <property name="Creater" />
+    <property name="AuthorizeTo" />
+    <property name="AuthorizedDept" />
+    <property name="AuthorizationTime" />
+    <property name="InvalidTime" />
+    <property name="Remark" />
+  </class>
+
+  <class name ="DBC">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+      <key-property name="DBCName" column="DBCName" />
+    </composite-id>
+    <property name="BelongCAN" />
+    <property name="DBCContent" />
+    <property name="ImportUser" />
+    <property name="ImportTime" />
+    <property name="FormerDBCName" />
+    <property name="CANType" />
+  </class>
+
+  <class name ="UploadInfo">
+    <id name="IP"/>
+    <property name="Port" />
+    <property name="User" />
+    <property name="Password" />
+    <property name="UploadPath" />
+  </class>
+
+  <class name ="ConfigTemp">
+    <id name="Name"/>
+    <property name="Version" />
+    <property name="Content" />
+    <property name="MatchSort" />
+    <property name="ImportDate" />
+  </class>
+
+  
+  <class name ="FaultType">
+    <composite-id >
+      <key-property name="ErrorType" column="ErrorType" />
+    </composite-id>
+    
+    <property name="IsMessage" />
+    <property name="MessageCount" />
+    <property name="MsgInformation" />
+    <property name="CheckInfor" />
+  </class>
+  <class name ="ProjectFiles">
+    <id name="ProName"/>
+    <property name="Content" />
+    <property name="UploadUser" />
+    <property name="UploadDate" />
+  </class>
+
+  <class name ="OperationLog">
+    <id name="OperNo"/>
+    <property name="OperDate" />
+    <property name="EmployeeNo" />
+    <property name="EmployeeName" />
+    <property name="OperRecord" />
+    <property name="OperTable" />
+  </class>
+
+  <class name ="LoginLog">
+    <id name="LoginNo"/>
+    <property name="EmployeeNo" />
+    <property name="EmployeeName" />
+    <property name="Department" />
+    <property name="LoginDate" />
+    <property name="LoginOffDate" />
+  </class>
+
+  <class name ="Suppliers">
+    <composite-id >
+      <key-property name="Module" column="Module" />
+      <key-property name="Type" column="Type" />
+      <key-property name="Supplier" column="Supplier"/>
+    </composite-id>
+    <property name="Contact" />
+    <property name="Tel" />
+  </class>
+
+  <class name ="ExampleTemp">
+    <id name="Name"/>
+    <property name="Version" />
+    <property name="Content" />
+    <property name="MatchSort" />
+    <property name="ImportDate" />
+    <property name="EmlTemplate" />
+    <property name="BusType" />
+  </class>
+
+  <class name ="Department">
+    <id name="Name"/>
+    <property name="Master" />
+    <property name="NumForDept" />
+    <property name="Remark" />
+  </class>
+
+  <class name ="Report">
+    <composite-id >
+      <key-property name="TaskNo" column="TaskNo" />
+      <key-property name="TaskRound" column="TaskRound"/>
+      <key-property name="TaskName" column="TaskName"/>
+      <key-property name="CANRoad" column="CANRoad"/>
+      <key-property name="Module" column="Module"/>
+      <key-property name="TestTime" column="TestTime" />
+    </composite-id>
+    <property name="ManualReport" />
+    <property name="AutoReport" />
+    <property name="TestUser" />
+    <property name="Remark" />
+   <property name="ErrorInfo" /> 
+  </class>
+  
+  <class name ="ReportInfo">
+    <composite-id >
+      <key-property name="TaskNo" column="TaskNo" />
+      <key-property name="TaskRound" column="TaskRound"/>
+      <key-property name="TaskName" column="TaskName"/>
+      <key-property name="CANRoad" column="CANRoad"/>
+      <key-property name="Module" column="Module"/>
+      <key-property name="TestTime" column="TestTime" />
+    </composite-id>
+    <property name="ReportTestList" />
+    <property name="ReportCoverInfo" />
+    <property name="ReportMainInfo" />
+    <property name="ReportPathInfo" />
+    <property name="TestUser" />
+    <property name="Remark" />
+    <property name="ErrorInfo" />
+  </class>
+
+  <class name ="Segment">
+    <id name="SegmentName"/>
+    <property name="Baud" />
+    <property name="Correspond" />
+  </class>
+<class name ="ExapChapter">
+    <id name="ChapterName"/>
+    <property name="TestType" />  
+</class>
+  <class name ="NodeConfigurationBox">
+    <id name="Name"/>
+    <property name="ID" />
+    <property name="Count" />
+  </class>
+
+  <class name ="FileLinkByVehicel">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+    </composite-id>
+    <property name="MatchSort" />
+    <property name="Topology" />
+    <property name="CfgTemplateName" />
+    <property name="CfgTemplate" />
+    <property name="CfgTemplateJson" />
+    <property name="CfgBaudJson" />
+    <property name="EmlTemplateName" />
+    <property name="EmlTemplate" />
+    <property name ="TplyDescrible"/>
+    <property name="ConTableColEdit" />
+    <property name ="EmlTableColEdit"/>
+
+  </class>
+  
+  <class name ="Topology">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+    </composite-id>
+    <property name="Tply" />
+    <property name="TplyDescrible" />
+    <property name="ImportUser" />
+    <property name="ImportTime" />
+  </class>
+
+  <class name ="Employee">
+    <id  name="ElyNo"/>
+    <property name="ElyName" />
+    <property name="ElyRole" />
+    <property name="Department" />
+    <property name="Sex" />
+    <property name="Contact" />
+    <property name="Mail" />
+    <property name="Password" />
+    <property name="Remark" />
+  </class>
+
+  <class name ="Task">
+    <composite-id >
+      <key-property name="TaskNo" column="TaskNo" />
+      <key-property name="TaskRound" column="TaskRound" />
+      <key-property name="TaskName" column="TaskName"/>
+      <key-property name="CANRoad" column="CANRoad" />
+      <key-property name="Module" column="Module"/>
+    </composite-id>
+    <property name="TestType" />
+    <property name="CreateTime" />
+    <property name="Creater" />
+    <property name="AuthTester" />
+    <property name="AuthorizedFromDept" />
+    <property name="Supplier" />
+    
+    <property name="ContainExmp" />
+    <property name="AuthorizationTime" />
+    <property name="InvalidTime" />
+    <property name="Remark" />
+  </class>
+  <class name ="QuestionNote">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+      <key-property name="TaskRound" column="TaskRound" />
+      <key-property name="TestType" column="TestType" />
+      <key-property name="Module" column="Module"/>
+      <!--<key-property name="ExapID" column="ExapID" />
+      <key-property name="AssessItem" column="AssessItem"/>-->
+      <key-property name="TestTime" column="TestTime"/>
+    </composite-id>
+    <!--<property name="VehicelType"/>
+    <property name="VehicelConfig"/>
+    <property name="VehicelStage"/>
+    <property name="TaskRound" />
+    <property name="TestType" />
+    <property name="Module" />-->
+    <!--<property name="ExapID" />-->
+    
+    <property name="FailItemInfo" />
+    <!--<property name="ExapName" />
+    <property name="DescriptionOfValue" />
+    <property name="MinValue" />
+    <property name="MaxValue" />
+    <property name="NormalValue" />
+    <property name="TestValue" />
+    <property name="Result" />-->
+    
+
+  </class>
+
+<class name ="PassReportNote">
+    <composite-id >
+      <key-property name="VehicelType" column="VehicelType" />
+      <key-property name="VehicelConfig" column="VehicelConfig" />
+      <key-property name="VehicelStage" column="VehicelStage"/>
+      <key-property name="TaskRound" column="TaskRound" />
+      <key-property name="TestType" column="TestType" />
+      <key-property name="Module" column="Module"/>
+      <!--<key-property name="ExapID" column="ExapID" />
+      <key-property name="AssessItem" column="AssessItem"/>-->
+      <key-property name="TestTime" column="TestTime"/>
+    </composite-id>
+    <!--<property name="VehicelType"/>
+    <property name="VehicelConfig"/>
+    <property name="VehicelStage"/>
+    <property name="TaskRound" />
+    <property name="TestType" />
+    <property name="Module" />-->
+    <!--<property name="ExapID" />-->
+    <property name="FailItemInfo" />
+    
+    <!--<property name="AssessItem" />--><!--
+    <property name="ExapName" />
+    <property name="DescriptionOfValue" /> 
+    <property name="MinValue" />
+    <property name="MaxValue" />
+    <property name="NormalValue" />
+    <property name="TestValue" />
+    <property name="Result" />-->
+    
+
+  </class>
+</hibernate-mapping>

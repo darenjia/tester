@@ -1,0 +1,20 @@
+# 测试依赖
+
+# 测试框架
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+pytest-cov>=4.1.0
+
+# 代码覆盖率
+coverage>=7.0.0
+
+# 类型检查
+mypy>=1.0.0
+
+# 代码质量
+flake8>=6.0.0
+black>=23.0.0
+
+# 其他工具
+responses>=0.23.0

@@ -1,0 +1,46 @@
+# Python执行器 - 生产环境依赖
+# 版本: 2.0.0
+
+# WebSocket通信
+flask==3.0.0
+flask-socketio==5.3.0
+python-socketio==5.9.0
+
+# 生产环境WSGI服务器
+waitress==2.1.2
+gunicorn==21.2.0
+
+# 性能监控
+psutil==5.9.6
+
+# 日志处理
+python-json-logger==2.0.7
+
+# 数据验证
+jsonschema==4.20.0
+
+# 配置管理
+PyYAML==6.0.1
+
+# Windows COM接口（Windows环境必需）
+pywin32==306; platform_system=="Windows"
+
+# 工具库
+requests==2.31.0
+python-dateutil==2.8.2
+
+# 类型提示
+typing-extensions==4.8.0
+
+# 测试（可选，生产环境可移除）
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+
+# 代码质量（可选，生产环境可移除）
+flake8==6.1.0
+black==23.11.0
+mypy==1.7.1
+
+# 安全相关
+cryptography==41.0.7

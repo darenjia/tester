@@ -1,0 +1,291 @@
+# GitLab CI/CD 配置
+# Python执行器自动化部署流水线
+
+stages:
+  - build
+  - test
+  - package
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  EXECUTOR_VERSION: "2.0.0"
+  DEPLOY_DIR: "C:\\PythonExecutor"
+
+# 缓存配置
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+# 构建阶段
+build:
+  stage: build
+  script:
+    - python -m venv venv
+    - venv\Scripts\activate
+    - pip install -r requirements_production.txt
+    - echo "${EXECUTOR_VERSION}-${CI_COMMIT_SHORT_SHA}" > version.txt
+  artifacts:
+    paths:
+      - version.txt
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+
+# 测试阶段
+test:
+  stage: test
+  script:
+    - venv\Scripts\activate
+    - pip install pytest pytest-cov
+    - pytest tests/ -v --cov=core --cov-report=xml --cov-report=html
+  coverage: '/TOTAL.+ ([0-9]{1,3}%)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# 代码质量检查
+lint:
+  stage: test
+  script:
+    - venv\Scripts\activate
+    - pip install flake8 black mypy
+    - flake8 core/ utils/ models/ --max-line-length=120 --extend-ignore=E203,W503
+    - black --check core/ utils/ models/
+    - mypy core/ utils/ models/ --ignore-missing-imports
+  allow_failure: true
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# 打包阶段
+package:
+  stage: package
+  script:
+    - |
+      # 创建部署包
+      $exclude = @("*.pyc", "__pycache__", ".git", "logs", "backup*", "venv", ".cache", "htmlcov", ".pytest_cache")
+      $tempDir = "python_executor_v${EXECUTOR_VERSION}"
+      
+      # 复制文件到临时目录
+      New-Item -ItemType Directory -Path $tempDir -Force
+      Get-ChildItem -Exclude $exclude | Copy-Item -Destination $tempDir -Recurse -Force
+      
+      # 创建压缩包
+      Compress-Archive -Path $tempDir -DestinationPath "python_executor_v${EXECUTOR_VERSION}.zip" -Force
+      
+      # 清理
+      Remove-Item $tempDir -Recurse -Force
+  artifacts:
+    name: "python_executor_v${EXECUTOR_VERSION}"
+    paths:
+      - "python_executor_v${EXECUTOR_VERSION}.zip"
+    expire_in: 30 days
+  only:
+    - main
+    - tags
+
+# 部署到开发环境
+deploy_dev:
+  stage: deploy
+  environment:
+    name: development
+    url: http://dev-executor-server:8080
+  script:
+    - |
+      # 部署到开发环境
+      $devices = Get-Content deploy\devices_dev.txt
+      foreach ($device in $devices) {
+        Write-Host "Deploying to $device..."
+        # 复制部署包
+        Copy-Item "python_executor_v${EXECUTOR_VERSION}.zip" "\\$device\c$\temp\" -Force
+        
+        # 远程执行部署
+        Invoke-Command -ComputerName $device -ScriptBlock {
+          $installDir = "C:\PythonExecutor"
+          $zipFile = "C:\temp\python_executor_v${using:EXECUTOR_VERSION}.zip"
+          
+          # 停止服务
+          Stop-Service PythonExecutor -ErrorAction SilentlyContinue
+          
+          # 备份
+          if (Test-Path $installDir) {
+            Rename-Item $installDir "$installDir.backup.$(Get-Date -Format 'yyyyMMddHHmmss')" -Force
+          }
+          
+          # 解压
+          Expand-Archive -Path $zipFile -DestinationPath $installDir -Force
+          
+          # 安装依赖
+          Set-Location $installDir
+          python -m pip install -r requirements_production.txt -q
+          
+          # 启动服务
+          .\deploy\install-service.ps1 -Action install -Force
+        }
+      }
+  only:
+    - develop
+  when: manual
+
+# 部署到测试环境
+deploy_test:
+  stage: deploy
+  environment:
+    name: testing
+    url: http://test-executor-server:8080
+  script:
+    - |
+      # 使用批量部署脚本
+      .\deploy\deploy-batch.ps1 `
+        -DeviceList deploy\devices_test.txt `
+        -Action deploy `
+        -SourcePath . `
+        -ConfigTemplate deploy\config\config.test.json `
+        -Parallel 2
+  only:
+    - main
+  when: manual
+
+# 部署到生产环境
+deploy_prod:
+  stage: deploy
+  environment:
+    name: production
+    url: http://prod-executor-server:8080
+  script:
+    - |
+      Write-Host "========================================"
+      Write-Host "部署到生产环境"
+      Write-Host "版本: v${EXECUTOR_VERSION}"
+      Write-Host "========================================"
+      
+      # 确认部署
+      $confirm = Read-Host "确认部署到生产环境? [Y/N]"
+      if ($confirm -ne 'Y') {
+        Write-Host "部署已取消"
+        exit 1
+      }
+      
+      # 批量部署
+      .\deploy\deploy-batch.ps1 `
+        -DeviceList deploy\devices_prod.txt `
+        -Action deploy `
+        -SourcePath . `
+        -ConfigTemplate deploy\config\config.production.json `
+        -Parallel 1  # 生产环境串行部署，降低风险
+      
+      # 验证部署
+      .\deploy\deploy-batch.ps1 -DeviceList deploy\devices_prod.txt -Action status
+  only:
+    - tags
+  when: manual
+  allow_failure: false
+
+# 回滚生产环境
+rollback_prod:
+  stage: deploy
+  script:
+    - |
+      Write-Host "========================================"
+      Write-Host "回滚生产环境"
+      Write-Host "========================================"
+      
+      $confirm = Read-Host "确认回滚生产环境? [Y/N]"
+      if ($confirm -ne 'Y') {
+        Write-Host "回滚已取消"
+        exit 1
+      }
+      
+      # 批量回滚（使用备份）
+      $devices = Get-Content deploy\devices_prod.txt
+      foreach ($device in $devices) {
+        Invoke-Command -ComputerName $device -ScriptBlock {
+          $installDir = "C:\PythonExecutor"
+          
+          # 查找最近的备份
+          $backup = Get-ChildItem "C:\" -Filter "PythonExecutor.backup.*" | 
+                    Sort-Object LastWriteTime -Descending | 
+                    Select-Object -First 1
+          
+          if ($backup) {
+            Stop-Service PythonExecutor
+            Remove-Item $installDir -Recurse -Force
+            Copy-Item $backup.FullName $installDir -Recurse
+            Start-Service PythonExecutor
+            Write-Host "回滚完成: $($backup.Name)"
+          } else {
+            Write-Error "未找到备份"
+          }
+        }
+      }
+  only:
+    - tags
+  when: manual
+  allow_failure: false
+
+# 健康检查
+health_check:
+  stage: deploy
+  script:
+    - |
+      $devices = Get-Content deploy\devices_prod.txt
+      $failed = @()
+      
+      foreach ($device in $devices) {
+        try {
+          $response = Invoke-RestMethod -Uri "http://${device}:8080/health" -TimeoutSec 10
+          if ($response.status -eq "healthy") {
+            Write-Host "[$device] 健康检查通过" -ForegroundColor Green
+          } else {
+            Write-Host "[$device] 健康检查失败: $($response.status)" -ForegroundColor Red
+            $failed += $device
+          }
+        } catch {
+          Write-Host "[$device] 健康检查异常: $_" -ForegroundColor Red
+          $failed += $device
+        }
+      }
+      
+      if ($failed.Count -gt 0) {
+        Write-Error "以下设备健康检查失败: $($failed -join ', ')"
+      }
+  only:
+    - main
+    - tags
+  when: on_success
+
+# 清理旧备份
+cleanup:
+  stage: deploy
+  script:
+    - |
+      $devices = Get-Content deploy\devices_prod.txt
+      foreach ($device in $devices) {
+        Invoke-Command -ComputerName $device -ScriptBlock {
+          # 删除7天前的备份
+          Get-ChildItem "C:\" -Filter "PythonExecutor.backup.*" | 
+            Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } |
+            Remove-Item -Recurse -Force
+          
+          # 删除30天前的日志
+          Get-ChildItem "C:\PythonExecutor\logs" -Filter "*.log*" |
+            Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
+            Remove-Item -Force
+        }
+      }
+  only:
+    - schedules
+  when: on_success

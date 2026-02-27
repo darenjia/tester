@@ -1,0 +1,439 @@
+"""
+CANoe测试工具适配器
+
+基于COM接口实现CANoe自动化控制
+支持CANoe 10/11/12/13/14/15/16/17等版本
+"""
+
+import time
+import logging
+from typing import Optional, Dict, Any
+
+from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
+
+# 尝试导入pywin32
+try:
+    import win32com.client
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+    logging.warning("pywin32未安装，CANoe适配器将无法使用")
+
+
+class CANoeAdapter(BaseTestAdapter):
+    """
+    CANoe测试工具适配器
+    
+    通过COM接口控制CANoe软件，支持以下功能：
+    - 连接/断开CANoe应用
+    - 加载配置文件(.cfg)
+    - 启动/停止测量
+    - 信号读写
+    - 系统变量操作
+    - 测试模块执行
+    """
+    
+    def __init__(self, config: dict = None):
+        """
+        初始化CANoe适配器
+        
+        Args:
+            config: 配置字典，可包含：
+                - app_name: CANoe应用名称（默认"CANoe.Application"）
+                - start_timeout: 启动超时时间（默认30秒）
+                - stop_timeout: 停止超时时间（默认10秒）
+        """
+        super().__init__(config)
+        self.app_name = self.config.get("app_name", "CANoe.Application")
+        self.start_timeout = self.config.get("start_timeout", 30)
+        self.stop_timeout = self.config.get("stop_timeout", 10)
+        
+        self._app = None
+        self._measurement = None
+        self._bus_systems = None
+        self._system_variables = None
+        
+    @property
+    def tool_type(self) -> TestToolType:
+        """返回测试工具类型"""
+        return TestToolType.CANOE
+    
+    def connect(self) -> bool:
+        """
+        连接CANoe应用
+        
+        Returns:
+            连接成功返回True，否则返回False
+        """
+        if not WIN32_AVAILABLE:
+            self._set_error("pywin32未安装，无法连接CANoe")
+            return False
+        
+        try:
+            self.status = AdapterStatus.CONNECTING
+            self.logger.info(f"正在连接CANoe应用: {self.app_name}")
+            
+            # 创建COM对象
+            self._app = win32com.client.Dispatch(self.app_name)
+            
+            # 获取测量对象
+            self._measurement = self._app.Measurement
+            
+            # 获取总线系统
+            self._bus_systems = self._app.BusSystems
+            
+            # 获取系统变量
+            self._system_variables = self._app.SystemVariables
+            
+            self.status = AdapterStatus.CONNECTED
+            self._clear_error()
+            self.logger.info("CANoe连接成功")
+            return True
+            
+        except Exception as e:
+            self._set_error(f"CANoe连接失败: {str(e)}")
+            return False
+    
+    def disconnect(self) -> bool:
+        """
+        断开CANoe连接
+        
+        Returns:
+            断开成功返回True，否则返回False
+        """
+        try:
+            # 停止测量（如果正在运行）
+            if self._measurement and self._measurement.Running:
+                self.stop_test()
+            
+            # 释放COM对象
+            self._app = None
+            self._measurement = None
+            self._bus_systems = None
+            self._system_variables = None
+            
+            self.status = AdapterStatus.DISCONNECTED
+            self.logger.info("CANoe连接已断开")
+            return True
+            
+        except Exception as e:
+            self._set_error(f"CANoe断开连接失败: {str(e)}")
+            return False
+    
+    def load_configuration(self, config_path: str) -> bool:
+        """
+        加载CANoe配置文件
+        
+        Args:
+            config_path: 配置文件路径(.cfg)
+            
+        Returns:
+            加载成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("CANoe未连接，无法加载配置")
+            return False
+        
+        try:
+            self.logger.info(f"正在加载配置文件: {config_path}")
+            self._app.Open(config_path)
+            self.logger.info("配置文件加载成功")
+            return True
+            
+        except Exception as e:
+            self._set_error(f"配置文件加载失败: {str(e)}")
+            return False
+    
+    def start_test(self) -> bool:
+        """
+        启动CANoe测量
+        
+        Returns:
+            启动成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("CANoe未连接，无法启动测量")
+            return False
+        
+        try:
+            if self._measurement.Running:
+                self.logger.warning("测量已在运行")
+                return True
+            
+            self.logger.info("正在启动测量...")
+            self._measurement.Start()
+            
+            # 等待启动完成
+            timeout = self.start_timeout
+            while not self._measurement.Running and timeout > 0:
+                time.sleep(0.5)
+                timeout -= 0.5
+            
+            if self._measurement.Running:
+                self.status = AdapterStatus.RUNNING
+                self.logger.info("测量已启动")
+                return True
+            else:
+                self._set_error("测量启动超时")
+                return False
+                
+        except Exception as e:
+            self._set_error(f"启动测量失败: {str(e)}")
+            return False
+    
+    def stop_test(self) -> bool:
+        """
+        停止CANoe测量
+        
+        Returns:
+            停止成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("CANoe未连接，无法停止测量")
+            return False
+        
+        try:
+            if not self._measurement.Running:
+                self.logger.warning("测量未在运行")
+                return True
+            
+            self.logger.info("正在停止测量...")
+            self._measurement.Stop()
+            
+            # 等待停止完成
+            timeout = self.stop_timeout
+            while self._measurement.Running and timeout > 0:
+                time.sleep(0.5)
+                timeout -= 0.5
+            
+            if not self._measurement.Running:
+                self.status = AdapterStatus.CONNECTED
+                self.logger.info("测量已停止")
+                return True
+            else:
+                self._set_error("测量停止超时")
+                return False
+                
+        except Exception as e:
+            self._set_error(f"停止测量失败: {str(e)}")
+            return False
+    
+    def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行单个测试项
+        
+        支持的测试项类型：
+        - signal_check: 信号检查
+        - signal_set: 信号设置
+        - sysvar_check: 系统变量检查
+        - sysvar_set: 系统变量设置
+        - test_module: 执行测试模块
+        
+        Args:
+            item: 测试项配置字典
+            
+        Returns:
+            测试结果字典
+        """
+        item_type = item.get("type")
+        item_name = item.get("name", "unnamed")
+        
+        self.logger.info(f"执行测试项: {item_name} (类型: {item_type})")
+        
+        try:
+            if item_type == "signal_check":
+                return self._execute_signal_check(item)
+            elif item_type == "signal_set":
+                return self._execute_signal_set(item)
+            elif item_type == "sysvar_check":
+                return self._execute_sysvar_check(item)
+            elif item_type == "sysvar_set":
+                return self._execute_sysvar_set(item)
+            elif item_type == "test_module":
+                return self._execute_test_module(item)
+            else:
+                return {
+                    "name": item_name,
+                    "type": item_type,
+                    "status": "error",
+                    "error": f"不支持的测试项类型: {item_type}"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"执行测试项失败: {str(e)}")
+            return {
+                "name": item_name,
+                "type": item_type,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_signal_check(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """执行信号检查"""
+        channel = item.get("channel", 1)
+        message = item.get("message")
+        signal = item.get("signal")
+        expected_value = item.get("expected_value")
+        tolerance = item.get("tolerance", 0.01)
+        
+        if not signal:
+            raise ValueError("信号检查需要指定signal参数")
+        
+        # 读取信号值
+        actual_value = self._read_signal(channel, message, signal)
+        
+        # 判断结果
+        passed = False
+        if actual_value is not None and expected_value is not None:
+            passed = abs(actual_value - expected_value) < tolerance
+        
+        return {
+            "name": item.get("name"),
+            "type": "signal_check",
+            "channel": channel,
+            "message": message,
+            "signal": signal,
+            "expected_value": expected_value,
+            "actual_value": actual_value,
+            "tolerance": tolerance,
+            "passed": passed,
+            "status": "passed" if passed else "failed"
+        }
+    
+    def _execute_signal_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """执行信号设置"""
+        channel = item.get("channel", 1)
+        message = item.get("message")
+        signal = item.get("signal")
+        value = item.get("value")
+        
+        if not signal or value is None:
+            raise ValueError("信号设置需要指定signal和value参数")
+        
+        # 设置信号值
+        success = self._write_signal(channel, message, signal, value)
+        
+        return {
+            "name": item.get("name"),
+            "type": "signal_set",
+            "channel": channel,
+            "message": message,
+            "signal": signal,
+            "value": value,
+            "success": success,
+            "status": "passed" if success else "failed"
+        }
+    
+    def _execute_sysvar_check(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """执行系统变量检查"""
+        namespace = item.get("namespace")
+        variable = item.get("variable")
+        expected_value = item.get("expected_value")
+        
+        if not namespace or not variable:
+            raise ValueError("系统变量检查需要指定namespace和variable参数")
+        
+        # 读取系统变量
+        actual_value = self._read_system_variable(namespace, variable)
+        
+        # 判断结果
+        passed = actual_value == expected_value
+        
+        return {
+            "name": item.get("name"),
+            "type": "sysvar_check",
+            "namespace": namespace,
+            "variable": variable,
+            "expected_value": expected_value,
+            "actual_value": actual_value,
+            "passed": passed,
+            "status": "passed" if passed else "failed"
+        }
+    
+    def _execute_sysvar_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """执行系统变量设置"""
+        namespace = item.get("namespace")
+        variable = item.get("variable")
+        value = item.get("value")
+        
+        if not namespace or not variable or value is None:
+            raise ValueError("系统变量设置需要指定namespace、variable和value参数")
+        
+        # 设置系统变量
+        success = self._write_system_variable(namespace, variable, value)
+        
+        return {
+            "name": item.get("name"),
+            "type": "sysvar_set",
+            "namespace": namespace,
+            "variable": variable,
+            "value": value,
+            "success": success,
+            "status": "passed" if success else "failed"
+        }
+    
+    def _execute_test_module(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """执行测试模块"""
+        test_name = item.get("test_name")
+        
+        if not test_name:
+            raise ValueError("测试模块执行需要指定test_name参数")
+        
+        # 获取测试配置
+        test_config = self._app.TestConfiguration
+        
+        # 执行测试
+        test_config.ExecuteTest(test_name)
+        
+        # 获取测试结果
+        verdict = test_config.Verdict
+        
+        return {
+            "name": item.get("name"),
+            "type": "test_module",
+            "test_name": test_name,
+            "verdict": verdict,
+            "status": "passed" if verdict == "Passed" else "failed"
+        }
+    
+    def _read_signal(self, channel: int, message: str, signal: str) -> Optional[float]:
+        """读取信号值"""
+        try:
+            bus = self._bus_systems(channel)
+            sig = bus.Signals(signal)
+            return float(sig.Value)
+        except Exception as e:
+            self.logger.warning(f"读取信号失败: {str(e)}")
+            return None
+    
+    def _write_signal(self, channel: int, message: str, signal: str, value: float) -> bool:
+        """写入信号值"""
+        try:
+            bus = self._bus_systems(channel)
+            sig = bus.Signals(signal)
+            sig.Value = value
+            return True
+        except Exception as e:
+            self.logger.warning(f"写入信号失败: {str(e)}")
+            return False
+    
+    def _read_system_variable(self, namespace: str, variable: str) -> Any:
+        """读取系统变量"""
+        try:
+            ns = self._system_variables.Namespaces(namespace)
+            var = ns.Variables(variable)
+            return var.Value
+        except Exception as e:
+            self.logger.warning(f"读取系统变量失败: {str(e)}")
+            return None
+    
+    def _write_system_variable(self, namespace: str, variable: str, value: Any) -> bool:
+        """写入系统变量"""
+        try:
+            ns = self._system_variables.Namespaces(namespace)
+            var = ns.Variables(variable)
+            var.Value = value
+            return True
+        except Exception as e:
+            self.logger.warning(f"写入系统变量失败: {str(e)}")
+            return False

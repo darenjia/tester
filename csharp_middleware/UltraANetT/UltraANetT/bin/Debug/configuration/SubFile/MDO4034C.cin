@@ -1,0 +1,1816 @@
+/*@!Encoding:936*/
+long OSC_Set(char IP[])
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  long Re=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_Set@",elCount(Sbuf));
+  strncat(Sbuf,IP,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_Initial()
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  long Re=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_Initial@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_AutoSet(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  ltoa(Mode,ModeTemp,10);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_AutoSet@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_EnablePanel(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  ltoa(Mode,ModeTemp,10);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_EnablePanel@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_RunStop(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  ltoa(Mode,ModeTemp,10);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_RunStop@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_RunStopSequence(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  ltoa(Mode,ModeTemp,10);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_RunStopSequence@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_TriggerModel(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  ltoa(Mode,ModeTemp,10);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_TriggerModel@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_EdgeTrigger(long Channel, float Level, long Mode, long Coupl)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char LevelTemp[20];
+  char ModeTemp[10];
+  char CouplTemp[10];
+  long Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  snprintf(LevelTemp,elCount(LevelTemp),"%.15f",Level);
+  ltoa(Mode,ModeTemp,10);
+  ltoa(Coupl,CouplTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_EdgeTrigger@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,LevelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,CouplTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_PulseWidthTrigger(long Channel, float Level, long Mode, float Parm1,float Parm2, long Polar)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char LevelTemp[20];
+  char ModeTemp[10];
+  char Parm1Temp[20],Parm2Temp[20];
+  char PolarTemp[10];
+  long Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  snprintf(LevelTemp,elCount(LevelTemp),"%.15f",Level);
+  ltoa(Mode,ModeTemp,10);
+  snprintf(Parm1Temp,elCount(Parm1Temp),"%.15f",Parm1);
+  snprintf(Parm2Temp,elCount(Parm2Temp),"%.15f",Parm2);
+  ltoa(Polar,PolarTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_PulseWidthTrigger@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,LevelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,Parm1Temp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,Parm2Temp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,PolarTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANBitRateConfig(long B, long Baudrate)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char BaudrateTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Baudrate,BaudrateTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANBitRateConfig@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,BaudrateTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANTriggerTypeFrame(long B, long Type,long FrameType)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char TypeTemp[10];
+  char FrameTypeTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Type,TypeTemp,10);
+  ltoa(FrameType,FrameTypeTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANTriggerTypeFrame@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,TypeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,FrameTypeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf====%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANTriggerIDDataFrame(long B, long Mode,long ID,long DataSize,qword DataValue)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char ModeTemp[10];
+  char IDTemp[10];
+  char DataSizeTemp[10];  
+  char DataValueTemp[10];  
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Mode,ModeTemp,10);
+  ltoa(ID,IDTemp,16);
+  ltoa(DataSize,DataSizeTemp,10);
+  ltoa(DataValue,DataValueTemp,16);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANTriggerIDDataFrame@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,IDTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DataSizeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,DataValueTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANTriggerDataFrame(long B, long DataSize,qword DataValue)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char DataSizeTemp[10];  
+  char DataValueTemp[10];  
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(DataSize,DataSizeTemp,10);
+  ltoa(DataValue,DataValueTemp,16);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANTriggerDataFrame@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DataSizeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,DataValueTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANTriggerID(long B, long Mode,long ID)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char ModeTemp[10];
+  char IDTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Mode,ModeTemp,10);
+  ltoa(ID,IDTemp,16);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANTriggerID@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,IDTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_CANConfig(long B, long Source,long BitRate,long SampPoint,long DisplayFormat,long DisplayType,
+                   long Position,float TrigLevel,long SignalType)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char SourceTemp[10];
+  char BitRateTemp[10];
+  char SampPointTemp[10];
+  char DisplayFormatTemp[10];
+  char DisplayTypeTemp[10];
+  char PositionTemp[10];
+  char TrigLevelTemp[20];
+  char SignalTypeTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Source,SourceTemp,10);
+  ltoa(BitRate,BitRateTemp,10);
+  ltoa(SampPoint,SampPointTemp,10);
+  ltoa(DisplayFormat,DisplayFormatTemp,10);
+  ltoa(DisplayType,DisplayTypeTemp,10);
+  ltoa(Position,PositionTemp,10);
+  snprintf(TrigLevelTemp,elCount(TrigLevelTemp),"%.15f",TrigLevel);
+  ltoa(SignalType,SignalTypeTemp,10);
+  
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_CANConfig@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,SourceTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,BitRateTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+  strncat(Sbuf,SampPointTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+  strncat(Sbuf,DisplayFormatTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));   
+  strncat(Sbuf,DisplayTypeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));   
+  strncat(Sbuf,PositionTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+  strncat(Sbuf,TrigLevelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+  strncat(Sbuf,SignalTypeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf)); 
+    
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_BusDisplay(long B, long Display)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char DisplayTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Display,DisplayTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_BusDisplay@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DisplayTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_Single(long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ModeTemp[10];
+  long Re=0;
+  
+  ltoa(Mode,ModeTemp,10); 
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_Single@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  testWaitForTimeout(5000);//防止还没有触发到
+  return Re;
+}
+
+long OSC_Cursor(long Channel, long Mode, float Xa,float Xb,float Ya,float Yb)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char ModeTemp[10];
+  char XaTemp[20];
+  char XbTemp[20];
+  char YaTemp[20];
+  char YbTemp[20];  
+  long Re=0;
+  
+  
+  
+  ltoa(Channel,ChannelTemp,10);
+  ltoa(Mode,ModeTemp,10);
+  
+  snprintf(XaTemp,elCount(XaTemp),"%.15f",Xa);
+  snprintf(XbTemp,elCount(XbTemp),"%.15f",Xb);
+  snprintf(YaTemp,elCount(YaTemp),"%.15f",Ya);
+  snprintf(YbTemp,elCount(YbTemp),"%.15f",Yb);
+
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_Cursor@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,XaTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,XbTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,YaTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,YbTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+  
+}
+
+long OSC_Cursor(long Select)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char SelectTemp[10];
+  long Re=0;
+  
+  ltoa(Select,SelectTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_Cursor@",elCount(Sbuf));
+  strncat(Sbuf,SelectTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_MeasurClear()
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  long Re=0;
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MeasurClear@",elCount(Sbuf));
+ 
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);  
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float OSC_MeasurAdd(long Channel,long Select)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char SelectTemp[10];
+  float Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  ltoa(Select,SelectTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MeasurAdd@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,SelectTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atodbl(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float OSC_MeasurRise(long Channel)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  float Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MeasurRise@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atodbl(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float OSC_MeasurFall(long Channel)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  float Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MeasurFall@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atodbl(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_TimeBase(float Timebase,long Position,long RecordLength)
+{
+  char Sbuf[1000];
+  char Dbuf[1000];
+  char TimebaseTemp[20];
+  char PositionTemp[10];
+  char RecordLengthTemp[10];  
+  long Re=0;
+  
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  ltoa(Position,PositionTemp,10);
+  ltoa(RecordLength,RecordLengthTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_TimeBase@",elCount(Sbuf));
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,PositionTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,RecordLengthTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_AcquireWave(long Channel,char Path[])
+{
+  char Sbuf[1000];
+  char Dbuf[1000];
+  char ChannelTemp[10];
+  long Re=0;
+  char absPath[1000];
+  
+  getAbsFilePath(Path,absPath,1000);
+  ltoa(Channel,ChannelTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_AcquireWave@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_SaveImage(char Path[],long Mode)
+{
+  char Sbuf[1000];
+  char Dbuf[1000];
+  char ModeTemp[10];
+  long Re=0;
+  char absPath[1000];
+  
+  getAbsFilePath(Path,absPath,1000);
+  ltoa(Mode,ModeTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_SaveImage@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_MathOn(long Channel1,long Channel2,long Math)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char Channel1Temp[10],Channel2Temp[10];
+  char MathTemp[10];
+  long Re=0;
+  
+  ltoa(Channel1,Channel1Temp,10);
+  ltoa(Channel2,Channel2Temp,10);
+  ltoa(Math,MathTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MathOn@",elCount(Sbuf));
+  strncat(Sbuf,Channel1Temp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,Channel2Temp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,MathTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  testWaitForTimeout(5000);//mathon完等待3s
+  return Re;
+}
+
+long OSC_MathOff()
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  long Re=0;
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MathOff@",elCount(Sbuf));
+ 
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_ChannelDisplay(long Channel,long Display)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10],DisplayTemp[10];
+  char MathTemp[10];
+  long Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  ltoa(Display,DisplayTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_ChannelDisplay@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DisplayTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINTrigID(long B,long ID)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char IDTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(ID,IDTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINTrigID@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,IDTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINTrigDataFrame(long B,long DataSize,qword DataValue)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char DataSizeTemp[10];
+  char DataValueTemp[10]; 
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(DataSize,DataSizeTemp,10);
+  ltoa(DataValue,DataValueTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINTrigDataFrame@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DataSizeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DataValueTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINTrigIDDataFrame(long B,long ID,long DataSize,qword DataValue)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char IDTemp[10];
+  char DataSizeTemp[10];
+  char DataValueTemp[10]; 
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(ID,IDTemp,10);
+  ltoa(DataSize,DataSizeTemp,10);
+  ltoa(DataValue,DataValueTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINTrigIDDataFrame@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,IDTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,DataSizeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,DataValueTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINTrigError(long B,long ErrorMode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char ErrorModeTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(ErrorMode,ErrorModeTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINTrigError@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ErrorModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINConfig(long B,long Channel,long BitRate,float Level)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char ChannelTemp[10];
+  char BitRateTemp[10];
+  char LevelTemp[20];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Channel,ChannelTemp,10);
+  ltoa(BitRate,BitRateTemp,10);
+  snprintf(LevelTemp,elCount(LevelTemp),"%.15f",Level);
+
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINConfig@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,BitRateTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  strncat(Sbuf,LevelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINBitRateConfig(long B,long Baudrate)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char BaudrateTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Baudrate,BaudrateTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINBitRateConfig@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,BaudrateTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_TriggerLevel(long Source,float Level)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char SourceTemp[10];
+  char LevelTemp[20];
+  long Re=0;
+  
+  ltoa(Source,SourceTemp,10);
+  snprintf(LevelTemp,elCount(LevelTemp),"%.15f",Level);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_TriggerLevel@",elCount(Sbuf));
+  strncat(Sbuf,SourceTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,LevelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_AcquireConfig(long RecordLength)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char RecordLengthTemp[10];
+  long Re=0;
+  
+  ltoa(RecordLength,RecordLengthTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_AcquireConfig@",elCount(Sbuf));
+  strncat(Sbuf,RecordLengthTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float OSC_MeasurVoltage(long Channel, float Xa,float Xb)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char ModeTemp[10];
+  char XaTemp[20];
+  char XbTemp[20];
+  float Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  snprintf(XaTemp,elCount(XaTemp),"%.15f",Xa);
+  snprintf(XbTemp,elCount(XbTemp),"%.15f",Xb);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_MeasurVoltage@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,XaTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,XbTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atodbl(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_LINTrigMode(long B,long Mode)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char BTemp[10];
+  char ModeTemp[10];
+  long Re=0;
+  
+  ltoa(B,BTemp,10);
+  ltoa(Mode,ModeTemp,10);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_LINTrigMode@",elCount(Sbuf));
+  strncat(Sbuf,BTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,ModeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_ChannelSet(long Channel, float Range,float Offset)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char ChannelTemp[10];
+  char RangeTemp[20];
+  char OffsetTemp[20];
+  float Re=0;
+  
+  ltoa(Channel,ChannelTemp,10);
+  snprintf(RangeTemp,elCount(RangeTemp),"%.15f",Range);
+  snprintf(OffsetTemp,elCount(OffsetTemp),"%.15f",Offset);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_ChannelSet@",elCount(Sbuf));
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,RangeTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,OffsetTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  testWaitForTimeout(3000);
+  return Re;
+  
+}
+
+long OSC_ZoomCfg(float Timebase)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char TimebaseTemp[20];
+  float Re=0;
+  
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_ZoomCfg@",elCount(Sbuf));
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_ZoomClose()
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  float Re=0;
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_ZoomClose@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long OSC_ZoomPosition(float Position)
+{
+  char Sbuf[100];
+  char Dbuf[100];
+  char PositionTemp[20];
+  float Re=0;
+  
+  snprintf(PositionTemp,elCount(PositionTemp),"%.15f",Position);
+  
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"OSC_ZoomPosition@",elCount(Sbuf));
+  strncat(Sbuf,PositionTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}

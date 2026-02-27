@@ -1,0 +1,322 @@
+/*@!Encoding:936*/
+variables
+{
+  
+}
+/*----- 测试上电/下电初始化控制 -----*/
+void TestInit()  //测试初始化上电
+{
+  sysvar::VTS::M1_VT7001.SetInterconnectionMode(1);//VT7001电源模式设置SUP1
+  KL_on(); 
+  Gnd_on();
+  //CASE接CAN1
+  MasterBOBControl(4 , 1, 1, MasteBOB.qword(0));
+  MasterBOBControl(28 , 1, 1, MasteBOB.qword(0));
+  @sysvar::VTS::M2_Ch19::Relay = 1;
+  @sysvar::VTS::M2_Ch20::Relay = 1;
+  //接120Ω终端电阻
+  MasterBOBControl(10 , 2, 3, MasteBOB.qword(0));
+  //设置电源输出
+  POW_CurrOutSetup(5);testWaitForTimeout(500);
+  if(DUT.SystemType==0)
+  {
+    POW_VoltOutSetup(12);testWaitForTimeout(1000);
+  }
+  if(DUT.SystemType==1)
+  {
+    POW_VoltOutSetup(24);testWaitForTimeout(1000);
+  }
+  POW_OutputSwitch(1);testWaitForTimeout(2000);
+  write("测试初始化上电");
+  writetolog("----------测试初始化上电----------");
+}
+
+TestEndReset()  //测试结束下电
+{
+  KL_off();
+  Gnd_off();
+  writetolog("----------测试结束下电----------");
+  testWaitForTimeout(3000);
+}
+
+/*----- VT7001控制 -----*/
+Gnd_on()
+{
+  MasterBOBControl(6 , 1, 0, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M2_Ch3::Relay = 1; 
+  writetolog("----------上电源地----------");
+}
+
+Gnd_off()
+{
+  MasterBOBControl(6 , 1, 1, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M2_Ch3::Relay = 0;
+  writetolog("----------下电源地----------");
+}
+
+K30_on()
+{
+  MasterBOBControl(6 , 1, 0, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M1_Out1::Active = 1;
+  writetolog("----------KL30上电----------");
+}
+
+K30_off()
+{
+  MasterBOBControl(6 , 1, 1, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M1_Out1::Active = 0;
+  writetolog("----------KL30下电----------");
+}
+
+K15_on ()
+{
+  MasterBOBControl(6 , 1, 0, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M1_Out2::Active = 1;
+  writetolog("----------KL15上电----------");
+}
+
+K15_off ()
+{
+  MasterBOBControl(6 , 1, 1, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M1_Out2::Active = 0;
+  writetolog("----------KL15下电----------");
+}
+
+KL_off()
+{
+  MasterBOBControl(6 , 1, 1, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  @sysvar::VTS::M1_Out1::Active = 0;
+  @sysvar::VTS::M1_Out2::Active = 0;
+  @sysvar::VTS::M2_Ch1::Relay = 0;
+  @sysvar::VTS::M2_Ch2::Relay = 0;
+  writetolog("----------KL下电----------");
+}
+
+KL_on()
+{
+  MasterBOBControl(6 , 1, 0, MasteBOB.qword(0));
+  Testwaitfortimeout(5);   //继电器动作延时时间
+  write("----------KL上电----------");
+  @sysvar::VTS::M1_Out1::Active = 1;
+  @sysvar::VTS::M1_Out2::Active = 1;
+  @sysvar::VTS::M2_Ch1::Relay = 1;
+  @sysvar::VTS::M2_Ch2::Relay = 1;
+  writetolog("----------KL上电----------");
+}
+
+CAN_120_1(int mode)
+{
+ if(mode==1)//接120欧终端1
+  {
+    MasterBOBControl(10 , 2, 3, MasteBOB.qword(0));
+  }
+ if(mode==0)//不接120欧终端1
+  {
+    MasterBOBControl(10 , 2, 0, MasteBOB.qword(0));
+  }
+}
+
+CAN_120_2(int mode)
+{
+ if(mode==1)//接120欧终端2
+  {
+    MasterBOBControl(12 , 2, 3, MasteBOB.qword(0));
+  }
+ if(mode==0)//不接120欧终端2
+  {
+    MasterBOBControl(12 , 2, 0, MasteBOB.qword(0));
+  }
+}
+
+DevSelfCheck()
+{
+  int i=0;
+  dword OSC_state=1;
+  dword DMM_state=1;
+  dword SM70_state=1;
+  dword NL_state=1;
+
+  @sysvar::mutualVar::startDeviceSelfCheck=1;     //开始设备自检开始标示符 ->>上位  不能更改
+/*-----设备自检-----*/   
+  /*----OSC  自检---*/
+    for(i=0;i<3;i++)
+    {
+      OSC_Set("192.168.100.1");
+      OSC_state=OSC_Initial();
+      testWaitForTimeout(2000);
+      write("示波器调用次数%d=======%d",i,OSC_state);
+      if(OSC_state==0)
+        break;
+    }
+    write("OSC_state=======%d",OSC_state);
+    if(OSC_state==0)
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "MDO4024C", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "MDO4024C", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }     
+    
+  /*----DMM4050  自检---*/
+    Dig_Multimeter_Set("com4");//
+    for(i=0;i<3;i++)
+    {
+      Dig_Multimeter_RemoteMode(1);
+      DMM_state=Dig_Multimeter_Initial();
+      write("数字万用表调用次数%d=======%d",i,DMM_state);
+      testWaitForTimeout(2000);
+      if(DMM_state==0) break;
+    }
+    write("DMM_state=======%d",DMM_state);   
+    if(DMM_state==0)
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }    
+    
+  /*----SM70-AR-24  自检---*/
+    //POW_Set("com1");// 10.1.0.101
+    //POW_RemoteModeCV(1);//设置远程模式
+    POW_Set("10.1.0.101");// 10.1.0.101
+    for(i=0;i<3;i++)
+    {
+      SM70_state=POW_Initial();
+      write("供电电源调用次数%d=======%d",i,SM70_state);
+      testWaitForTimeout(2000);
+      if(SM70_state==0) break;
+    }
+    
+    write("SM70_state=======%d",SM70_state);
+    if(SM70_state==0)
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }       
+    
+  /*----NL 自检---*/
+    POW_Ambi_Set("com5");//com2
+    for(i=0;i<3;i++)
+    {
+      NL_state=POW_Ambi_Initial();
+      write("双极性电源调用次数%d====1111===%d",i,NL_state);
+     // NL_state=POW_Ambi_CurrOutSetup(2);
+      testWaitForTimeout(2000);
+      if(NL_state==0) break;
+    }
+    write("NL_state=======%d",NL_state);
+    if(NL_state==0)
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }      
+    
+if((OSC_state==0) && (DMM_state==0) && (SM70_state==0) && (NL_state==0))
+  writeProfileString("Devinfo", "FinalResults", "Normal", "IncludeFiles\\DevInfo.ini"); 
+else
+  writeProfileString("Devinfo", "FinalResults", "Error", "IncludeFiles\\DevInfo.ini"); 
+
+  @sysvar::mutualVar::isEndDeviceSelfCheck=1;  //设备自检结束标示符 ->>上位  不能更改
+  write("设备自检结束");
+}
+
+qword message_bit_set(sysvarInt * SysName,byte start_bit,int length_data,qword data)
+{
+    int i,j;
+    byte out_bit[64];
+    qword out_data;
+    qword input_data;
+  
+  input_data=sysGetVariableInt(SysName);
+ //  write("input_data====%x",input_data);  
+/*-----原始数据置入数组----*/  
+  for(i=0;i<8;i++)
+  {
+    out_bit[i]=input_data & 0x01;
+    input_data=input_data>>1;
+  }
+/*-----新数据置入数组----*/    
+  for(j=0;j<length_data;j++)
+  {
+    out_bit[start_bit+j]= data & 0x01;
+    data=data>>1;
+  }
+  for(i=63;i>=0;i--)
+  {
+    out_data = out_data<<1;
+    out_data = out_data | out_bit[i];
+  }
+//  write("out_data====%x",out_data);  
+  return out_data;
+}
+
+qword message_bit_set(byte start_bit,byte length_data,qword data,qword input_data)
+{
+  int i=0,j=0;
+  byte out_bit[64];
+  qword out_k=0;
+  qword out_data=0;
+  out_k=input_data;
+//  write("qword_out_k====%lld",out_k);
+  //write("qword_data====%lld",data); 
+  for(i=0;i<64;i++)
+  {
+      out_bit[i]=(out_k & 0x01 == 1);
+      out_k=out_k>>1;
+  }
+  for(j=0;j<length_data;j++)
+  {
+    out_bit[start_bit+j] = (data & 0x01 == 1);
+    data=data>>1;
+  }
+  for(i=63;i>=0;i--)
+  {
+    out_data = out_data<<1;
+    out_data = out_data | out_bit[i];
+  }
+//  write("qword_out_data====%lld",out_data);  
+  return out_data;
+
+}
+
+MasterBOBControl(byte start_bit,byte length_data,qword data,qword input_data)
+{
+  MasteBOB.MsgChannel = 2;
+  MasteBOB.ID=0x527;
+  MasteBOB.DLC=8;
+  MasteBOB.qword(0)= message_bit_set(start_bit, length_data, data, input_data);
+  output(MasteBOB);
+}
+

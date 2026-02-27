@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Product>
+  <VehielType>M01</VehielType>
+  <VehieConfig>NewTask</VehieConfig>
+  <VehielStage>NewStage</VehielStage>
+  <TestRound>NewRound</TestRound>
+  <TestName>CAN通信单元</TestName>
+  <TestNode>TPMS</TestNode>
+  <CANRoad>CAN-B(CF)-CAN</CANRoad>
+  <Suppier>
+  </Suppier>
+  <TestDate>11/07/2018 20:40:01</TestDate>
+  <TestType>
+  </TestType>
+  <TestPlace>
+  </TestPlace>
+  <TestUser>蔡永祥</TestUser>
+</Product>

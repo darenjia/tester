@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Product>
+  <IsFirst>false</IsFirst>
+  <SelfPath>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\CAN DUT Communication Test\IncludeFiles\DevInfo.ini</SelfPath>
+  <CfgPath>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\selfCheck\SelfCheckTest.cfg</CfgPath>
+  <CANSigExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\CAN DUT Communication Test\Test.cfg</CANSigExam>
+  <CANSigReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\CAN DUT Communication Test\Test_report.html</CANSigReport>
+  <CANLtgExam>无</CANLtgExam>
+  <CANLtgReport>无</CANLtgReport>
+  <LINSigExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\LIN Master DUT Communication Test\Test.cfg</LINSigExam>
+  <LINSigReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\LIN Master DUT Communication Test\Test_report.xml</LINSigReport>
+  <LINSigFromExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\LIN Slaver DUT Communication Test\Test.cfg</LINSigFromExam>
+  <LINSigFromReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\LIN Slaver DUT Communication Test\Test_report.xml</LINSigFromReport>
+  <LINLtgExam>无</LINLtgExam>
+  <LINLtgReport>无</LINLtgReport>
+  <OSEKSigReport>D:\MyCode\公司\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\TG1_TC1_report.xml</OSEKSigReport>
+  <OSEKSigExam>D:\MyCode\公司\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\TG1_TC1.cfg</OSEKSigExam>
+  <OSEKLtnReport>D:\MyCode\公司\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\TG1_TC1_report.xml</OSEKLtnReport>
+  <OSEKLtnExam>D:\MyCode\公司\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\TG1_TC1.cfg</OSEKLtnExam>
+  <DTCreport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Diag Communication Test\Test_report.html</DTCreport>
+  <DTCExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Diag Communication Test\Test.cfg</DTCExam>
+  <WifiReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\GATEWAY Routing Test\Test_report.xml</WifiReport>
+  <WifiExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\GATEWAY Routing Test\Test.cfg</WifiExam>
+  <AutoSARNMExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\AUTOSAR DUT NM Test\Test.cfg</AutoSARNMExam>
+  <AutoSARNMReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\AUTOSAR DUT NM Test\Test_report.html</AutoSARNMReport>
+  <AutoSARNMLtgExam>无</AutoSARNMLtgExam>
+  <AutoSARNMLtgReport>无</AutoSARNMLtgReport>
+  <DynamicNMExam>无</DynamicNMExam>
+  <DynamicNMReport>无</DynamicNMReport>
+  <DynamicNMFromExam>无</DynamicNMFromExam>
+  <DynamicNMFromReport>无</DynamicNMFromReport>
+  <DynamicNMLtgExam>无</DynamicNMLtgExam>
+  <DynamicNMLtgReport>无</DynamicNMLtgReport>
+  <IndirectExam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Indirect NM Test\Test.cfg</IndirectExam>
+  <IndirectReport>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Indirect NM Test\Test_report.html</IndirectReport>
+  <IndirectLtgExam>无</IndirectLtgExam>
+  <IndirectLtgReport>无</IndirectLtgReport>
+  <CANSig1939Report>无</CANSig1939Report>
+  <CANSig1939Exam>无</CANSig1939Exam>
+  <CANLtg1939Report>无</CANLtg1939Report>
+  <CANLtg1939Exam>无</CANLtg1939Exam>
+  <AutoSARNM1939Report>无</AutoSARNM1939Report>
+  <AutoSARNM1939Exam>无</AutoSARNM1939Exam>
+  <AutoSARNMLtg1939Report>无</AutoSARNMLtg1939Report>
+  <AutoSARNMLtg1939Exam>无</AutoSARNMLtg1939Exam>
+  <DynamicNM1939Report>无</DynamicNM1939Report>
+  <DynamicNM1939Exam>无</DynamicNM1939Exam>
+  <DynamicNMFrom1939Report>无</DynamicNMFrom1939Report>
+  <DynamicNMFrom1939Exam>无</DynamicNMFrom1939Exam>
+  <DynamicNMLtg1939Report>无</DynamicNMLtg1939Report>
+  <DynamicNMLtg1939Exam>无</DynamicNMLtg1939Exam>
+  <Indirect1939Report>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Indirect NM Test\Test_report.xml</Indirect1939Report>
+  <Indirect1939Exam>C:\Users\Administrator\Desktop\UltraANetT\UltraANetT\bin\Debug\configuration\exampleTest\Indirect NM Test\Test.cfg</Indirect1939Exam>
+  <Indirect1939Report>无</Indirect1939Report>
+  <Indirect1939Exam>无</Indirect1939Exam>
+  <IndirectLtg1939Report>无</IndirectLtg1939Report>
+  <IndirectLtg1939Exam>无</IndirectLtg1939Exam>
+</Product>

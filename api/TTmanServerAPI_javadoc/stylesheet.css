@@ -1,0 +1,58 @@
+/* Javadoc style sheet */
+
+/* Define colors, fonts and other style attributes here to override the defaults  */
+
+/* Page background color */
+body { background-color: #FFFFFF }
+
+/* Table colors */
+.TableHeadingColor     { background: #3c5aa3 } /* SPT blue */
+.TableSubHeadingColor  { background: #E6E6E6 } /* Light grey */
+.TableRowColor         { background: #FFFFFF } /* White */
+
+/* Font used in left-hand frame lists */
+.FrameTitleFont   { 	font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal }
+.FrameHeadingFont { 	font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal }
+.FrameItemFont    { 	font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal }
+
+/* Example of smaller, sans-serif font in frames */
+/* .FrameItemFont  { font-size: 10pt; font-family: Helvetica, Arial, sans-serif } */
+
+/* Navigation bar fonts and colors */
+.NavBarCell1    { background-color:#E6E6E6;}/* Light grey */
+.NavBarCell1Rev { background-color:#3c5aa3;}/* SPT blue */
+.NavBarFont1    {	font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal;
+			color:#000000; }
+.NavBarFont1Rev {	font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal;
+			color:#FFFFFF; }
+.NavBarCell2 {		font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal;
+			background-color:#FFFFFF;}
+.NavBarCell3 {		font-family: Arial, Helvetica, sans-serif; 
+			font-size: 10pt; font-style: normal; 
+			text-align: left; line-height: normal;
+			background-color:#FFFFFF;}
+
+h1 {			font-family: Arial, Helvetica, sans-serif; 
+			font-size: 18pt; font-style: normal; 
+			line-height: normal; font-weight: normal; 
+			color: #3c5aa3 }
+h2 {			font-family: Arial, Helvetica, sans-serif; 
+			font-size: 14pt; font-style: normal; 
+			line-height: normal; font-weight: normal; 
+			color: #3c5aa3 }
+h3 {			font-family: Arial, Helvetica, sans-serif; 
+			font-size: 12pt; font-style: normal; 
+			line-height: normal; font-weight: normal; 
+			color: #3c5aa3 }

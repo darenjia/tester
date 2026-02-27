@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<TreeList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Columns>
+    <Column>
+      <ColumnName>colName</ColumnName>
+      <ColumnType>Bound</ColumnType>
+    </Column>
+  </Columns>
+  <Nodes>
+  </Nodes>
+</TreeList>

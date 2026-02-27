@@ -1,0 +1,35 @@
+/*@!Encoding:936*/
+
+void RefValueToSystemVar(char Sentence[])    //用于在上位界面中显示必要操作步骤
+{
+  int i;
+  if(@sysvar::mutualVar::bufferFlag==0||@sysvar::mutualVar::bufferFlag==-1)
+  {
+  SysSetVariableString(sysvar::mutualVar::bufferValue,Sentence);
+  @sysvar::mutualVar::bufferFlag=1; 
+  }else
+  {
+    for(i=0;i<10;i++)
+    {
+      testWaitForTimeout(1000);
+      if(@sysvar::mutualVar::bufferFlag==0)
+      {
+        SysSetVariableString(sysvar::mutualVar::bufferValue,Sentence);
+        @sysvar::mutualVar::bufferFlag=1; 
+        break;
+      }
+    }
+  }
+}
+
+void ReftestCaseResultState(int State)    //用于传输testcase的最终的结果
+{
+  switch(State)
+  {  
+    case 0: @sysvar::mutualVar::testCaseResultState=0;break;
+    case 1: @sysvar::mutualVar::testCaseResultState=1;break;
+    case -1: @sysvar::mutualVar::testCaseResultState=-1;break;
+    default: @sysvar::mutualVar::testCaseResultState=-1;break;
+  }
+  
+}

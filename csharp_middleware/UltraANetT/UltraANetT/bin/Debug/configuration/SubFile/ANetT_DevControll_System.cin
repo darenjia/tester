@@ -1,0 +1,1662 @@
+/*@!Encoding:936*/
+variables
+{
+  
+}
+/*----- 测试上电/下电初始化控制 -----*/
+void TestInit_sys(int mode)  //测试初始化上电
+{
+  sysvar::VTS::M1_VT7001.SetInterconnectionMode(1);//VT7001电源模式设置SUP1
+  KL_on(); 
+  Gnd_on();
+  CAN_120_1(0);
+  CAN_120_2(0);
+//  POW_CurrOutSetup(5);testWaitForTimeout(500);
+//  POW_VoltOutSetup(24);testWaitForTimeout(3000);
+  POW_OutputSwitch(1); 
+
+  CASE_TJ_CAN1(1);  
+  testWaitForTimeout(1000);
+ }
+
+void ANetTslaveboxcontrol_CANInitial()//选取的盒子全部进行CAN初始化
+{
+  int j=0;
+  int k=0,n;
+   k=0;
+   n=0;
+   j=0;       
+  for(j=0;j<T_online_DUTnumber;j++)
+  {
+    k=DUT[j].Slavebox;
+    Slave_lastmsg[k].ID=DUT[j].Slavebox;
+    Slave_lastmsg[k].dlc=8;
+    Slave_lastmsg[k].msgChannel=2;
+    Slave_lastmsg[k].byte(0)=0X1f;//上电和地
+    Slave_lastmsg[k].byte(1)=0XC0;//上CAN1线  
+    Slave_lastmsg[k].byte(2)=0XC0;//网关的话上CAN2线
+    Slave_lastmsg[k].byte(3)=0X00;
+    Slave_lastmsg[k].byte(4)=0X00;
+    Slave_lastmsg[k].byte(5)=0;
+    Slave_lastmsg[k].byte(6)=0;
+    Slave_lastmsg[k].byte(7)=0;
+    
+//    if (TestChannel==1)//CAN1????
+//     {
+//      Slave_lastmsg[k].qword(0)=message_bit_set(8,2,03,Slave_lastmsg[k].qword(0));
+//      write("CAN1????");
+//     }
+//    else if(TestChannel==2)//CAN2????
+//     {
+//      WRITE("HEREJJJJJJJJ");
+//      Slave_lastmsg[k].qword(0)=message_bit_set(10,2,03,Slave_lastmsg[k].qword(0));
+//      write("CAN2????");
+//     }
+//     else if(TestChannel==3)//CAN3????
+//     {
+//      Slave_lastmsg[k].qword(0)=message_bit_set(12,2,03,Slave_lastmsg[k].qword(0));
+//     }
+//     else if(TestChannel==4)//CAN4????
+//     {
+//      Slave_lastmsg[k].qword(0)=message_bit_set(14,2,03,Slave_lastmsg[k].qword(0));
+//     }
+  
+    output(Slave_lastmsg[k]);   
+  }
+  Testwaitfortimeout(10);
+}
+void ANetTslaveboxcontrol()//发0x100报文使能
+{
+  Enable_lastmsg.ID = 0X100;
+  Enable_lastmsg.dlc = 8;
+  Enable_lastmsg.msgChannel=2;
+  output(Enable_lastmsg);
+  Testwaitfortimeout(10);
+}
+void ANetT0x100slaveboxNotReponse()//发0x120报文使得盒子不返回自身ID
+{
+  Enable_lastmsg.ID = 0X120;
+  Enable_lastmsg.dlc = 8;
+  Enable_lastmsg.msgChannel=2;
+  Enable_lastmsg.byte(0) = 0X1;
+  output(Enable_lastmsg);
+  Testwaitfortimeout(10);
+}
+void ANetTslaveboxcontrol_alldrop()//控制所有盒子同时断开
+{
+  Enable_lastmsg.ID = 0x101;//针对Local、Gwateway盒子
+  Enable_lastmsg.dlc = 8;
+  Enable_lastmsg.msgChannel=2;
+  Enable_lastmsg.byte(0)=0;
+  output(Enable_lastmsg);
+  Testwaitfortimeout(2);
+  Enable_lastmsg.ID = 0x103;//针对I/O盒子
+  Enable_lastmsg.dlc = 8;
+  Enable_lastmsg.msgChannel=2;
+  Enable_lastmsg.byte(0)=0;
+  output(Enable_lastmsg);
+  Testwaitfortimeout(2);
+  Enable_lastmsg.ID = 0x104;//针对Global盒子
+  Enable_lastmsg.dlc = 8;
+  Enable_lastmsg.msgChannel=2;
+  Enable_lastmsg.byte(0)=0;
+  output(Enable_lastmsg);
+  Testwaitfortimeout(2);
+  
+  
+}
+void ANetTslaveboxcontrol(char DUTname1[],char Type[],int enable)//被控制的单个盒子进行何种操作
+{
+
+  int i;
+  char SlaveBoxCase[50][50];
+  
+  strncpy (SlaveBoxCase[1],"CAN_Initial",elcount(SlaveBoxCase[1]));
+  strncpy (SlaveBoxCase[2],"poweroff",elcount(SlaveBoxCase[2]));
+  strncpy (SlaveBoxCase[3],"gndoff",elcount(SlaveBoxCase[3]));
+  strncpy (SlaveBoxCase[4],"ACCoff",elcount(SlaveBoxCase[4]));
+  strncpy (SlaveBoxCase[5],"IG1off",elcount(SlaveBoxCase[5]));
+  strncpy (SlaveBoxCase[6],"IG2off",elcount(SlaveBoxCase[6]));
+  strncpy (SlaveBoxCase[7],"gnd_offset",elcount(SlaveBoxCase[7]));
+  strncpy (SlaveBoxCase[8],"CANHoff",elcount(SlaveBoxCase[8]));
+  strncpy (SlaveBoxCase[9],"CANLoff",elcount(SlaveBoxCase[9]));
+  strncpy (SlaveBoxCase[10],"CANHLoff",elcount(SlaveBoxCase[10]));
+  strncpy (SlaveBoxCase[11],"CANH_R_CANL",elcount(SlaveBoxCase[11]));
+  
+  strncpy (DUTname2,DUTname1,elcount(DUTname2));
+
+  for(i=1;i<100;i++)
+  {
+    if(strncmp(Type,SlaveBoxCase[i],strlen(Type))==0)
+    {
+      SlaveCaseEnable=i;
+      res=enable;
+      break;
+    }
+  }
+  setTimer(SlaveRoundTimer,5);
+  Testwaitfortimeout(10);
+}
+void ANetT_Allslaveboxcontrol(char Type[],int enable)//控制所有盒子进行何种操作
+{
+
+  int i;
+  char SlaveBoxCase[50][50];
+  
+  strncpy (SlaveBoxCase[1],"CAN_Initial",elcount(SlaveBoxCase[1]));
+  strncpy (SlaveBoxCase[2],"poweroff",elcount(SlaveBoxCase[2]));
+  strncpy (SlaveBoxCase[3],"gndoff",elcount(SlaveBoxCase[3]));
+  strncpy (SlaveBoxCase[4],"ACCoff",elcount(SlaveBoxCase[4]));
+  strncpy (SlaveBoxCase[5],"IG1off",elcount(SlaveBoxCase[5]));
+  strncpy (SlaveBoxCase[6],"IG2off",elcount(SlaveBoxCase[6]));
+  strncpy (SlaveBoxCase[7],"gnd_offset",elcount(SlaveBoxCase[7]));
+  strncpy (SlaveBoxCase[8],"CANHoff",elcount(SlaveBoxCase[8]));
+  strncpy (SlaveBoxCase[9],"CANLoff",elcount(SlaveBoxCase[9]));
+  strncpy (SlaveBoxCase[10],"CANHLoff",elcount(SlaveBoxCase[10]));
+  strncpy (SlaveBoxCase[11],"CANH_R_CANL",elcount(SlaveBoxCase[11]));
+  
+
+  for(i=1;i<100;i++)
+  {
+    if(strncmp(Type,SlaveBoxCase[i],strlen(Type))==0)
+    {
+      SlaveCaseEnable=i;
+      res=enable;
+      break;
+    }
+  }
+  if(SlaveCaseEnable==1)  //CAN_Initial
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  } 
+  if(SlaveCaseEnable==2)  //poweroff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x10;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+  if(SlaveCaseEnable==3)  //gndoff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x0F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+  if(SlaveCaseEnable==4)  //ACCoff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x17;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+  if(SlaveCaseEnable==5)  //IG1off
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1D;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+  if(SlaveCaseEnable==6)  //IG2off
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1B;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }
+
+  if(SlaveCaseEnable==8)  //CANHoff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0x80;
+      Enable_lastmsg.byte(2)=0x80;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  } 
+  if(SlaveCaseEnable==9)  //CANLoff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0x40;
+      Enable_lastmsg.byte(2)=0x40;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+  if(SlaveCaseEnable==10)  //CANHLoff
+  {
+    if(res==1)
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0x00;
+      Enable_lastmsg.byte(2)=0x00;
+      output(Enable_lastmsg);
+    }
+    else
+    {
+      Enable_lastmsg.ID = 0x102;//针对Local、Gwateway盒子
+      Enable_lastmsg.dlc = 8;
+      Enable_lastmsg.msgChannel=2;
+      Enable_lastmsg.byte(0)=0x1F;
+      Enable_lastmsg.byte(1)=0xC0;
+      Enable_lastmsg.byte(2)=0xC0;
+      output(Enable_lastmsg);
+    }
+  }   
+}
+on timer SlaveRoundTimer
+{
+  int j=0;
+  int k=0;
+  for(j=0;j<T_online_DUTnumber;j++)
+  {
+    if(strncmp(DUTname2,DUT[j].name,strlen(DUTname2))==0)
+    {
+      break;
+    }
+  }
+  k=DUT[j].Slavebox;
+  Slave_lastmsg[k].ID =DUT[j].Slavebox;
+  Slave_lastmsg[k].dlc = 8;
+  
+  if(SlaveCaseEnable==1)  //CAN_Initial
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(0,5,31,Slave_lastmsg[k].qword(0));
+      if(DUT[j].TerminalR == 1)
+        Slave_lastmsg[k].qword(0)=message_bit_set(14,2,03,Slave_lastmsg[k].qword(0));
+      else
+        Slave_lastmsg[k].qword(0)=message_bit_set(12,4,15,Slave_lastmsg[k].qword(0));
+      Slave_lastmsg[k].qword(0)=message_bit_set(22,2,03,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(0,5,00,Slave_lastmsg[k].qword(0));
+      Slave_lastmsg[k].qword(0)=message_bit_set(14,2,00,Slave_lastmsg[k].qword(0));
+      Slave_lastmsg[k].qword(0)=message_bit_set(22,2,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  } 
+  
+  
+  if(SlaveCaseEnable==2)  //poweroff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(0,4,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(0,4,15,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  }
+  if(SlaveCaseEnable==3)  //gndoff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(4,1,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(4,1,01,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  }
+  if(SlaveCaseEnable==4)  //ACCoff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(3,1,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(3,1,01,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  }
+  if(SlaveCaseEnable==5)  //IG1off
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(1,1,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(1,1,01,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  }
+  if(SlaveCaseEnable==6)  //IG2off
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(2,1,00,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(2,1,01,Slave_lastmsg[k].qword(0));
+      output(Slave_lastmsg[k]);
+    }
+  }
+  if(SlaveCaseEnable==7)  //gnd_offset
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(4,1,00,Slave_lastmsg[k].qword(0));//????????
+      Slave_lastmsg[k].qword(0)=message_bit_set(5,2,03,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(4,1,01,Slave_lastmsg[k].qword(0));//????????
+      Slave_lastmsg[k].qword(0)=message_bit_set(5,2,00,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+  } 
+  if(SlaveCaseEnable==8)  //CANHoff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(14,1,00,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(14,1,01,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+  }   
+  if(SlaveCaseEnable==9)  //CANLoff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(15,1,00,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(15,1,01,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+  }   
+  if(SlaveCaseEnable==10)  //CANHLoff
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(14,2,00,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(14,2,03,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+  } 
+  if(SlaveCaseEnable==11)  //CANH_R_CANL
+  {
+    if(res==1)
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(12,2,03,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+    else
+    {
+      Slave_lastmsg[k].qword(0)=message_bit_set(12,2,00,Slave_lastmsg[k].qword(0));//????????
+      output(Slave_lastmsg[k]);
+    }
+  }
+}
+void ANetTslaveboxcontrol_sys(char Type[],int enable)//被控制的所有盒子进行何种操作
+{
+  int i,j;
+  int trig=0;
+  char ordername[20][50];
+  int k=0;
+  strncpy (ordername[0],"ACCoff",elcount(ordername[0]));
+  strncpy (ordername[1],"IG1off",elcount(ordername[1]));
+  strncpy (ordername[2],"IG2off",elcount(ordername[2]));
+  strncpy (ordername[3],"poweroff",elcount(ordername[3]));
+ 
+  trig=0;
+  for(i=0;i<100;i++)
+  {
+    if(strncmp(Type,ordername[i],strlen(Type))==0)
+     {
+      trig=1;
+      break;
+     }
+  }
+  
+
+ if(trig==1)
+ {
+  if(i==0)//ACCoff
+  {
+    if(enable==1)
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+        k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(3,1,00,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("ACCoff");
+      }
+    }
+    else
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+        k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(3,1,01,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("ACCoff??");
+      }
+    }
+  }
+  if(i==1)//IG1off
+  {
+    if(enable==1)
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+        k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(1,1,00,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("IG1off");
+      }
+    }
+    else
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+       k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(1,1,01,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("IG1off??");
+      }
+    }
+  }
+  if(i==2)//IG2off
+  {
+    if(enable==1)
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+        k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(2,1,00,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("IG2off");
+      }
+    }
+    else
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+       k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(2,1,01,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+        write("IG2off??");
+      }
+    }
+  }
+  if(i==3)//poweroff
+  {
+    if(enable==1)
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+       k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(0,1,00,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+      }
+    }
+    else
+    {
+      for(j=0;j<T_online_DUTnumber;j++)
+      {
+       k=DUT[j].Slavebox;
+        Slave_lastmsg[k].ID = DUT[j].Slavebox;
+        Slave_lastmsg[k].dlc = 8;
+        Slave_lastmsg[k].qword(0)=message_bit_set(0,1,01,Slave_lastmsg[k].qword(0));
+        output(Slave_lastmsg[k]);
+      }
+    }
+  }
+  Testwaitfortimeout(10);
+ }
+}
+
+
+//void ANetTslaveboxcontrol_LINInitial()//选取的盒子进行LIN初始化
+//{
+//  int j=0;
+//  int k=0,m=0,n=0;
+//  if(T_online_DUTnumber==1)//???
+//  {
+//    k=DUT[0].Slavebox;
+//    Slave_lastmsg[k].ID = DUT[0].Slavebox;
+//    Slave_lastmsg[k].dlc = 8;
+//    Slave_lastmsg[k].byte(0)=0X3F;//ff
+//    Slave_lastmsg[k].byte(1)=0X00;//02
+//    Slave_lastmsg[k].byte(2)=0X03;
+//    Slave_lastmsg[k].byte(3)=0X00;
+//    Slave_lastmsg[k].byte(4)=0X00;
+//    Slave_lastmsg[k].byte(5)=0;
+//    Slave_lastmsg[k].byte(6)=0;
+//    Slave_lastmsg[k].byte(7)=0;
+//    
+//    for(n=0;n<DUT[j].T_DUT_ReceiverNum;n++)
+//    {
+//      if(DUT[j].T_online_Receiver[n].T_DUT_NetworkIndex==1)//LIN1????
+//      {
+//        Slave_lastmsg[k].qword(0)=message_bit_set(16,1,1,Slave_lastmsg[k].qword(0));
+//      }
+//      if(DUT[j].T_online_Receiver[n].T_DUT_NetworkIndex==2)//LIN2????
+//      {
+//        Slave_lastmsg[k].qword(0)=message_bit_set(17,1,1,Slave_lastmsg[k].qword(0));
+//      }
+//    }
+//    output(Slave_lastmsg[k]);
+//    Testwaitfortimeout(10);
+//  }
+//  else //??
+//  {
+//    for(j=0;j<T_online_DUTnumber;j++)
+//    {
+//      m=DUT[j].Slavebox;
+//      Slave_lastmsg[m].ID = DUT[j].Slavebox;
+//      Slave_lastmsg[m].dlc = 8;
+//      Slave_lastmsg[m].byte(0)=0X3F;//ff
+//      Slave_lastmsg[m].byte(1)=0X00;//02
+//      Slave_lastmsg[m].byte(2)=0X00;
+//      Slave_lastmsg[m].byte(3)=0X00;
+//      Slave_lastmsg[m].byte(4)=0X00;
+//      Slave_lastmsg[m].byte(5)=0;
+//      Slave_lastmsg[m].byte(6)=0;
+//      Slave_lastmsg[m].byte(7)=0;
+//      output(Slave_lastmsg[m]);
+//      for(n=0;n<DUT[j].T_DUT_ReceiverNum;n++)
+//      {
+//        if(DUT[j].T_online_Receiver[n].T_DUT_NetworkIndex==1)//LIN1????
+//        {
+//          Slave_lastmsg[m].qword(0)=message_bit_set(16,1,1,Slave_lastmsg[k].qword(0));
+//        }
+//        if(DUT[j].T_online_Receiver[n].T_DUT_NetworkIndex==2)//LIN2????
+//        {
+//          Slave_lastmsg[m].qword(0)=message_bit_set(17,1,1,Slave_lastmsg[k].qword(0));
+//        }
+//      }
+//      output(Slave_lastmsg[k]);
+//      Testwaitfortimeout(10);
+//    }
+//  }
+//}
+//void ANetTslaveboxcontrol(char DUTname[],int network,int eventnum,int Enable)  //事件型相关
+//{
+//  int i=0;
+//  int j=0,m=0;
+//  int loceve,enable_level;
+//  for(i=0;i<T_online_DUTnumber;i++)
+//  {
+//    if(strncmp(DUTname,DUT[i].name,strlen(DUTname))==0)
+//      {
+//        break;
+//      }
+//  }
+//  j=DUT[i].Slavebox;
+//  Slave_lastmsg[j].ID = DUT[i].Slavebox;
+//  Slave_lastmsg[j].dlc = 8;
+//  //for(m=0;m<DUT[i].T_DUT_ReceiverNum;m++)
+//  for(m=0;m<T_DUT_ReceiverNum;m++)
+//  {
+//    if(DUT[i].T_online_Receiver[m].T_DUT_NetworkIndex==network)
+//    {
+//      break;
+//    }
+//  }
+////  loceve= DUT[i].T_online_receiver[m].T_online_Localevent[eventnum-1].LocaleventIO;
+////  enable_level=DUT[i].T_online_receiver[m].T_online_Localevent[eventnum-1].Enablelevel;
+//  write("LocaleventIO======%d",loceve);
+//  if(loceve==1)
+//  {
+//    if(Enable==1)
+//      {
+//        Slave_lastmsg[j].qword(0)=message_bit_set(36,1,enable_level,Slave_lastmsg[j].qword(0));
+//      }
+//    else
+//      {
+//        Slave_lastmsg[j].qword(0)=message_bit_set(36,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//      }
+//  }
+//  if(loceve==2)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(37,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(37,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==3)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(38,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(38,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==4)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(39,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(39,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==5)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(40,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(40,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==6)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(41,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(41,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==7)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(42,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(42,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==8)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(43,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(43,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==9)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(28,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(28,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==10)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(29,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(29,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==11)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(30,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(30,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==12)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(31,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(31,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==13)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(32,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(32,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==14)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(33,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(33,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==15)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(34,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(34,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  if(loceve==16)
+//  {
+//    if(Enable==1)
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(35,1,enable_level,Slave_lastmsg[j].qword(0));
+//    }
+//    else
+//    {
+//      Slave_lastmsg[j].qword(0)=message_bit_set(35,1,(~enable_level),Slave_lastmsg[j].qword(0));
+//    }
+//  }
+//  output(Slave_lastmsg[j]);
+//  Testwaitfortimeout(10);
+//}
+
+
+void TestInit_OnlyKL30(int mode)  //测试初始化上电
+{
+  sysvar::VTS::M1_VT7001.SetInterconnectionMode(1);//VT7001电源模式设置SUP1
+//  POW_CurrOutSetup(5);testWaitForTimeout(500);
+//  POW_VoltOutSetup(24);testWaitForTimeout(500);
+  POW_OutputSwitch(1);
+  testWaitForTimeout(100);  //用于等效电源启动过程的等待延时  
+  
+  CASE_TJ_CAN1(1);  
+
+  K30_on();
+  Gnd_on();
+
+  writetolog("----------测试初始化上电----------");
+}
+
+
+CANH_off(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    //@sysvar::VTS::M3_Ch5::Relay = 0;
+    @sysvar::VTS::M3_Ch19::Relay = 0;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    Testwaitfortimeout(5);
+    writeToLog("=======CANH断路=======");
+    RefValueToSystemVar("CANH断路"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+   // @sysvar::VTS::M3_Ch5::Relay = 1;
+    @sysvar::VTS::M3_Ch19::Relay = 1;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    //Testwaitfortimeout(500);
+    writeToLog("=======CANH断路恢复分析记录文件=======");
+    RefValueToSystemVar("CANH断路恢复"); 
+  }
+}
+
+CANL_off(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    @sysvar::VTS::M3_Ch6::Relay = 0;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    Testwaitfortimeout(5);
+    writeToLog("=======CANL断路=======");
+    RefValueToSystemVar("CANL断路"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    @sysvar::VTS::M3_Ch6::Relay = 1;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    //Testwaitfortimeout(500);
+    writeToLog("=======CANL断路恢复分析记录文件=======");
+    RefValueToSystemVar("CANL断路恢复"); 
+  }
+}
+
+CANHL_off(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    //@sysvar::VTS::M3_Ch5::Relay = 0;
+   // @sysvar::VTS::M3_Ch6::Relay = 0;
+    @sysvar::VTS::M3_Ch19::Relay = 0;
+    @sysvar::VTS::M3_Ch20::Relay = 0;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    Testwaitfortimeout(5);
+    writeToLog("=======CANHL断路=======");
+    RefValueToSystemVar("CANHL断路"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+   // @sysvar::VTS::M3_Ch5::Relay = 1;
+   // @sysvar::VTS::M3_Ch6::Relay = 1;
+    @sysvar::VTS::M3_Ch19::Relay = 1;
+    @sysvar::VTS::M3_Ch20::Relay = 1;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    //Testwaitfortimeout(500);
+    writeToLog("=======CANHL断路恢复分析记录文件=======");
+    RefValueToSystemVar("CANHL断路恢复"); 
+  }
+}
+
+CANH_ShortToPower(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,6,1,1));
+    writeToLog("=======CANH短电=======");
+    RefValueToSystemVar("CANH短电"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,6,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANH短电恢复分析记录文件=======");
+    RefValueToSystemVar("CANH短电恢复"); 
+  }
+}
+
+CANL_ShortToPower(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,0,1,1));
+    writeToLog("=======CANL短电=======");
+    RefValueToSystemVar("CANL短电"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,0,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANL短电恢复分析记录文件=======");
+    RefValueToSystemVar("CANL短电恢复"); 
+  }
+}
+
+CANHL_ShortToPower(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,6,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,0,1,1));
+    writeToLog("========CANHL短电======");
+    RefValueToSystemVar("CANHL短电"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,6,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,0,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANHL短电恢复分析记录文件=======");
+    RefValueToSystemVar("CANHL短电恢复"); 
+  }
+}
+
+CANH_ShortToGnd(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,2,1,1));
+    writeToLog("=======CANH短地=======");
+    RefValueToSystemVar("CANH短地"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,2,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANH短地恢复分析记录文件=======");
+    RefValueToSystemVar("CANH短地恢复"); 
+  }
+}
+
+CANL_ShortToGnd(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,4,1,1));
+    writeToLog("=======CANL短地=======");
+    RefValueToSystemVar("CANL短地"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,4,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANL短地恢复分析记录文件=======");
+    RefValueToSystemVar("CANL短地恢复"); 
+  }
+}
+
+CANHL_ShortToGnd(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,2,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,4,1,1));
+    writeToLog("=======CANHL短地=======");
+    RefValueToSystemVar("CANHL短地"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,2,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,4,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANHL短地恢复分析记录文件=======");
+    RefValueToSystemVar("CANHL短地恢复"); 
+  }
+}
+
+CANH_ShortTo_CANL(int State)
+{
+  if(State==1)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,2,1,1));
+    writeToLog("=======CANH对CANL短路=======");
+    RefValueToSystemVar("CANH对CANL短路"); 
+  }
+  if(State==0)
+  {
+    ErrorFlag++;
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+    testWaitForTimeout(2.5);
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,2,1,0));
+    //Testwaitfortimeout(500); 
+    writeToLog("=======CANH对CANL短路恢复分析记录文件=======");
+    RefValueToSystemVar("CANH对CANL短路恢复"); 
+  }
+}
+
+
+//DevSelfCheck()
+//{
+//  int i=0;
+//  dword OSC_state=1;
+//  dword DMM_state=1;
+//  dword SM70_state=1;
+//  dword NL_state=1;
+//
+//  @sysvar::mutualVar::startDeviceSelfCheck=1;     //开始设备自检开始标示符 ->>上位  不能更改
+//  
+///*-----设备自检-----*/   
+//  /*----OSC  自检---*/
+//    for(i=0;i<3;i++)
+//    {
+//      OSC_Set("192.168.100.1");
+//      OSC_state=OSC_Initial();
+//      testWaitForTimeout(2000);
+//      write("示波器调用次数%d=======%d",i,OSC_state);
+//      if(OSC_state==0) break;
+//    }
+//    write("OSC_state=======%d",OSC_state);
+//    if(OSC_state==0)
+//    {
+//      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev0.Model", "MDO4024C", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev0.State", "Normal", "IncludeFiles\\DevInfo.ini");
+//    }
+//    else
+//    {
+//      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev0.Model", "MDO4024C", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev0.State", "Error", "IncludeFiles\\DevInfo.ini");
+//    }     
+//    
+//  /*----DMM4050  自检---*/
+//    Dig_Multimeter_Set("com5");//com4
+//    for(i=0;i<3;i++)
+//    {
+//      Dig_Multimeter_RemoteMode(1);
+//      DMM_state=Dig_Multimeter_Initial();
+//      write("数字万用表调用次数%d=======%d",i,DMM_state);
+//      testWaitForTimeout(2000);
+//      if(DMM_state==0) break;
+//    }
+//    write("DMM_state=======%d",DMM_state);   
+//    if(DMM_state==0)
+//    {
+//      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev1.State", "Normal", "IncludeFiles\\DevInfo.ini");
+//    }
+//    else
+//    {
+//      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev1.State", "Error", "IncludeFiles\\DevInfo.ini");
+//    }    
+//    
+//  /*----SM70-AR-24  自检---*/
+//    POW_Set("10.1.0.101");//com1 
+//    for(i=0;i<3;i++)
+//    {
+//      SM70_state=POW_Initial();
+//      write("供电电源调用次数%d=======%d",i,SM70_state);
+//      //SM70_state=POW_VoltOutSetup(12);
+//      testWaitForTimeout(2000);
+//      if(SM70_state==0) break;
+//    }
+//    
+//    write("SM70_state=======%d",SM70_state);
+//    if(SM70_state==0)
+//    {
+//      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev2.State", "Normal", "IncludeFiles\\DevInfo.ini");
+//    }
+//    else
+//    {
+//      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev2.State", "Error", "IncludeFiles\\DevInfo.ini");
+//    }       
+//    
+//  /*----NL 自检---*/
+//    
+//    POW_Ambi_Set("com1");//com2
+//    for(i=0;i<3;i++)
+//    {
+//      NL_state=POW_Ambi_Initial();
+//      write("双极性电源调用次数%d====1111===%d",i,NL_state);
+//     // NL_state=POW_Ambi_CurrOutSetup(2);
+//      testWaitForTimeout(2000);
+//      if(NL_state==0) break;
+//    }
+//    write("NL_state=======%d",NL_state);
+//    if(NL_state==0)
+//    {
+//      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev3.State", "Normal", "IncludeFiles\\DevInfo.ini");
+//    }
+//    else
+//    {
+//      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+//      writeProfileString("Devinfo", "Dev3.State", "Error", "IncludeFiles\\DevInfo.ini");
+//    }      
+//    
+//
+//if((OSC_state==0) && (DMM_state==0) && (SM70_state==0) && (NL_state==0))
+//  writeProfileString("Devinfo", "FinalResults", "Normal", "IncludeFiles\\DevInfo.ini"); 
+//else
+//  writeProfileString("Devinfo", "FinalResults", "Error", "IncludeFiles\\DevInfo.ini"); 
+//
+//  @sysvar::mutualVar::isEndDeviceSelfCheck=1;  //设备自检结束标示符 ->>上位  不能更改
+//
+//}
+DevSelfCheck_sys()
+{
+  int i=0;
+  dword OSC_state=1;
+  dword DMM_state=1;
+  dword SM70_state=1;
+  dword NL_state=1;
+
+  @sysvar::mutualVar::startDeviceSelfCheck=1;     //开始设备自检开始标示符 ->>上位  不能更改
+ 
+/*-----设备自检-----*/   
+  /*----OSC  自检---*/
+    for(i=0;i<3;i++)
+    {
+      //OSC_Set("192.168.100.1");
+      OSC_state=OSC_Initial();
+      testWaitForTimeout(20);
+      write("示波器调用次数%d=======%d",i,OSC_state);
+      if(OSC_state==0) break;
+    }
+    write("OSC_state=======%d",OSC_state);
+    if(OSC_state==0)
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "DSOX3014T", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "DSOX3014T", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }     
+    
+  /*----DMM4050  自检---*/
+    Dig_Multimeter_Set("com4");//com4
+    for(i=0;i<3;i++)
+    {
+      Dig_Multimeter_RemoteMode(1);
+      DMM_state=Dig_Multimeter_Initial();
+      write("数字万用表调用次数%d=======%d",i,DMM_state);
+      testWaitForTimeout(2000);
+      if(DMM_state==0) break;
+    }
+    write("DMM_state=======%d",DMM_state);   
+    if(DMM_state==0)
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }    
+    
+  /*----SM70-AR-24  自检---*/
+    POW_Set("10.1.0.101");//com1 
+    for(i=0;i<3;i++)
+    {
+      SM70_state=POW_Initial();
+      write("供电电源调用次数%d=======%d",i,SM70_state);
+      testWaitForTimeout(2000);
+      if(SM70_state==0) break;
+    }
+    
+    write("SM70_state=======%d",SM70_state);
+    if(SM70_state==0)
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }       
+    
+    
+    
+    
+  /*----NL 自检---*/
+    
+    POW_Ambi_Set("com2");//com2
+    for(i=0;i<3;i++)
+    {
+      NL_state=POW_Ambi_Initial();
+      write("双极性电源调用次数%d=======%d",i,NL_state);
+     // NL_state=POW_Ambi_CurrOutSetup(2);
+      testWaitForTimeout(2000);
+      if(NL_state==0) break;
+    }
+    write("NL_state=======%d",NL_state);
+    if(NL_state==0)
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }      
+    
+
+if((OSC_state==0) && (DMM_state==0) && (SM70_state==0) && (NL_state==0))
+  writeProfileString("Devinfo", "FinalResults", "Normal", "IncludeFiles\\DevInfo.ini"); 
+else
+  writeProfileString("Devinfo", "FinalResults", "Error", "IncludeFiles\\DevInfo.ini"); 
+
+  @sysvar::mutualVar::isEndDeviceSelfCheck=1;  //设备自检结束标示符 ->>上位  不能更改
+
+}
+
+CASE_TJ_CAN1(int mode)
+{
+  if(mode==0)//CASE接CAN1
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,6,1,1));
+  }
+  
+  if(mode==1)//CASE接台架
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,6,1,0));
+  }
+  
+//  @sysvar::VTS::M3_Ch5::Relay = 1;
+//  @sysvar::VTS::M3_Ch6::Relay = 1; 
+  
+}
+qword message_bit_set_sys(sysvarInt * SysName,byte start_bit,int length_data,qword data)
+{
+    int i,j;
+    byte out_bit[64];
+    qword out_data;
+    qword input_data;
+  
+  input_data=sysGetVariableInt(SysName);
+ //  write("input_data====%x",input_data);  
+/*-----原始数据置入数组----*/  
+  for(i=0;i<8;i++)
+  {
+    out_bit[i]=input_data & 0x01;
+    input_data=input_data>>1;
+  }
+/*-----新数据置入数组----*/    
+  for(j=0;j<length_data;j++)
+  {
+    out_bit[start_bit+j]= data & 0x01;
+    data=data>>1;
+  }
+  for(i=63;i>=0;i--)
+  {
+    out_data = out_data<<1;
+    out_data = out_data | out_bit[i];
+  }
+//  write("out_data====%x",out_data);  
+  return out_data;
+}
+
+qword message_bit_set(byte start_bit,byte length_data,qword data,qword input_data)
+{
+  int i=0,j=0;
+  byte out_bit[64];
+  qword out_k=0;
+  qword out_data=0;
+  out_k=input_data;
+  //write("qword_out_k====%lld",out_k);
+  //write("qword_data====%lld",data); 
+  for(i=0;i<64;i++)
+  {
+      out_bit[i]=(out_k & 0x01 == 1);
+      out_k=out_k>>1;
+  }
+  for(j=0;j<length_data;j++)
+  {
+    out_bit[start_bit+j] = (data & 0x01 == 1);
+    data=data>>1;
+  }
+  for(i=63;i>=0;i--)
+  {
+    out_data = out_data<<1;
+    out_data = out_data | out_bit[i];
+  }
+//  write("qword_out_data====%lld",out_data);  
+  return out_data;
+}
+
+
+MasterBOBControl(byte start_bit,byte length_data,qword data,qword input_data)
+{
+  MasteBOB.MsgChannel = 2;
+  MasteBOB.ID=0x527;
+  MasteBOB.DLC=8;
+  MasteBOB.qword(0)=message_bit_set(start_bit, length_data, data, input_data);
+  output(MasteBOB);
+}
+
+
+/*----- VT7001控制 -----*/
+Gnd_on()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,1));
+  @sysvar::VTS::M3_Ch3::Relay = 1; 
+  writetolog("----------上电源地----------");
+  //RefValueToSystemVar("上电源地"); 
+}
+
+Gnd_off()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,0));
+  @sysvar::VTS::M3_Ch3::Relay = 0;
+  writetolog("----------下电源地----------");
+  //RefValueToSystemVar("下电源地"); 
+}
+
+K30_on()
+{	
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 1;
+  @sysvar::VTS::M1_Out2::Active = 0;
+  writetolog("----------KL30上电----------");
+  //RefValueToSystemVar("KL30上电"); 
+}
+
+K30_off()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 0;
+  writetolog("----------KL30下电----------");
+  //RefValueToSystemVar("KL30下电"); 
+}
+
+K15_on ()
+{  
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out2::Active = 1;
+  writetolog("----------KL15上电----------");
+  //RefValueToSystemVar("KL15上电"); 
+}
+
+K15_off ()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2, message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2, 1, 1, ErrorFlag%2));
+  @sysvar::VTS::M1_Out2::Active = 0;
+  writetolog("----------KL15下电----------");
+  //RefValueToSystemVar("KL15下电"); 
+}
+
+KL_off()
+{
+  ErrorFlag++;
+  //sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,1));
+  @sysvar::VTS::M1_Out1::Active = 0;
+  @sysvar::VTS::M1_Out2::Active = 0;
+  @sysvar::VTS::M3_Ch1::Relay = 0;
+  @sysvar::VTS::M3_Ch2::Relay = 0;
+  writetolog("----------KL下电----------");
+  //RefValueToSystemVar("KL下电"); 
+}
+
+KL_on()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,0));
+  @sysvar::VTS::M3_Ch1::Relay = 1;
+  @sysvar::VTS::M3_Ch2::Relay = 1;
+  @sysvar::VTS::M1_Out1::Active = 1;
+  //Testwaitfortimeout(2000); //20190507先上30电，再上15电
+  @sysvar::VTS::M1_Out2::Active = 1;
+  writetolog("----------KL上电----------");
+  //RefValueToSystemVar("KL上电"); 
+}
+
+TestEndReset()  //测试结束下电
+{
+  //POW_OutputSwitch(0);
+  KL_off();
+  Gnd_off();
+  writetolog("----------测试结束下电----------");
+  testWaitForTimeout(T_KL_OFF+3000);
+}
+
+CAN_120_1(int mode)
+{
+ if(mode==1)//接120欧终端1
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,7,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,3,1,1));
+  }
+ if(mode==0)//不接120欧终端1
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,7,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,3,1,0));
+  }
+}
+
+CAN_120_2(int mode)
+{
+ if(mode==1)//接120欧终端2
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,3,1,1));
+  }
+ if(mode==0)//不接120欧终端2
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set_sys(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,3,1,0));
+  }
+}

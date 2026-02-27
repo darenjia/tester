@@ -1,0 +1,371 @@
+/*@!Encoding:936*/
+variables
+{
+  
+}
+/*----- 测试上电/下电初始化控制 -----*/
+void TestInit()  //测试初始化上电
+{
+  sysvar::VTS::M1_VT7001.SetInterconnectionMode(1);//VT7001电源模式设置SUP1
+  KL_on(); 
+  Gnd_on();
+  
+  //CASE接CAN1
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,5,1,1));
+  testWaitForTimeout(1000);
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,6,1,1));
+ // @sysvar::VTS::M3_Ch5::Relay = 1;
+ // @sysvar::VTS::M3_Ch6::Relay = 1;
+  
+  @sysvar::VTS::M3_Ch19::Relay = 1;
+  @sysvar::VTS::M3_Ch20::Relay = 1;
+//  CAN_120_1(1);
+  //设置电源输出
+  POW_CurrOutSetup(5);testWaitForTimeout(500);
+  if(DUT.SystemType==0)
+  {
+    POW_VoltOutSetup(12);testWaitForTimeout(1000);
+  }
+  if(DUT.SystemType==1)
+  {
+    POW_VoltOutSetup(24);testWaitForTimeout(1000);
+  }
+  POW_OutputSwitch(1);testWaitForTimeout(2000);
+  write("测试初始化上电");
+  writetolog("----------测试初始化上电----------");
+}
+
+//void TestInit(int mode)  //测试初始化上电
+//{
+//  
+//  sysvar::VTS::M1_VT7001.SetInterconnectionMode(1);//VT7001电源模式设置SUP1
+//  KL_on(); 
+//  Gnd_on();   
+//  
+//  if(mode==0)
+//  {
+//   CASE_TJ_CAN1(0);
+//  }
+//  if(mode==1)
+//  {
+//   CASE_TJ_CAN1(1);
+//  }
+//  if (DUT.TerminalR ==1)
+//  {
+//   CAN_120_1(1);
+//  }
+//  if (DUT.TerminalR ==0)
+//  {
+//   CAN_120_1(1);
+//   CAN_120_2(1);
+//  }
+//  
+//  POW_CurrOutSetup(5);testWaitForTimeout(500);
+//  POW_VoltOutSetup(12);testWaitForTimeout(3000);
+//  POW_OutputSwitch(1);
+//  write("测试初始化上电");
+//  writetolog("----------测试初始化上电----------");
+//}
+
+TestEndReset()  //测试结束下电
+{
+  KL_off();
+  Gnd_off();
+  writetolog("----------测试结束下电----------");
+  testWaitForTimeout(3000);
+}
+
+/*----- VT7001控制 -----*/
+Gnd_on()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M3_Ch3::Relay = 1; 
+  writetolog("----------上电源地----------");
+  //RefValueToSystemVar("上电源地"); 
+}
+
+Gnd_off()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M3_Ch3::Relay = 0;
+  writetolog("----------下电源地----------");
+  //RefValueToSystemVar("下电源地"); 
+}
+
+K30_on()
+{	
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 1;
+  writetolog("----------KL30上电----------");
+  RefValueToSystemVar("KL30上电"); 
+}
+
+K30_off()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 0;
+  writetolog("----------KL30下电----------");
+  RefValueToSystemVar("KL30下电"); 
+}
+
+K15_on ()
+{  
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out2::Active = 1;
+  writetolog("----------KL15上电----------");
+  RefValueToSystemVar("KL15上电"); 
+}
+
+K15_off ()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out2::Active = 0;
+  writetolog("----------KL15下电----------");
+  RefValueToSystemVar("KL15下电"); 
+}
+
+KL_off()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 0;
+  @sysvar::VTS::M1_Out2::Active = 0;
+  @sysvar::VTS::M3_Ch1::Relay = 0;
+  @sysvar::VTS::M3_Ch2::Relay = 0;
+  writetolog("----------KL下电----------");
+  RefValueToSystemVar("KL下电"); 
+}
+
+KL_on()
+{
+  ErrorFlag++;
+  sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_2,1,1,ErrorFlag%2));
+  @sysvar::VTS::M1_Out1::Active = 1;
+  @sysvar::VTS::M1_Out2::Active = 1;
+  @sysvar::VTS::M3_Ch1::Relay = 1;
+  @sysvar::VTS::M3_Ch2::Relay = 1;
+  writetolog("----------KL上电----------");
+  //RefValueToSystemVar("KL上电"); 
+}
+
+/*----- VT7900控制 -----*/
+
+//CAN_WYB(int mode)
+//{
+//  if(mode==1)
+//  {
+//    TestEndReset();
+//    CASE_TJ_CAN1(1); 
+//    CAN_120_1(0);
+//    CAN_120_2(0);
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,2,1,1));
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,3,1,1));
+//  }
+//  
+//  if(mode==0)
+//  {
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,2,1,0));
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_0,3,1,0));
+//  }
+//}
+
+//CASE_TJ_CAN1(int mode)
+//{
+//  if(mode==0)//CASE接CAN1
+//  {
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,5,1,1));
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,6,1,1));
+//  }
+//  
+//  if(mode==1)//CASE接台架
+//  {
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,5,1,0));
+//    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,6,1,0));
+//  }
+//  
+//  @sysvar::VTS::M3_Ch5::Relay = 1;
+//  @sysvar::VTS::M3_Ch6::Relay = 1;  
+//}
+
+CAN_120_1(int mode)
+{
+ if(mode==1)//接120欧终端1
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,7,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,3,1,1));
+  }
+ if(mode==0)//不接120欧终端1
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,7,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_4,3,1,0));
+  }
+}
+
+CAN_120_2(int mode)
+{
+ if(mode==1)//接120欧终端2
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,5,1,1));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,3,1,1));
+  }
+ if(mode==0)//不接120欧终端2
+  {
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,5,1,0));
+    sysSetVariableInt(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,message_bit_set(sysvar::VTS::M2_NewConfig::PCA9506_Std_3,3,1,0));
+  }
+}
+
+
+DevSelfCheck()
+{
+  int i=0;
+  dword OSC_state=1;
+  dword DMM_state=1;
+  dword SM70_state=1;
+  dword NL_state=1;
+
+  @sysvar::mutualVar::startDeviceSelfCheck=1;     //开始设备自检开始标示符 ->>上位  不能更改
+ 
+/*-----设备自检-----*/   
+  /*----OSC  自检---*/
+    for(i=0;i<3;i++)
+    {
+      //OSC_Set("192.168.100.1");
+      OSC_state=OSC_Initial();
+      testWaitForTimeout(20);
+      write("示波器调用次数%d=======%d",i,OSC_state);
+      if(OSC_state==0) break;
+    }
+    write("OSC_state=======%d",OSC_state);
+    if(OSC_state==0)
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "DSOX3014T", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev0.Name", "示波器", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.Model", "DSOX3014T", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev0.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }     
+    
+  /*----DMM4050  自检---*/
+    Dig_Multimeter_Set("com4");//com5
+    for(i=0;i<3;i++)
+    {
+      Dig_Multimeter_RemoteMode(1);
+      DMM_state=Dig_Multimeter_Initial();
+      write("数字万用表调用次数%d=======%d",i,DMM_state);
+      testWaitForTimeout(2000);
+      if(DMM_state==0) break;
+    }
+    write("DMM_state=======%d",DMM_state);   
+    if(DMM_state==0)
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev1.Name", "数字万用表", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.Model", "DMM4050", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev1.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }    
+    
+  /*----SM70-AR-24  自检---*/
+    POW_Set("10.1.0.101");//com1 
+    for(i=0;i<3;i++)
+    {
+      SM70_state=POW_Initial();
+      write("供电电源调用次数%d=======%d",i,SM70_state);
+      testWaitForTimeout(2000);
+      if(SM70_state==0) break;
+    }
+    
+    write("SM70_state=======%d",SM70_state);
+    if(SM70_state==0)
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev2.Name", "程控电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.Model", "SM70-AR-24", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev2.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }       
+    
+  /*----NL 自检---*/
+    
+    POW_Ambi_Set("com2");//com2
+    for(i=0;i<3;i++)
+    {
+      NL_state=POW_Ambi_Initial();
+      write("双极性电源调用次数%d=======%d",i,NL_state);
+     // NL_state=POW_Ambi_CurrOutSetup(2);
+      testWaitForTimeout(2000);
+      if(NL_state==0) break;
+    }
+    write("NL_state=======%d",NL_state);
+    if(NL_state==0)
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Normal", "IncludeFiles\\DevInfo.ini");
+    }
+    else
+    {
+      writeProfileString("Devinfo", "Dev3.Name", "双极性电源", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.Model", "NL", "IncludeFiles\\DevInfo.ini");
+      writeProfileString("Devinfo", "Dev3.State", "Error", "IncludeFiles\\DevInfo.ini");
+    }      
+    
+
+if((OSC_state==0) && (DMM_state==0) && (SM70_state==0) && (NL_state==0))
+  writeProfileString("Devinfo", "FinalResults", "Normal", "IncludeFiles\\DevInfo.ini"); 
+else
+  writeProfileString("Devinfo", "FinalResults", "Error", "IncludeFiles\\DevInfo.ini"); 
+
+  @sysvar::mutualVar::isEndDeviceSelfCheck=1;  //设备自检结束标示符 ->>上位  不能更改
+
+}
+
+
+qword message_bit_set(sysvarInt * SysName,byte start_bit,int length_data,qword data)
+{
+    int i,j;
+    byte out_bit[64];
+    qword out_data;
+    qword input_data;
+  
+  input_data=sysGetVariableInt(SysName);
+ //  write("input_data====%x",input_data);  
+/*-----原始数据置入数组----*/  
+  for(i=0;i<8;i++)
+  {
+    out_bit[i]=input_data & 0x01;
+    input_data=input_data>>1;
+  }
+/*-----新数据置入数组----*/    
+  for(j=0;j<length_data;j++)
+  {
+    out_bit[start_bit+j]= data & 0x01;
+    data=data>>1;
+  }
+  for(i=63;i>=0;i--)
+  {
+    out_data = out_data<<1;
+    out_data = out_data | out_bit[i];
+  }
+//  write("out_data====%x",out_data);  
+  return out_data;
+}

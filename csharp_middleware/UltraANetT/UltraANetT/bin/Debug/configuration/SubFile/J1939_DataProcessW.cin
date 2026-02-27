@@ -1,0 +1,1427 @@
+/*@!Encoding:936*/
+long ANetT_Database_J1939_File(char Path[])
+{
+  char Sbuf[1000];
+  char Dbuf[1000];
+  long Re=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_File@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf====%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      write("State_String_===%s",State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+    write("Re===%d",Re);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_TXID(char DUTName[], dword ID[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char IDTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_TXID@",elCount(Sbuf));
+  strncat(Sbuf,DUTName,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==TXID==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    k3=-1;
+    write("ID====%s",Dbuf2);
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k3+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        IDTemp[j]=0;
+      }
+      substr_cpy(IDTemp,Dbuf2,k3+1,strstr_off(Dbuf2,k3+1,"#")-k3-1,elCount(IDTemp));
+      strtoul(IDTemp,ID[i]);
+      k3=strstr_off(Dbuf2,k3+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_RXID(char DUTName[], dword ID[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char IDTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_RXID@",elCount(Sbuf));
+  strncat(Sbuf,DUTName,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==RXID==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("ID====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    k3=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k3+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        IDTemp[j]=0;
+      }
+      substr_cpy(IDTemp,Dbuf2,k3+1,strstr_off(Dbuf2,k3+1,"#")-k3-1,elCount(IDTemp));
+      strtoul(IDTemp,ID[i]);
+      k3=strstr_off(Dbuf2,k3+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_IDCycletimeDLC(dword ID[],long DLC[],long Cycletime[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char IDTemp[10];
+  char DLCTemp[10];
+  char CycleTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_IDCycletimeDLC@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(ID[i]=='\0') break;
+    ltoa(ID[i],IDTemp,16);
+    strncat(Sbuf,IDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==IDCycletimeDLC==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  k3=strstr_off(State_String_,k2+1,"@");
+  if(k1>0&&k2>0&&k3>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    substr_cpy(Dbuf3,State_String_,k2+1,k3-k2-1,elCount(Dbuf3));
+    write("DLC====%s",Dbuf2);
+    write("Cycletime====%s",Dbuf3);
+    Re=atol(Dbuf1);
+    k4=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k4+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        DLCTemp[j]=0;
+      }
+      substr_cpy(DLCTemp,Dbuf2,k4+1,strstr_off(Dbuf2,k4+1,"#")-k4-1,elCount(DLCTemp));
+      strtol(DLCTemp,DLC[i]);
+      k4=strstr_off(Dbuf2,k4+1,"#");
+    }
+    k5=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf3,k5+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        CycleTemp[j]=0;
+      }
+      substr_cpy(CycleTemp,Dbuf3,k5+1,strstr_off(Dbuf3,k5+1,"#")-k5-1,elCount(CycleTemp));
+      strtol(CycleTemp,Cycletime[i]);
+      k5=strstr_off(Dbuf3,k5+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_IDDLC(dword ID[],long DLC[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char IDTemp[10];
+  char DLCTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_IDDLC@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(ID[i]=='\0') break;
+    ltoa(ID[i],IDTemp,16);
+    strncat(Sbuf,IDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==IDDLC==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("DLC====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    k4=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k4+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        DLCTemp[j]=0;
+      }
+      substr_cpy(DLCTemp,Dbuf2,k4+1,strstr_off(Dbuf2,k4+1,"#")-k4-1,elCount(DLCTemp));
+      strtol(DLCTemp,DLC[i]);
+      k4=strstr_off(Dbuf2,k4+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_IDCycletime(dword ID[],long Cycletime[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char IDTemp[10];
+  char CycletimeTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_IDCycletime@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(ID[i]=='\0') break;
+    ltoa(ID[i],IDTemp,16);
+    strncat(Sbuf,IDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==IDCycletime==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("Cycletime====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    k4=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k4+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        CycletimeTemp[j]=0;
+      }
+      substr_cpy(CycletimeTemp,Dbuf2,k4+1,strstr_off(Dbuf2,k4+1,"#")-k4-1,elCount(CycletimeTemp));
+      strtol(CycletimeTemp,Cycletime[i]);
+      k4=strstr_off(Dbuf2,k4+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Database_J1939_MsgAll(char DUTName[], dword ID[],long signal_N[],long startbit[][],long length[][],long method[][])
+{
+  char Sbuf[1000];
+  char Dbuf1[2000];
+  char Dbuf2[2000];
+  char Dbuf3[2000];
+  char Dbuf4[2000];
+  char Dbuf5[2000];
+  char Dbuf6[2000];
+  char IDTemp[10];
+  char signal_NTemp[10];
+  char startbitTemp1[500];
+  char startbitTemp2[10];
+  char lengthTemp1[500];
+  char lengthTemp2[10];
+  char methodTemp1[500];
+  char methodTemp2[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  int k=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Database_J1939_MsgAll@",elCount(Sbuf));
+  strncat(Sbuf,DUTName,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==MsgAll==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  k3=strstr_off(State_String_,k2+1,"@");
+  k4=strstr_off(State_String_,k3+1,"@");
+  k5=strstr_off(State_String_,k4+1,"@");
+  k6=strstr_off(State_String_,k5+1,"@");
+  if(k1>0&&k2>0&&k3>0&&k4>0&&k5>0&&k6>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    substr_cpy(Dbuf3,State_String_,k2+1,k3-k2-1,elCount(Dbuf3));
+    substr_cpy(Dbuf4,State_String_,k3+1,k4-k3-1,elCount(Dbuf4));
+    substr_cpy(Dbuf5,State_String_,k4+1,k5-k4-1,elCount(Dbuf5));
+    substr_cpy(Dbuf6,State_String_,k5+1,k6-k5-1,elCount(Dbuf6));
+    write("ID====%s",Dbuf2);
+    write("信号个数====%s",Dbuf3);
+    write("STB====%s",Dbuf4);
+    write("length====%s",Dbuf5);
+    write("发送方式====%s",Dbuf6);
+    Re=atol(Dbuf1);
+    k7=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k7+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        IDTemp[j]=0;
+      }
+      substr_cpy(IDTemp,Dbuf2,k7+1,strstr_off(Dbuf2,k7+1,"#")-k7-1,elCount(IDTemp));
+      strtoul(IDTemp,ID[i]);
+      k7=strstr_off(Dbuf2,k7+1,"#");
+    }
+    k8=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf3,k8+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        signal_NTemp[j]=0;
+      }
+      substr_cpy(signal_NTemp,Dbuf3,k8+1,strstr_off(Dbuf3,k8+1,"#")-k8-1,elCount(signal_NTemp));
+      strtol(signal_NTemp,signal_N[i]);
+      k8=strstr_off(Dbuf3,k8+1,"#");
+    }
+    k9=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf4,k9+1,"#")<=0) break;
+      for(j=0;j<500;j++)
+      {
+        startbitTemp1[j]=0;
+      }
+      substr_cpy(startbitTemp1,Dbuf4,k9+1,strstr_off(Dbuf4,k9+1,"#")-k9-1,elCount(startbitTemp1));
+      k10=-1;
+      for(k=0;k<100;k++)
+      {
+        if(strstr_off(startbitTemp1,k10+1,"$")<=0) break;
+        for(j=0;j<10;j++)
+        {
+          startbitTemp2[j]=0;
+        }
+        substr_cpy(startbitTemp2,startbitTemp1,k10+1,strstr_off(startbitTemp1,k10+1,"$")-k10-1,elCount(startbitTemp2));
+        strtol(startbitTemp2,startbit[i][k]);
+        k10=strstr_off(startbitTemp1,k10+1,"$");
+      }
+      k9=strstr_off(Dbuf4,k9+1,"#");
+    }
+    k11=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf5,k11+1,"#")<=0) break;
+      for(j=0;j<500;j++)
+      {
+        lengthTemp1[j]=0;
+      }
+      substr_cpy(lengthTemp1,Dbuf5,k11+1,strstr_off(Dbuf5,k11+1,"#")-k11-1,elCount(lengthTemp1));
+      k12=-1;
+      for(k=0;k<100;k++)
+      {
+        if(strstr_off(lengthTemp1,k12+1,"$")<=0) break;
+        for(j=0;j<10;j++)
+        {
+          lengthTemp2[j]=0;
+        }
+        substr_cpy(lengthTemp2,lengthTemp1,k12+1,strstr_off(lengthTemp1,k12+1,"$")-k12-1,elCount(lengthTemp2));
+        strtol(lengthTemp2,length[i][k]);
+        k12=strstr_off(lengthTemp1,k12+1,"$");
+      }
+      k11=strstr_off(Dbuf5,k11+1,"#");
+    }
+    k13=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf6,k13+1,"#")<=0) break;
+      for(j=0;j<500;j++)
+      {
+        methodTemp1[j]=0;
+      }
+      substr_cpy(methodTemp1,Dbuf6,k13+1,strstr_off(Dbuf6,k13+1,"#")-k13-1,elCount(methodTemp1));
+      k14=-1;
+      for(k=0;k<100;k++)
+      {
+        if(strstr_off(methodTemp1,k14+1,"$")<=0) break;
+        for(j=0;j<10;j++)
+        {
+          methodTemp2[j]=0;
+        }
+        substr_cpy(methodTemp2,methodTemp1,k14+1,strstr_off(methodTemp1,k14+1,"$")-k14-1,elCount(methodTemp2));
+        strtol(methodTemp2,method[i][k]);
+        k14=strstr_off(methodTemp1,k14+1,"$");
+      }
+      k13=strstr_off(Dbuf6,k13+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Bus_J1939_AcquireID(long Channel,char Path[],dword ID[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  char IDTemp[10];
+  char DLCTemp[1000];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Bus_J1939_AcquireID@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf====AcquireID=======%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("AcquireID====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    k3=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k3+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        IDTemp[j]=0;
+      }
+      substr_cpy(IDTemp,Dbuf2,k3+1,strstr_off(Dbuf2,k3+1,"#")-k3-1,elCount(IDTemp));
+      strtoul(IDTemp,ID[i]);
+      k3=strstr_off(Dbuf2,k3+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_IDCheck(char Path[],long Channel,dword StandardID[],char Describ[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  char StandardIDTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_IDCheck@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(StandardID[i]=='\0') break;
+    ltoa(StandardID[i],StandardIDTemp,16);
+    strncat(Sbuf,StandardIDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==IDCheck==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("IDCheck====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_DLCCheck(char Path[],long Channel,dword StandardID[],long StandardDLC[],char Describ[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  char StandardIDTemp[10];
+  char StandardDLCTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_DLCCheck@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(StandardID[i]=='\0') break;
+    ltoa(StandardID[i],StandardIDTemp,16);
+    strncat(Sbuf,StandardIDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(StandardDLC[i]=='\0') break;
+    ltoa(StandardDLC[i],StandardDLCTemp,10);
+    strncat(Sbuf,StandardDLCTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==DLCCheck==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("DLCCheck====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_CycleCheck(char Path[],long Channel,dword StandardID[],long StandardCycleTime[],char Describ[])
+{
+  char Sbuf[10000];
+  char Dbuf1[10000];
+  char Dbuf2[10000];
+  char Dbuf3[10000];
+  char ChannelTemp[10];
+  char StandardIDTemp[10];
+  char StandardCycleTimeTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  int Num=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_CycleCheck@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(StandardID[i]=='\0')
+    {
+      Num=i;
+      break;
+    }
+    ltoa(StandardID[i],StandardIDTemp,16);
+    strncat(Sbuf,StandardIDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<Num;i++)
+  {
+    //if(StandardCycleTime[i]=='\0') break;  若DBC中无该报文，则周期为0
+    ltoa(StandardCycleTime[i],StandardCycleTimeTemp,10);
+    strncat(Sbuf,StandardCycleTimeTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==CycleTimeCheck==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    write("State_String_====%s",State_String_);
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("CycleTimeCheck====%s",Dbuf2);
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_InitalSequenceTest(char Path[],long Channel,char Describ[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_InitalSequenceTest@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==InitalSequenceTest==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    write("InitalSequenceTest====%s",Dbuf2);
+    Re=atodbl(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_ExtendFrameType(char Path[],long Channel,char Describ[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_ExtendFrameType@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  write("Sbuf==ExtendFrameType==%s",Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_InitialorFaultRecoverTime_file(char Path[],long Channel)
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char ChannelTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_InitialorFaultRecoverTime_file@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==InitialorFaultRecoverTime_file==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    Re=atodbl(Dbuf1);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_SamplingPoint(long Channel,char Path[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char ChannelTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_SamplingPoint@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==SamplingPoint==%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  write("State_String_========%s",State_String_);
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    write("Dbuf1========%s",Dbuf1);
+    Re=atol(Dbuf1);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_BusOffCheck(char Path[],long Channel,long number,char Describ[])
+{
+  char Sbuf[100000];
+  char Dbuf1[100000];
+  char Dbuf2[100000];
+  char Dbuf3[100000];
+  char ChannelTemp[10];
+  char numberTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_BusOffCheck@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(number,numberTemp,10);
+  strncat(Sbuf,numberTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_InitialorFaultRecoverTime_OSC(char Path[],float Timebase,long SampPoint,float TrrggerV)
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char TimebaseTemp[20];
+  char SampPointTemp[10];
+  char TrrggerVTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_InitialorFaultRecoverTime_OSC@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(SampPoint,SampPointTemp,10);
+  strncat(Sbuf,SampPointTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  snprintf(TrrggerVTemp,elCount(TrrggerVTemp),"%.2f",TrrggerV);
+  strncat(Sbuf,TrrggerVTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    Re=atodbl(Dbuf1);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_Holdtime(char Path[],float Timebase,long SampPoint)
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char TimebaseTemp[20];
+  char SampPointTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_Holdtime@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(SampPoint,SampPointTemp,10);
+  strncat(Sbuf,SampPointTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    Re=atodbl(Dbuf1);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_Tbit(char Path1[],char Path2[],float Timebase,long SampPoint,float &CurSorA,float &CursorB)
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char TimebaseTemp[20];
+  char SampPointTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath1[1000];
+  char absPath2[1000];
+  getAbsFilePath(Path1,absPath1,1000);
+  getAbsFilePath(Path2,absPath2,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_Tbit@",elCount(Sbuf));
+  strncat(Sbuf,absPath1,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  strncat(Sbuf,absPath2,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(SampPoint,SampPointTemp,10);
+  strncat(Sbuf,SampPointTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  k3=strstr_off(State_String_,k2+1,"@");
+  if(k1>0&&k2>0&&k3>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    substr_cpy(Dbuf3,State_String_,k2+1,k3-k2-1,elCount(Dbuf3));
+    Re=atodbl(Dbuf1);
+    CurSorA=atodbl(Dbuf2);
+    CursorB=atodbl(Dbuf3);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+float ANetT_Test_J1939_Symmetry(char Path[],float Timebase,long SampPoint,float &CurSorA,float &CursorB)
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char TimebaseTemp[20];
+  char SampPointTemp[10];
+  float Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_Symmetry@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  snprintf(TimebaseTemp,elCount(TimebaseTemp),"%.15f",Timebase);
+  strncat(Sbuf,TimebaseTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(SampPoint,SampPointTemp,10);
+  strncat(Sbuf,SampPointTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  k3=strstr_off(State_String_,k2+1,"@");
+  if(k1>0&&k2>0&&k3>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    substr_cpy(Dbuf3,State_String_,k2+1,k3-k2-1,elCount(Dbuf3));
+    Re=atodbl(Dbuf1);
+    CurSorA=atodbl(Dbuf2);
+    CursorB=atodbl(Dbuf3);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_StuffBit(char Path[],long ByteOrder,long Channel,dword StandardID[],long signal_N[],long startbit[][],long length[][],char Describ[])
+{
+
+  char Sbuf[10000];
+  char Dbuf1[10000];
+  char Dbuf2[10000];
+  char Dbuf3[10000];
+  char StandardIDTemp[100];
+  char signal_NTemp[100];
+  char startbitTemp[100];
+  char lengthTemp[100];
+  char ChannelTemp[10];
+  char ByteOrderTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  int p=0;
+  int m=0;
+  int n=0;
+  int q=0;  
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_StuffBit@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(ByteOrder,ByteOrderTemp,10);
+  strncat(Sbuf,ByteOrderTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(StandardID[i]=='\0') break;
+    ltoa(StandardID[i],StandardIDTemp,16);
+    strncat(Sbuf,StandardIDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(j=0;j<500;j++)
+  {
+    if(signal_N[j]=='\0') break;
+    ltoa(signal_N[j],signal_NTemp,10);
+    strncat(Sbuf,signal_NTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(m=0;m<100;m++)
+  {
+    for(n=0;n<signal_N[m];n++)
+    {
+     // if(startbit[m][n]=='\0') break;
+      ltoa(startbit[m][n],startbitTemp,10);
+      strncat(Sbuf,startbitTemp,elCount(Sbuf));
+      strncat(Sbuf,"#",elCount(Sbuf));
+    }
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(p=0;p<100;p++)
+  {
+    for(q=0;q<500;q++)
+    {
+      if(length[p][q]=='\0') break;
+      ltoa(length[p][q],lengthTemp,10);
+      strncat(Sbuf,lengthTemp,elCount(Sbuf));
+      strncat(Sbuf,"#",elCount(Sbuf));
+    }
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;}
+
+long DeleteIDArray(dword ID[],dword deleteID[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  char IDTemp[10];
+  char deleteIDTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"DeleteIDArray@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(ID[i]=='\0') break;
+    ltoa(ID[i],IDTemp,16);
+    strncat(Sbuf,IDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+  for(i=0;i<500;i++)
+  {
+    if(deleteID[i]=='\0' && i>=1) break;
+    ltoa(deleteID[i],deleteIDTemp,16);
+    strncat(Sbuf,deleteIDTemp,elCount(Sbuf));
+    strncat(Sbuf,"#",elCount(Sbuf));
+  }
+  strncat(Sbuf,"@",elCount(Sbuf));
+//  write("Sbuf===========%s",Sbuf);
+  
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+//  write("State_String_===========%s",State_String_);
+  if(k1>0&&k2>0)
+  {
+    for(i=0;i<500;i++)
+    {
+      if(ID[i]=='\0') break;
+      ID[i]=0;
+    } 
+    //先删除ID所有元素
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    k4=-1;
+    for(i=0;i<500;i++)
+    {
+      if(strstr_off(Dbuf2,k4+1,"#")<=0) break;
+      for(j=0;j<10;j++)
+      {
+        IDTemp[j]=0;
+      }
+      substr_cpy(IDTemp,Dbuf2,k4+1,strstr_off(Dbuf2,k4+1,"#")-k4-1,elCount(IDTemp));
+      strtoul(IDTemp,ID[i]);
+      k4=strstr_off(Dbuf2,k4+1,"#");
+    }
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long Delete_RecordFile(char Path[])
+{
+  char Sbuf[1000];
+  char Dbuf[1000];
+  long Re=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  write("DeleteFile====%s",absPath);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"Delete_RecordFile@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  if(k1>0)
+  {
+    substr_cpy(Dbuf,State_String_,0,k1,elCount(Dbuf));
+    Re=atol(Dbuf);
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+
+long ANetT_Test_J1939_MessageRepeatCheck(char Path[],long Channel,long ID,char Describ[])
+{
+  char Sbuf[1000];
+  char Dbuf1[1000];
+  char Dbuf2[1000];
+  char Dbuf3[1000];
+  char ChannelTemp[10];
+  char IDTemp[10];
+  long Re=0;
+  int i=0;
+  int j=0;
+  char absPath[1000];
+  getAbsFilePath(Path,absPath,1000);
+  strncpy(Sbuf,"",elCount(Sbuf));
+  strncat(Sbuf,"ANetT_Test_J1939_MessageRepeatCheck@",elCount(Sbuf));
+  strncat(Sbuf,absPath,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(Channel,ChannelTemp,10);
+  strncat(Sbuf,ChannelTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  ltoa(ID,IDTemp,16);
+  strncat(Sbuf,IDTemp,elCount(Sbuf));
+  strncat(Sbuf,"@",elCount(Sbuf));
+  write("Sbuf==========%s",Sbuf);
+  putValue(CAPL_String,Sbuf);
+  testWaitForTimeout(1);
+  putValue(CAPL_TIME,timeNow());
+  while(1)
+  {
+    if(getValue(StateMachine_TIME)!=State_TIME_)
+    {
+      getValue(StateMachine_String,State_String_);
+      break;
+    }
+    testWaitForTimeout(1);
+  }
+  k1=strstr_off(State_String_,0,"@");
+  k2=strstr_off(State_String_,k1+1,"@");
+  if(k1>0&&k2>0)
+  {
+    substr_cpy(Dbuf1,State_String_,0,k1,elCount(Dbuf1));
+    substr_cpy(Dbuf2,State_String_,k1+1,k2-k1-1,elCount(Dbuf2));
+    Re=atol(Dbuf1);
+    strncpy (Describ,Dbuf2,elcount(Describ));
+  }
+  else Re=-1;
+  State_TIME_=getValue(StateMachine_TIME);
+  return Re;
+}
+

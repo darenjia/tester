@@ -1,0 +1,105 @@
+{
+    "_comment": "Python执行器配置模板 - 部署时会根据设备信息自动填充",
+    "device_id": "{{DEVICE_ID}}",
+    "device_name": "{{DEVICE_NAME}}",
+    "environment": "production",
+    "version": "2.0.0",
+    
+    "websocket": {
+        "host": "0.0.0.0",
+        "port": {{WEBSOCKET_PORT}},
+        "heartbeat_interval": 30,
+        "reconnect_interval": 5,
+        "max_reconnect_attempts": 3,
+        "ssl_enabled": false,
+        "ssl_cert": "",
+        "ssl_key": ""
+    },
+    
+    "platform": {
+        "host": "platform-server.company.com",
+        "port": 8080,
+        "api_base": "/api/v1",
+        "auth_token": "",
+        "timeout": 30
+    },
+    
+    "logging": {
+        "level": "INFO",
+        "file": "logs/executor.log",
+        "max_size": 10485760,
+        "backup_count": 10,
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        "console_output": false
+    },
+    
+    "task": {
+        "timeout": 3600,
+        "check_interval": 1,
+        "max_concurrent": 1,
+        "queue_size": 10,
+        "auto_cleanup": true,
+        "cleanup_interval": 3600
+    },
+    
+    "canoe": {
+        "enabled": true,
+        "timeout": 30,
+        "config_timeout": 60,
+        "max_retries": 3,
+        "retry_delay": 2.0,
+        "app_name": "CANoe",
+        "visible": false,
+        "auto_save": false
+    },
+    
+    "tsmaster": {
+        "enabled": true,
+        "timeout": 30,
+        "config_timeout": 60,
+        "max_retries": 3,
+        "retry_delay": 2.0,
+        "library_path": "C:\\Program Files\\TOSUN\\TSMaster\\lib\\TSMaster.dll"
+    },
+    
+    "performance": {
+        "monitor_enabled": true,
+        "monitor_interval": 60,
+        "metrics_retention_hours": 24,
+        "cpu_threshold": 80,
+        "memory_threshold": 85,
+        "disk_threshold": 90,
+        "alert_enabled": true
+    },
+    
+    "security": {
+        "validate_inputs": true,
+        "max_config_file_size_mb": 100,
+        "allowed_config_extensions": [".cfg", ".xml", ".json", ".dbc", ".ldf", ".arxml"],
+        "blocked_paths": ["C:\\Windows", "C:\\Program Files", ".."],
+        "api_key_required": false,
+        "api_key": ""
+    },
+    
+    "circuit_breaker": {
+        "enabled": true,
+        "failure_threshold": 10,
+        "recovery_timeout": 300,
+        "half_open_max_calls": 3,
+        "success_threshold": 2
+    },
+    
+    "retry": {
+        "max_attempts": 3,
+        "delay": 1.0,
+        "backoff": 2.0,
+        "max_delay": 60.0
+    },
+    
+    "backup": {
+        "enabled": true,
+        "interval_hours": 24,
+        "retention_days": 7,
+        "path": "backup"
+    }
+}
