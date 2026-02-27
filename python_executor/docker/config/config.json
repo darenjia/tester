@@ -1,0 +1,63 @@
+{
+  "executor": {
+    "id": "executor-01",
+    "name": "执行器1",
+    "platform": "windows",
+    "max_concurrent_tasks": 1,
+    "device_id": "DEVICE-001",
+    "description": "Windows容器部署的Python执行器"
+  },
+  "platform": {
+    "host": "platform-api",
+    "port": 8080,
+    "ws_endpoint": "ws://platform-api:8080/ws/executor",
+    "api_key": "",
+    "retry_count": 3,
+    "retry_delay": 5,
+    "heartbeat_interval": 30
+  },
+  "adapters": {
+    "canoe": {
+      "enabled": true,
+      "com_port": 0,
+      "startup_timeout": 30,
+      "license_server": "5053@localhost",
+      "config_path": ""
+    },
+    "tsmaster": {
+      "enabled": true,
+      "use_rpc": true,
+      "rpc_app_name": null,
+      "fallback_to_traditional": true,
+      "connection_timeout": 10
+    },
+    "ttworkbench": {
+      "enabled": false,
+      "ttman_path": "C:/Spirent/TTman.bat",
+      "workspace_path": "C:/Workspace"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/executor.log",
+    "max_size": "100MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "network": {
+    "api_port": 5000,
+    "ws_port": 5001,
+    "cors_enabled": true,
+    "cors_origins": "*"
+  },
+  "task": {
+    "default_timeout": 3600,
+    "max_retry": 0,
+    "cleanup_on_exit": true
+  },
+  "hardware": {
+    "can_channel_count": 2,
+    "lin_channel_count": 0,
+    "device_id": ""
+  }
+}
