@@ -12,7 +12,7 @@ def test_websocket_connection():
     
     try:
         ws = websocket.WebSocket()
-        ws.connect("ws://localhost:8080/ws/executor")
+        ws.connect("ws://localhost:8180/ws/executor")
         
         # 发送心跳
         ws.send(json.dumps({
@@ -38,7 +38,7 @@ def test_task_dispatch():
     
     try:
         ws = websocket.WebSocket()
-        ws.connect("ws://localhost:8080/ws/executor")
+        ws.connect("ws://localhost:8180/ws/executor")
         
         # 构造测试任务
         task_data = {
@@ -90,7 +90,7 @@ def test_task_cancel():
     
     try:
         ws = websocket.WebSocket()
-        ws.connect("ws://localhost:8080/ws/executor")
+        ws.connect("ws://localhost:8180/ws/executor")
         
         # 发送取消任务
         cancel_data = {

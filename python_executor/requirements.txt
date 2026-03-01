@@ -2,4 +2,6 @@
 flask>=2.0.0
 flask-socketio>=5.0.0
 python-socketio>=5.0.0
+gevent>=24.0.0
+gevent-websocket>=0.10.0
 pywin32>=300; sys_platform == "win32"

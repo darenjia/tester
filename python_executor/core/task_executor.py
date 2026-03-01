@@ -10,7 +10,7 @@ from enum import Enum
 from utils.logger import get_logger
 from utils.exceptions import TaskException, ToolException
 from config.settings import settings
-from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType
+from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
 from core.result_collector import ResultCollector
 from core.canoe_controller import CANoeController
 from core.tsmaster_controller import TSMasterController

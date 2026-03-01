@@ -3,6 +3,7 @@
 """
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from config.settings import settings
@@ -28,8 +29,12 @@ def setup_logger(name: str = "executor") -> logging.Logger:
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
     logger.setLevel(log_level)
     
+    # 获取项目根目录并构建绝对路径
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    log_file_path = os.path.join(base_dir, settings.log_file)
+    
     # 创建日志目录
-    log_dir = os.path.dirname(settings.log_file)
+    log_dir = os.path.dirname(log_file_path)
     if log_dir and not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
@@ -40,22 +45,25 @@ def setup_logger(name: str = "executor") -> logging.Logger:
     )
     
     # 文件处理器（轮转日志）
-    file_handler = RotatingFileHandler(
-        filename=settings.log_file,
-        maxBytes=settings.log_max_size,
-        backupCount=settings.log_backup_count,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
+    try:
+        file_handler = RotatingFileHandler(
+            filename=log_file_path,
+            maxBytes=settings.log_max_size,
+            backupCount=settings.log_backup_count,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        print(f"警告: 无法创建日志文件: {e}")
     
     # 控制台处理器
-    console_handler = logging.StreamHandler()
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
     
     # 添加处理器到日志器
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     
     return logger

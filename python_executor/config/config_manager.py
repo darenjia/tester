@@ -46,7 +46,7 @@ class ConfigManager:
         self._default_config = {
             "websocket": {
                 "host": "0.0.0.0",
-                "port": 8080,
+                "port": 8180,
                 "heartbeat_interval": 30,
                 "reconnect_interval": 5,
                 "max_reconnect_attempts": 3

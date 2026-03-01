@@ -86,10 +86,30 @@ class MetricCollector:
         with self._lock:
             result = {}
             for metric_name in self.metrics:
-                result[metric_name] = {
-                    'latest': self.get_latest(metric_name),
-                    'statistics': self.get_statistics(metric_name)
-                }
+                points = list(self.metrics[metric_name])
+                if points:
+                    latest = points[-1]
+                    values = [p.value for p in points]
+                    result[metric_name] = {
+                        'latest': {
+                            'value': latest.value,
+                            'timestamp': latest.timestamp,
+                            'labels': latest.labels
+                        },
+                        'statistics': {
+                            'count': len(values),
+                            'min': min(values),
+                            'max': max(values),
+                            'mean': statistics.mean(values),
+                            'median': statistics.median(values),
+                            'stdev': statistics.stdev(values) if len(values) > 1 else 0
+                        }
+                    }
+                else:
+                    result[metric_name] = {
+                        'latest': None,
+                        'statistics': {}
+                    }
             return result
 
 class PerformanceMonitor:

@@ -2,6 +2,8 @@
 Flask-SocketIO WebSocket服务端
 需要安装: pip install flask flask-socketio
 """
+from gevent import monkey
+monkey.patch_all()
 
 from flask import Flask
 from flask_socketio import SocketIO, emit, request
@@ -15,7 +17,7 @@ app.config['SECRET_KEY'] = 'python-executor-secret-key'
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='threading',
+    async_mode='gevent',
     logger=True,
     engineio_logger=True
 )
@@ -142,11 +144,11 @@ def handle_task_dispatch(data):
 
 if __name__ == '__main__':
     print("启动Python执行器WebSocket服务端...")
-    print("监听地址: ws://localhost:8080")
+    print("监听地址: ws://localhost:8180")
     
     socketio.run(
         app,
         host='0.0.0.0',
-        port=8080,
+        port=8180,
         debug=True
     )

@@ -1,10 +1,12 @@
 """
 运行脚本 - 启动Python执行器
 """
+from gevent import monkey
+monkey.patch_all()
+
 import sys
 import os
 
-# 添加当前目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 

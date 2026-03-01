@@ -16,7 +16,7 @@ from utils.validators import InputValidator, ValidationError
 from utils.metrics import TaskMetrics, performance_monitor, record_metric
 from config.settings import settings
 from config.config_manager import config_manager
-from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType
+from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
 from core.result_collector import ResultCollector
 from core.canoe_controller_production import CANoeControllerProduction
 from core.tsmaster_controller import TSMasterController

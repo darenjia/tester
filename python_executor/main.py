@@ -2,6 +2,9 @@
 Python执行器主应用
 集成WebSocket服务端和任务执行器
 """
+from gevent import monkey
+monkey.patch_all()
+
 import json
 import time
 import signal
@@ -15,12 +18,11 @@ from flask_socketio import SocketIO, emit
 from config.settings import settings
 from utils.logger import get_logger, setup_logger
 from utils.exceptions import ExecutorException
-from models.task import Task, Message
-from models.result import StatusUpdate, LogEntry
+from models.task import Task
+from models.result import Message, StatusUpdate, LogEntry
 from core.task_executor import TaskExecutor
-from websocket.client import WebSocketServer
+from ws_server.client import WebSocketServer
 
-# 设置日志
 logger = setup_logger("executor")
 
 class PythonExecutor:
@@ -34,7 +36,7 @@ class PythonExecutor:
         self.socketio = SocketIO(
             self.app,
             cors_allowed_origins="*",
-            async_mode='threading',
+            async_mode='gevent',
             logger=False,
             engineio_logger=False
         )
@@ -162,24 +164,26 @@ class PythonExecutor:
     def _handle_task_dispatch(self, message: Message, client_sid: str):
         """处理任务下发"""
         try:
-            logger.info(f"收到任务下发: {message.task_id}")
+            logger.info(f"收到任务下发: {message.taskNo}")
             
-            # 创建任务对象
             task_data = message.payload or {}
+            if isinstance(task_data, str):
+                task_data = json.loads(task_data)
+            if not isinstance(task_data, dict):
+                task_data = {}
+            
             task_data.update({
-                'taskId': message.task_id,
-                'deviceId': message.device_id
+                'taskNo': message.taskNo,
+                'deviceId': message.deviceId
             })
             
             task = Task.from_dict(task_data)
             
-            # 初始化任务执行器（如果还没初始化）
             if not self.task_executor:
                 self.task_executor = TaskExecutor(
                     message_sender=lambda msg: self._send_message_to_client(client_sid, msg)
                 )
             
-            # 执行任务
             success = self.task_executor.execute_task(task)
             
             if success:
@@ -189,10 +193,9 @@ class PythonExecutor:
                 
         except Exception as e:
             logger.error(f"处理任务下发失败: {e}")
-            # 发送错误消息
             self._send_message_to_client(client_sid, {
                 'type': 'TASK_STATUS',
-                'taskId': message.task_id,
+                'taskId': message.taskNo,
                 'status': 'failed',
                 'message': f"任务下发失败: {e}",
                 'timestamp': int(time.time() * 1000)
@@ -201,14 +204,14 @@ class PythonExecutor:
     def _handle_task_cancel(self, message: Message, client_sid: str):
         """处理任务取消"""
         try:
-            logger.info(f"收到任务取消: {message.task_id}")
+            logger.info(f"收到任务取消: {message.taskNo}")
             
             if self.task_executor:
                 success = self.task_executor.cancel_task()
                 if success:
-                    logger.info(f"任务取消成功: {message.task_id}")
+                    logger.info(f"任务取消成功: {message.taskNo}")
                 else:
-                    logger.warning(f"任务取消失败: {message.task_id}")
+                    logger.warning(f"任务取消失败: {message.taskNo}")
             else:
                 logger.warning("没有正在执行的任务")
                 

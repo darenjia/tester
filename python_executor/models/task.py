@@ -23,6 +23,16 @@ class TestToolType(Enum):
     TTWORKBENCH = "ttworkbench"
 
 
+class TestItemType(Enum):
+    """测试项类型枚举"""
+    SIGNAL_CHECK = "signal_check"
+    SIGNAL_SET = "signal_set"
+    TEST_MODULE = "test_module"
+    DIAGNOSTIC = "diagnostic"
+    WAIT = "wait"
+    CONDITION = "condition"
+
+
 class CaseResultStatus(Enum):
     """用例执行结果状态 - TDM2.0标准"""
     PASS = "PASS"

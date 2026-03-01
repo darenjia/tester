@@ -9,8 +9,8 @@
   },
   "platform": {
     "host": "platform-api",
-    "port": 8080,
-    "ws_endpoint": "ws://platform-api:8080/ws/executor",
+    "port": 8180,
+    "ws_endpoint": "ws://platform-api:8180/ws/executor",
     "api_key": "",
     "retry_count": 3,
     "retry_delay": 5,

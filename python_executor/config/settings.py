@@ -11,7 +11,7 @@ class Settings:
     def __init__(self):
         # WebSocket配置
         self.websocket_host = "0.0.0.0"
-        self.websocket_port = 8080
+        self.websocket_port = 8180
         self.heartbeat_interval = 30  # 秒
         self.reconnect_interval = 5   # 秒
         self.max_reconnect_attempts = 3

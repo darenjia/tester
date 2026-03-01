@@ -2,12 +2,18 @@
 Python执行器主应用 - 生产环境版本
 集成所有生产环境增强功能
 """
+from gevent import monkey
+monkey.patch_all()
+
+print("正在初始化 Python 执行器...")
+
 import json
 import time
 import signal
 import sys
 from datetime import datetime
 from typing import Dict, Any
+from functools import wraps
 
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
@@ -18,12 +24,13 @@ from utils.logger import get_logger, setup_logger
 from utils.exceptions import ExecutorException
 from utils.metrics import performance_monitor, metric_collector
 from utils.validators import InputValidator, ValidationError
-from models.task import Task, Message
-from models.result import StatusUpdate, LogEntry
+from models.task import Task
+from models.result import Message, StatusUpdate, LogEntry
 from core.task_executor_production import TaskExecutorProduction
 
-# 设置日志
+print("正在设置日志...")
 logger = setup_logger("executor_production")
+print("日志设置完成")
 
 class PythonExecutorProduction:
     """Python执行器主类 - 生产环境版本"""
@@ -36,7 +43,7 @@ class PythonExecutorProduction:
         self.socketio = SocketIO(
             self.app,
             cors_allowed_origins="*",
-            async_mode='threading',
+            async_mode='gevent',
             logger=False,
             engineio_logger=False
         )
@@ -89,33 +96,66 @@ class PythonExecutorProduction:
         @self.app.route('/health')
         def health_check():
             """健康检查"""
-            return {
+            health_result = {
                 'status': 'healthy',
                 'timestamp': datetime.now().isoformat(),
                 'clients': len(self.clients),
-                'current_task': self.task_executor.get_current_status() if self.task_executor else None,
+                'current_task': None,
                 'config_valid': len(config_manager.validate_config()) == 0
             }
+            
+            try:
+                if self.task_executor:
+                    health_result['current_task'] = self.task_executor.get_current_status()
+            except Exception as e:
+                logger.warning(f"获取任务状态失败: {e}")
+            
+            return health_result
         
         @self.app.route('/status')
         def status():
             """状态查询"""
-            return {
+            status_result = {
                 'clients': len(self.clients),
                 'running': self.running,
                 'uptime': time.time() - getattr(self, 'start_time', time.time()),
-                'current_task': self.task_executor.get_current_status() if self.task_executor else None,
-                'metrics': performance_monitor.get_metrics_report() if performance_monitor else None
+                'current_task': None,
+                'metrics': None
             }
+            
+            try:
+                if self.task_executor:
+                    status_result['current_task'] = self.task_executor.get_current_status()
+            except Exception as e:
+                logger.warning(f"获取任务状态失败: {e}")
+            
+            try:
+                status_result['metrics'] = performance_monitor.get_metrics_report()
+            except Exception as e:
+                logger.warning(f"获取性能指标失败: {e}")
+            
+            return status_result
         
         @self.app.route('/metrics')
         def metrics():
             """指标查询"""
-            return {
+            metrics_result = {
                 'timestamp': datetime.now().isoformat(),
-                'metrics': metric_collector.get_all_metrics(),
-                'performance': performance_monitor.get_metrics_report() if performance_monitor else None
+                'metrics': {},
+                'performance': None
             }
+            
+            try:
+                metrics_result['metrics'] = metric_collector.get_all_metrics()
+            except Exception as e:
+                logger.warning(f"获取指标失败: {e}")
+            
+            try:
+                metrics_result['performance'] = performance_monitor.get_metrics_report()
+            except Exception as e:
+                logger.warning(f"获取性能报告失败: {e}")
+            
+            return metrics_result
         
         @self.app.route('/config', methods=['GET'])
         def get_config():
@@ -141,33 +181,37 @@ class PythonExecutorProduction:
         @self.socketio.on('connect')
         def handle_connect():
             """处理客户端连接"""
-            sid = request.sid
-            client_info = {
-                'sid': sid,
-                'connected_at': datetime.now(),
-                'last_heartbeat': datetime.now(),
-                'ip': request.remote_addr
-            }
-            self.clients[sid] = client_info
-            
-            logger.info(f"客户端连接: {sid} from {request.remote_addr}")
-            
-            # 发送欢迎消息
-            emit('welcome', {
-                'message': 'Python执行器（生产环境版）已连接',
-                'executor_info': {
-                    'version': '2.0.0',
-                    'status': 'ready',
-                    'features': [
-                        'circuit_breaker',
-                        'auto_retry',
-                        'hot_reload',
-                        'performance_monitoring',
-                        'input_validation'
-                    ]
-                },
-                'timestamp': int(time.time() * 1000)
-            })
+            try:
+                sid = request.sid
+                client_info = {
+                    'sid': sid,
+                    'connected_at': datetime.now(),
+                    'last_heartbeat': datetime.now(),
+                    'ip': request.remote_addr
+                }
+                self.clients[sid] = client_info
+                
+                logger.info(f"客户端连接: {sid} from {request.remote_addr}")
+                
+                emit('welcome', {
+                    'message': 'Python执行器（生产环境版）已连接',
+                    'executor_info': {
+                        'version': '2.0.0',
+                        'status': 'ready',
+                        'features': [
+                            'circuit_breaker',
+                            'auto_retry',
+                            'hot_reload',
+                            'performance_monitoring',
+                            'input_validation'
+                        ]
+                    },
+                    'timestamp': int(time.time() * 1000)
+                })
+            except Exception as e:
+                logger.error(f"处理连接时出错: {e}")
+                return False
+            return True
         
         @self.socketio.on('disconnect')
         def handle_disconnect():
@@ -234,13 +278,17 @@ class PythonExecutorProduction:
     def _handle_task_dispatch(self, message: Message, client_sid: str):
         """处理任务下发"""
         try:
-            logger.info(f"收到任务下发: {message.task_id}")
+            logger.info(f"收到任务下发: {message.taskNo}")
             
-            # 验证任务数据
             task_data = message.payload or {}
+            if isinstance(task_data, str):
+                task_data = json.loads(task_data)
+            if not isinstance(task_data, dict):
+                task_data = {}
+            
             task_data.update({
-                'taskId': message.task_id,
-                'deviceId': message.device_id
+                'taskNo': message.taskNo,
+                'deviceId': message.deviceId
             })
             
             # 验证输入
@@ -292,22 +340,22 @@ class PythonExecutorProduction:
     def _handle_task_cancel(self, message: Message, client_sid: str):
         """处理任务取消"""
         try:
-            logger.info(f"收到任务取消: {message.task_id}")
+            logger.info(f"收到任务取消: {message.taskNo}")
             
             if self.task_executor:
                 success = self.task_executor.cancel_task()
                 if success:
-                    logger.info(f"任务取消成功: {message.task_id}")
+                    logger.info(f"任务取消成功: {message.taskNo}")
                     emit('cancel_response', {
-                        'taskId': message.task_id,
+                        'taskId': message.taskNo,
                         'status': 'cancelled',
                         'message': '任务已取消',
                         'timestamp': int(time.time() * 1000)
                     })
                 else:
-                    logger.warning(f"任务取消失败: {message.task_id}")
+                    logger.warning(f"任务取消失败: {message.taskNo}")
                     emit('cancel_response', {
-                        'taskId': message.task_id,
+                        'taskId': message.taskNo,
                         'status': 'failed',
                         'message': '任务取消失败',
                         'timestamp': int(time.time() * 1000)
@@ -315,7 +363,7 @@ class PythonExecutorProduction:
             else:
                 logger.warning("没有正在执行的任务")
                 emit('cancel_response', {
-                    'taskId': message.task_id,
+                    'taskId': message.taskNo,
                     'status': 'failed',
                     'message': '没有正在执行的任务',
                     'timestamp': int(time.time() * 1000)
@@ -398,7 +446,7 @@ class PythonExecutorProduction:
     def run(self, host: str = None, port: int = None):
         """运行执行器"""
         host = host or config_manager.get('websocket.host', '0.0.0.0')
-        port = port or config_manager.get('websocket.port', 8080)
+        port = port or config_manager.get('websocket.port', 8180)
         
         self.start_time = time.time()
         
