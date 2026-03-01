@@ -310,7 +310,7 @@ class PythonExecutorProduction:
             if success:
                 logger.info(f"任务已加入队列: {task.task_id}")
                 emit('task_response', {
-                    'taskId': task.task_id,
+                    'taskNo': task.task_id,
                     'status': 'queued',
                     'message': '任务已加入队列',
                     'timestamp': int(time.time() * 1000)
@@ -318,7 +318,7 @@ class PythonExecutorProduction:
             else:
                 logger.warning(f"任务加入队列失败: {task.task_id}")
                 emit('task_response', {
-                    'taskId': task.task_id,
+                    'taskNo': task.task_id,
                     'status': 'rejected',
                     'message': '任务加入队列失败',
                     'timestamp': int(time.time() * 1000)
@@ -347,7 +347,7 @@ class PythonExecutorProduction:
                 if success:
                     logger.info(f"任务取消成功: {message.taskNo}")
                     emit('cancel_response', {
-                        'taskId': message.taskNo,
+                        'taskNo': message.taskNo,
                         'status': 'cancelled',
                         'message': '任务已取消',
                         'timestamp': int(time.time() * 1000)
@@ -355,7 +355,7 @@ class PythonExecutorProduction:
                 else:
                     logger.warning(f"任务取消失败: {message.taskNo}")
                     emit('cancel_response', {
-                        'taskId': message.taskNo,
+                        'taskNo': message.taskNo,
                         'status': 'failed',
                         'message': '任务取消失败',
                         'timestamp': int(time.time() * 1000)
@@ -363,7 +363,7 @@ class PythonExecutorProduction:
             else:
                 logger.warning("没有正在执行的任务")
                 emit('cancel_response', {
-                    'taskId': message.taskNo,
+                    'taskNo': message.taskNo,
                     'status': 'failed',
                     'message': '没有正在执行的任务',
                     'timestamp': int(time.time() * 1000)

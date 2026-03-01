@@ -105,7 +105,7 @@ notepad config\config.template.json
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
 | `device_id` | 设备唯一标识 | `TEST-PC-001` |
-| `websocket.port` | WebSocket服务端口 | `8080` |
+| `websocket.port` | WebSocket服务端口 | `8180` |
 | `platform.host` | 测试平台服务器地址 | `platform.company.com` |
 | `logging.level` | 日志级别 | `INFO` |
 | `canoe.enabled` | 启用CANoe支持 | `true` |
@@ -190,10 +190,10 @@ python -c "import json; json.load(open('config/executor_config.json'))"
 
 ```powershell
 # 查看性能指标
-curl http://localhost:8080/metrics
+curl http://localhost:8180/metrics
 
 # 健康检查
-curl http://localhost:8080/health
+curl http://localhost:8180/health
 ```
 
 ### 集成外部监控

@@ -195,7 +195,7 @@ class PythonExecutor:
             logger.error(f"处理任务下发失败: {e}")
             self._send_message_to_client(client_sid, {
                 'type': 'TASK_STATUS',
-                'taskId': message.taskNo,
+                'taskNo': message.taskNo,
                 'status': 'failed',
                 'message': f"任务下发失败: {e}",
                 'timestamp': int(time.time() * 1000)

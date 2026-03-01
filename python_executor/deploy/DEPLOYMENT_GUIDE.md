@@ -25,7 +25,7 @@
 
 #### 网络要求
 - [ ] 与测试平台服务器的网络连通
-- [ ] WebSocket端口（默认8080）可访问
+- [ ] WebSocket端口（默认8180）可访问
 - [ ] 防火墙允许Python执行器通信
 
 #### 软件依赖
@@ -61,10 +61,10 @@ copy deploy\config\config.template.json deploy\config\config.production.json
 {
     "platform": {
         "host": "your-platform-server.com",
-        "port": 8080
+        "port": 8180
     },
     "websocket": {
-        "port": 8080
+        "port": 8180
     }
 }
 ```
@@ -133,7 +133,7 @@ cd $installDir
 tail -f logs\executor.log
 
 # 测试WebSocket连接（在另一台机器上）
-curl http://<device-ip>:8080/health
+curl http://<device-ip>:8180/health
 ```
 
 ### 2.2 使用安装脚本一键部署
@@ -257,7 +257,7 @@ $cred = New-Object System.Management.Automation.PSCredential($username, $passwor
 ```powershell
 # 修改配置文件后，发送热更新信号
 # 方式1：HTTP接口
-curl -X POST http://localhost:8080/config/reload
+curl -X POST http://localhost:8180/config/reload
 
 # 方式2：重启服务（会中断当前任务）
 .\deploy\install-service.ps1 -Action restart
@@ -307,10 +307,10 @@ tail -f logs\service.log
 
 ```powershell
 # 获取性能指标
-curl http://localhost:8080/metrics | ConvertFrom-Json
+curl http://localhost:8180/metrics | ConvertFrom-Json
 
 # 查看CPU和内存使用
-$metrics = curl http://localhost:8080/metrics | ConvertFrom-Json
+$metrics = curl http://localhost:8180/metrics | ConvertFrom-Json
 $metrics.metrics.'system.cpu_percent'
 $metrics.metrics.'system.memory_percent'
 ```
@@ -319,7 +319,7 @@ $metrics.metrics.'system.memory_percent'
 
 ```powershell
 # HTTP健康检查
-$response = curl http://localhost:8080/health | ConvertFrom-Json
+$response = curl http://localhost:8180/health | ConvertFrom-Json
 $response.status
 $response.clients
 $response.current_task
@@ -364,7 +364,7 @@ python --version
 python -c "import flask; import socketio; print('Dependencies OK')"
 
 # 3. 检查端口占用
-Get-NetTCPConnection -LocalPort 8080
+Get-NetTCPConnection -LocalPort 8180
 
 # 4. 手动运行测试
 python main_production.py
@@ -388,7 +388,7 @@ python -c "import json; json.load(open('config/executor_config.json'))"
 
 ```powershell
 # 1. 测试网络连通
-Test-NetConnection -ComputerName platform-server -Port 8080
+Test-NetConnection -ComputerName platform-server -Port 8180
 
 # 2. 检查防火墙
 Get-NetFirewallRule | Where-Object { $_.DisplayName -like "*Python*" }
@@ -397,7 +397,7 @@ Get-NetFirewallRule | Where-Object { $_.DisplayName -like "*Python*" }
 cat config\executor_config.json | grep platform
 
 # 4. 测试WebSocket
-curl http://platform-server:8080/api/health
+curl http://platform-server:8180/api/health
 ```
 
 ### 6.3 CANoe/TSMaster连接失败
@@ -428,13 +428,13 @@ Test-Path "C:\Program Files\TOSUN\TSMaster\lib\TSMaster.dll"
 
 ```powershell
 # 1. 查看性能指标
-curl http://localhost:8080/metrics | ConvertFrom-Json
+curl http://localhost:8180/metrics | ConvertFrom-Json
 
 # 2. 查看进程信息
 Get-Process python | Select-Object Name, Id, CPU, WorkingSet
 
 # 3. 查看任务状态
-curl http://localhost:8080/health | ConvertFrom-Json
+curl http://localhost:8180/health | ConvertFrom-Json
 
 # 4. 检查日志中的性能告警
 grep "性能告警" logs\executor.log
@@ -482,7 +482,7 @@ cd C:\PythonExecutor
 
 # 3. 验证升级
 .\deploy\install-service.ps1 -Action status
-curl http://localhost:8080/health
+curl http://localhost:8180/health
 ```
 
 #### 批量升级
@@ -592,12 +592,12 @@ sc delete PythonExecutor         # 删除服务
     
     "websocket": {
         "host": "0.0.0.0",
-        "port": 8080
+        "port": 8180
     },
     
     "platform": {
         "host": "platform.company.com",
-        "port": 8080
+        "port": 8180
     },
     
     "logging": {

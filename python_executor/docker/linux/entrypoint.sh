@@ -42,16 +42,10 @@ echo "  TSMaster启用: $TSMASTER_ENABLED"
 # 检查端口占用
 echo ""
 echo "检查端口占用..."
-if lsof -Pi :5000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "  [WARNING] 端口5000已被占用"
+if lsof -Pi :8180 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "  [WARNING] 端口8180已被占用"
 else
-    echo "  [OK] 端口5000可用"
-fi
-
-if lsof -Pi :5001 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "  [WARNING] 端口5001已被占用"
-else
-    echo "  [OK] 端口5001可用"
+    echo "  [OK] 端口8180可用"
 fi
 
 # 设置环境变量

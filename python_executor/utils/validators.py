@@ -194,9 +194,9 @@ class InputValidator:
         validated_data = {}
         
         # 验证任务ID
-        task_id = task_data.get('taskId')
-        if task_id:
-            validated_data['taskId'] = InputValidator.validate_task_id(str(task_id))
+        task_no = task_data.get('taskNo')
+        if task_no:
+            validated_data['taskNo'] = InputValidator.validate_task_id(str(task_no))
         else:
             raise ValidationError("任务ID不能为空")
         

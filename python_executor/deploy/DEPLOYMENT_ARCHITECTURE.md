@@ -300,13 +300,13 @@ Get-Content logs/executor.log -Tail 50
 pip list | grep -E "flask|socketio"
 
 # 检查端口占用
-Get-NetTCPConnection -LocalPort 8080
+Get-NetTCPConnection -LocalPort 8180
 ```
 
 #### 连接测试平台失败
 ```powershell
 # 测试网络连通
-Test-NetConnection -ComputerName platform-server -Port 8080
+Test-NetConnection -ComputerName platform-server -Port 8180
 
 # 检查配置
 Get-Content config/executor_config.json | grep websocket

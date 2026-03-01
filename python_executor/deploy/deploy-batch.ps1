@@ -182,7 +182,7 @@ function New-DeviceConfig {
         $config.device_name = $Device
         
         # 生成设备特定端口（避免冲突）
-        $portBase = 8080
+        $portBase = 8180
         $deviceHash = [math]::Abs($Device.GetHashCode()) % 1000
         $config.websocket.port = $portBase + $deviceHash
         

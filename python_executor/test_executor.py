@@ -43,7 +43,7 @@ def test_task_dispatch():
         # 构造测试任务
         task_data = {
             "type": "TASK_DISPATCH",
-            "taskId": "TEST_TASK_001",
+            "taskNo": "TEST_TASK_001",
             "deviceId": "DEVICE_001",
             "toolType": "canoe",
             "configPath": "C:\\TestConfigs\\EngineTest.cfg",
@@ -66,7 +66,7 @@ def test_task_dispatch():
         }
         
         ws.send(json.dumps(task_data))
-        print(f"发送任务: {task_data['taskId']}")
+        print(f"发送任务: {task_data['taskNo']}")
         
         # 接收响应
         response = ws.recv()
@@ -95,12 +95,12 @@ def test_task_cancel():
         # 发送取消任务
         cancel_data = {
             "type": "TASK_CANCEL",
-            "taskId": "TEST_TASK_001",
+            "taskNo": "TEST_TASK_001",
             "timestamp": int(time.time() * 1000)
         }
         
         ws.send(json.dumps(cancel_data))
-        print(f"发送取消任务: {cancel_data['taskId']}")
+        print(f"发送取消任务: {cancel_data['taskNo']}")
         
         # 接收响应
         response = ws.recv()

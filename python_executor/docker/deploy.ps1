@@ -145,7 +145,7 @@ function Show-ContainerStatus {
     
     Write-ColorOutput "`n健康检查:" -Color Yellow
     try {
-        $health = Invoke-WebRequest -Uri http://localhost:5000/health -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $health = Invoke-WebRequest -Uri http://localhost:8180/health -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue
         if ($health) {
             Write-ColorOutput "  HTTP API: 正常" -Color Green
         }

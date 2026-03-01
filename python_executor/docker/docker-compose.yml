@@ -23,7 +23,7 @@ services:
       - EXECUTOR_ID=${EXECUTOR_ID:-executor-01}
       - EXECUTOR_NAME=${EXECUTOR_NAME:-执行器1}
       - PLATFORM_HOST=${PLATFORM_HOST:-platform-api}
-      - PLATFORM_PORT=${PLATFORM_PORT:-8080}
+      - PLATFORM_PORT=${PLATFORM_PORT:-8180}
       - CANOE_ENABLED=${CANOE_ENABLED:-true}
       - TSMASTER_ENABLED=${TSMASTER_ENABLED:-true}
       - DEBUG=${DEBUG:-false}
@@ -62,8 +62,7 @@ services:
 
     # 端口映射
     ports:
-      - "${API_PORT:-5000}:5000"  # HTTP API
-      - "${WS_PORT:-5001}:5001"    # WebSocket
+      - "${API_PORT:-8180}:8180"
 
     # 网络配置
     networks:
@@ -75,7 +74,7 @@ services:
 
     # 健康检查
     healthcheck:
-      test: ["CMD", "powershell", "-Command", "try { Invoke-WebRequest -Uri http://localhost:5000/health -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty StatusCode } catch { exit 1 }"]
+      test: ["CMD", "powershell", "-Command", "try { Invoke-WebRequest -Uri http://localhost:8180/health -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty StatusCode } catch { exit 1 }"]
       interval: 30s
       timeout: 10s
       retries: 3

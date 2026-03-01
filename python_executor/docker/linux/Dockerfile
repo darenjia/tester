@@ -52,11 +52,11 @@ COPY docker/linux/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # 12. 暴露端口
-EXPOSE 5000 5001
+EXPOSE 8180
 
 # 13. 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:8180/health || exit 1
 
 # 14. 切换到非root用户
 USER executor

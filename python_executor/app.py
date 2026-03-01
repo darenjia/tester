@@ -105,11 +105,11 @@ def handle_task_dispatch(data):
         print(f"收到任务下发: {data}")
         
         # 这里可以添加任务执行逻辑
-        task_id = data.get('taskId')
+        task_no = data.get('taskNo')
         
         # 模拟任务接收确认
         emit('task_response', {
-            'taskId': task_id,
+            'taskNo': task_no,
             'status': 'accepted',
             'message': '任务已接收，正在执行',
             'timestamp': int(datetime.now().timestamp() * 1000)
@@ -119,7 +119,7 @@ def handle_task_dispatch(data):
         import threading
         def execute_task():
             # 这里应该调用实际的执行器
-            print(f"开始执行任务: {task_id}")
+            print(f"开始执行任务: {task_no}")
             
             # 模拟执行过程
             import time
@@ -127,7 +127,7 @@ def handle_task_dispatch(data):
             
             # 发送完成消息
             emit('task_completed', {
-                'taskId': task_id,
+                'taskNo': task_no,
                 'status': 'completed',
                 'results': [],
                 'timestamp': int(datetime.now().timestamp() * 1000)

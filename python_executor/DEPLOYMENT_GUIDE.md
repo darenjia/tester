@@ -23,7 +23,7 @@ cp config/executor_config.json.example config/executor_config.json
 ```
 
 **主要配置项：**
-- `websocket.port`: WebSocket服务端口（默认8080）
+- `websocket.port`: WebSocket服务端口（默认8180）
 - `logging.level`: 日志级别（INFO/DEBUG/ERROR）
 - `task.timeout`: 任务超时时间（秒）
 - `canoe.timeout`: CANoe连接超时时间
@@ -31,19 +31,28 @@ cp config/executor_config.json.example config/executor_config.json
 ### 3. 启动执行器
 
 ```bash
-# 方式1：使用运行脚本
-python run.py
+# 方式1：生产环境（推荐）
+python main_production.py
 
-# 方式2：直接运行主模块
+# 方式2：标准版本
 python main.py
+
+# 方式3：使用运行脚本
+python run.py
 ```
 
-**启动成功标志：**
+**启动成功标志（生产环境）：**
 ```
 ============================================================
-Python执行器启动
-版本: 1.0.0
-监听地址: ws://0.0.0.0:8080
+Python执行器（生产环境版）启动
+版本: 2.0.0
+监听地址: ws://0.0.0.0:8180
+生产环境特性:
+  - 熔断器保护
+  - 自动重试机制
+  - 配置热更新
+  - 性能监控
+  - 输入验证
 ============================================================
 ```
 
@@ -52,10 +61,10 @@ Python执行器启动
 ### 连接测试
 ```bash
 # 检查WebSocket连接
-curl http://localhost:8080/health
+curl http://localhost:8180/health
 
 # 查看执行器状态
-curl http://localhost:8080/status
+curl http://localhost:8180/status
 ```
 
 ### 运行测试用例
@@ -83,7 +92,7 @@ python test_executor.py
 {
     "websocket": {
         "host": "0.0.0.0",
-        "port": 8080,
+        "port": 8180,
         "heartbeat_interval": 30,
         "reconnect_interval": 5
     }
@@ -134,7 +143,7 @@ tail -n 100 logs/executor.log
 
 ### 3. WebSocket连接超时
 **问题：** 连接Java服务端超时
-**解决：** 检查网络配置，确保端口8080未被占用
+**解决：** 检查网络配置，确保端口8180未被占用
 
 ### 4. 任务执行超时
 **问题：** 任务执行时间超过配置的超时时间
@@ -147,7 +156,7 @@ tail -n 100 logs/executor.log
 // Java端连接示例
 WebSocketClient client = new StandardWebSocketClient();
 WebSocketStompClient stompClient = new WebSocketStompClient(client);
-StompSession session = stompClient.connect("ws://localhost:8080/ws/executor").get();
+StompSession session = stompClient.connect("ws://localhost:8180/ws/executor").get();
 ```
 
 ### 消息格式验证
@@ -155,19 +164,29 @@ StompSession session = stompClient.connect("ws://localhost:8080/ws/executor").ge
 // 任务下发消息
 {
     "type": "TASK_DISPATCH",
-    "taskId": "TASK_20250203_001",
+    "taskNo": "TASK_20250203_001",
     "deviceId": "DEVICE_001",
-    "toolType": "canoe",
-    "configPath": "C:\\TestConfigs\\EngineTest.cfg",
-    "testItems": [
-        {
-            "name": "初始化检查",
-            "type": "signal_check",
-            "signalName": "EngineStatus",
-            "expectedValue": 0
-        }
-    ],
-    "timeout": 3600,
+    "payload": {
+        "projectNo": "PROJ_001",
+        "taskNo": "TASK_20250203_001",
+        "taskName": "发动机测试",
+        "toolType": "canoe",
+        "configPath": "C:\\TestConfigs\\EngineTest.cfg",
+        "caseList": [
+            {
+                "caseNo": "CASE_001",
+                "caseName": "初始化检查",
+                "moduleLevel1": "发动机",
+                "moduleLevel2": "启动系统",
+                "priority": "高",
+                "caseType": "功能测试",
+                "preCondition": "车辆静止",
+                "stepDescription": "检查发动机状态信号",
+                "expectedResult": "状态为0（关闭）",
+                "maintainer": "测试工程师"
+            }
+        ]
+    },
     "timestamp": 1706963200000
 }
 ```

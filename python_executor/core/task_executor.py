@@ -12,8 +12,7 @@ from utils.exceptions import TaskException, ToolException
 from config.settings import settings
 from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
 from core.result_collector import ResultCollector
-from core.canoe_controller import CANoeController
-from core.tsmaster_controller import TSMasterController
+from core.adapters.adapter_factory import AdapterFactory, TestToolType as AdapterToolType
 
 logger = get_logger("task_executor")
 
@@ -89,12 +88,13 @@ class TaskExecutor:
             # 更新状态为运行中
             self._update_task_status(task.task_id, TaskStatus.RUNNING)
             
-            # 根据工具类型选择控制器
-            if task.tool_type == TestToolType.CANOE.value:
-                self.controller = CANoeController()
-            elif task.tool_type == TestToolType.TSMASTER.value:
-                self.controller = TSMasterController()
-            else:
+            # 使用适配器工厂创建控制器
+            try:
+                tool_enum = AdapterToolType(task.tool_type.lower())
+                self.controller = AdapterFactory.create_adapter(tool_enum, {
+                    'timeout': settings.canoe_timeout if task.tool_type == TestToolType.CANOE.value else settings.tsmaster_timeout
+                })
+            except ValueError:
                 raise TaskException(f"不支持的测试工具类型: {task.tool_type}")
             
             # 连接测试软件
@@ -333,7 +333,7 @@ class TaskExecutor:
         except Exception as e:
             logger.warning(f"清理控制器资源失败: {e}")
     
-    def _update_task_status(self, task_id: str, status: TaskStatus, message: str = None, progress: int = None):
+    def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):
         """更新任务状态"""
         if self.current_collector:
             self.current_collector.add_status_update(status.value, message, progress)
@@ -342,31 +342,31 @@ class TaskExecutor:
         if self.message_sender:
             self.message_sender({
                 "type": "TASK_STATUS",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": status.value,
                 "message": message,
                 "progress": progress,
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_progress(self, task_id: str, test_item, result: TestResult):
+    def _report_progress(self, task_no: str, test_item, result: TestResult):
         """上报执行进度"""
         if self.message_sender:
             self.message_sender({
                 "type": "LOG_STREAM",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "level": "INFO",
                 "message": f"执行测试项: {test_item.name}",
                 "result": result.to_dict(),
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_final_result(self, task_id: str, task_result: TaskResult):
+    def _report_final_result(self, task_no: str, task_result: TaskResult):
         """上报最终结果"""
         if self.message_sender:
             self.message_sender({
                 "type": "RESULT_REPORT",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": task_result.status,
                 "results": [r.to_dict() for r in task_result.results],
                 "summary": task_result.summary,

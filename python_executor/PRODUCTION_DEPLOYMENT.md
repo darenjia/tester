@@ -74,7 +74,7 @@ pip install psutil
 {
     "websocket": {
         "host": "0.0.0.0",
-        "port": 8080,
+        "port": 8180,
         "heartbeat_interval": 30,
         "reconnect_interval": 5,
         "max_reconnect_attempts": 3
@@ -136,7 +136,7 @@ python main_production.py
 pip install waitress
 
 # 启动
-waitress-serve --host=0.0.0.0 --port=8080 main_production:app
+waitress-serve --host=0.0.0.0 --port=8180 main_production:app
 ```
 
 #### Windows服务（使用NSSM）
@@ -160,7 +160,7 @@ nssm start PythonExecutor
 
 ```bash
 # HTTP健康检查
-curl http://localhost:8080/health
+curl http://localhost:8180/health
 
 # 预期响应
 {
@@ -176,7 +176,7 @@ curl http://localhost:8080/health
 
 ```bash
 # 获取性能指标
-curl http://localhost:8080/metrics
+curl http://localhost:8180/metrics
 
 # 预期响应
 {
@@ -206,7 +206,7 @@ grep "性能告警" logs/executor.log
 
 ```bash
 # 手动重新加载配置
-curl -X POST http://localhost:8080/config/reload
+curl -X POST http://localhost:8180/config/reload
 ```
 
 ## 故障排查
@@ -243,7 +243,7 @@ grep "record_failure" logs/executor.log
 **排查**:
 ```bash
 # 查看内存指标
-curl http://localhost:8080/metrics | grep memory
+curl http://localhost:8180/metrics | grep memory
 
 # 检查任务完成情况
 grep "任务执行完成" logs/executor.log

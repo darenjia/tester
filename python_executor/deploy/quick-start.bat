@@ -190,7 +190,7 @@ cls
 echo [信息] 运行健康检查...
 %POWERSHELL% -Command "
 try {
-    $response = Invoke-RestMethod -Uri 'http://localhost:8080/health' -TimeoutSec 5
+    $response = Invoke-RestMethod -Uri 'http://localhost:8180/health' -TimeoutSec 5
     Write-Host '[成功] 健康检查通过' -ForegroundColor Green
     Write-Host '状态:' $response.status
     Write-Host '客户端数:' $response.clients

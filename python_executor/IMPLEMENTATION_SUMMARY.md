@@ -21,33 +21,56 @@
 
 ```
 python_executor/
-├── main.py                   # 主应用入口
+├── main.py                   # 主应用入口（标准版）
+├── main_production.py        # 生产环境入口（推荐）
 ├── run.py                    # 快速启动脚本
 ├── test_executor.py          # 功能测试脚本
 ├── requirements.txt          # 项目依赖
+├── requirements_production.txt # 生产环境依赖
 ├── README.md                 # 项目说明
 ├── DEPLOYMENT_GUIDE.md       # 部署指南
+├── PRODUCTION_DEPLOYMENT.md  # 生产环境部署指南
 ├── config/
 │   ├── settings.py            # 配置管理
+│   ├── config_manager.py      # 配置热更新管理
 │   ├── executor_config.json  # 运行时配置
 │   └── executor_config.json.example  # 配置示例
 ├── core/
 │   ├── __init__.py
-│   ├── task_executor.py      # 任务执行核心
-│   ├── canoe_controller.py   # CANoe控制器
+│   ├── task_executor.py            # 任务执行核心（标准版）
+│   ├── task_executor_production.py # 任务执行核心（生产环境版）
+│   ├── adapters/              # 测试工具适配器
+│   │   ├── adapter_factory.py     # 适配器工厂
+│   │   ├── canoe_adapter.py       # CANoe适配器
+│   │   ├── tsmaster_adapter.py    # TSMaster适配器
+│   │   └── ttworkbench_adapter.py # TTworkbench适配器
+│   ├── canoe_controller.py    # CANoe控制器（旧版）
+│   ├── canoe_controller_production.py # CANoe控制器（生产环境版）
 │   ├── tsmaster_controller.py # TSMaster控制器
-│   └── result_collector.py   # 结果收集器
-├── websocket/
+│   └── result_collector.py    # 结果收集器
+├── ws_server/
 │   ├── __init__.py
-│   └── client.py             # WebSocket服务端
+│   └── client.py              # WebSocket服务端
 ├── models/
 │   ├── __init__.py
-│   ├── task.py               # 任务模型
-│   └── result.py             # 结果模型
-└── utils/
-    ├── __init__.py
-    ├── logger.py             # 日志工具
-    └── exceptions.py         # 异常定义
+│   ├── task.py                # 任务模型
+│   └── result.py              # 结果模型
+├── utils/
+│   ├── __init__.py
+│   ├── logger.py              # 日志工具
+│   ├── exceptions.py          # 异常定义
+│   ├── validators.py          # 输入验证
+│   ├── retry.py               # 重试和熔断器
+│   └── metrics.py             # 性能监控
+├── tests/                     # 测试目录
+│   ├── test_api/             # API测试
+│   ├── test_canoe_adapter.py # CANoe适配器测试
+│   └── test_tsmaster_adapter_rpc.py # TSMaster适配器测试
+├── docker/                    # Docker部署配置
+│   ├── linux/                # Linux容器配置
+│   ├── windows/              # Windows容器配置
+│   └── docker-compose.yml    # Docker Compose配置
+└── deploy/                    # 部署脚本和配置
 ```
 
 ### 🔧 技术特点
@@ -61,6 +84,18 @@ python_executor/
 - **实时通信**: 支持任务下发、状态更新、日志推送、结果上报
 - **心跳检测**: 30秒心跳包，自动检测连接状态
 - **断线重连**: 支持连接异常时的自动重连机制
+
+#### 3. 生产环境特性
+- **熔断器保护**: 防止级联故障，当错误率达到阈值时自动断开
+- **自动重试机制**: 自动重试失败的操作，最大重试3次，指数退避
+- **配置热更新**: 无需重启服务即可更新配置，5秒检查一次配置文件变更
+- **性能监控**: 实时监控系统资源使用情况（CPU、内存、磁盘、网络IO）
+- **输入验证**: 严格验证所有输入数据，防止路径遍历和注入攻击
+
+#### 4. TDM2.0对接
+- **标准字段**: 支持TDM2.0标准字段（projectNo, taskNo, caseNo等）
+- **结果上报**: 支持TDM2.0格式的结果上报
+- **实时同步**: 任务状态和结果实时同步到TDM平台
 
 #### 3. 任务执行引擎
 - **状态机管理**: PENDING → RUNNING → COMPLETED/FAILED/CANCELLED
@@ -143,7 +178,7 @@ python test_executor.py
 ```java
 // Java端连接示例
 WebSocketClient client = new StandardWebSocketClient();
-client.connect("ws://localhost:8080/ws/executor");
+client.connect("ws://localhost:8180/ws/executor");
 ```
 
 支持的消息类型：

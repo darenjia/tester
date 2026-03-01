@@ -169,7 +169,7 @@ class TestErrorHandlingScenarios:
             # 发送无效格式的任务数据
             ws_client.send_event('message', {
                 'type': 'TASK_DISPATCH',
-                'taskId': 'INVALID-TASK',
+                'taskNo': 'INVALID-TASK',
                 'payload': 'invalid data format',  # 应该是字典
                 'timestamp': int(time.time() * 1000)
             })

@@ -299,7 +299,7 @@ services:
     environment:
       - CONFIG_PATH=C:/app/docker/config/config.json
       - LOG_LEVEL=INFO
-      - PLATFORM_HOST=platform-api:8080
+      - PLATFORM_HOST=platform-api:8180
       - EXECUTOR_ID=${EXECUTOR_ID:-executor-01}
       
     volumes:
@@ -381,8 +381,8 @@ volumes:
   },
   "platform": {
     "host": "platform-api",
-    "port": 8080,
-    "ws_endpoint": "ws://platform-api:8080/ws/executor"
+    "port": 8180,
+    "ws_endpoint": "ws://platform-api:8180/ws/executor"
   },
   "adapters": {
     "canoe": {
@@ -423,7 +423,7 @@ EXECUTOR_NAME=执行器1
 
 # 平台配置
 PLATFORM_API_HOST=platform-api
-PLATFORM_API_PORT=8080
+PLATFORM_API_PORT=8180
 
 # 日志配置
 LOG_LEVEL=INFO
@@ -524,7 +524,7 @@ services:
     environment:
       - CONFIG_PATH=/app/config/config.json
       - LOG_LEVEL=INFO
-      - PLATFORM_HOST=host.docker.internal:8080
+      - PLATFORM_HOST=host.docker.internal:8180
       - EXECUTOR_ID=executor-linux-01
       - CANOE_ENABLED=false
       - TSMASTER_ENABLED=false
@@ -697,8 +697,8 @@ docker-compose -f docker-compose.linux.yml logs -f
 {
   "platform": {
     "host": "platform-api",
-    "port": 8080,
-    "ws_endpoint": "ws://platform-api:8080/ws/executor",
+    "port": 8180,
+    "ws_endpoint": "ws://platform-api:8180/ws/executor",
     "api_key": "your-api-key-here",
     "retry_count": 3,
     "retry_delay": 5

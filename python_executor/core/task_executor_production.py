@@ -169,7 +169,7 @@ class TaskExecutorProduction:
         # 验证任务数据
         try:
             task_data = {
-                'taskId': task.task_id,
+                'taskNo': task.task_id,
                 'deviceId': task.device_id,
                 'toolType': task.tool_type,
                 'configPath': task.config_path,
@@ -515,7 +515,7 @@ class TaskExecutorProduction:
         self._stop_event.set()
         return True
     
-    def _update_task_status(self, task_id: str, status: TaskStatus, message: str = None, progress: int = None):
+    def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):
         """更新任务状态"""
         if self.current_collector:
             self.current_collector.add_status_update(status.value, message, progress)
@@ -523,31 +523,31 @@ class TaskExecutorProduction:
         if self.message_sender:
             self.message_sender({
                 "type": "TASK_STATUS",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": status.value,
                 "message": message,
                 "progress": progress,
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_progress(self, task_id: str, test_item, result: TestResult):
+    def _report_progress(self, task_no: str, test_item, result: TestResult):
         """上报执行进度"""
         if self.message_sender:
             self.message_sender({
                 "type": "LOG_STREAM",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "level": "INFO",
                 "message": f"执行测试项: {test_item.name}",
                 "result": result.to_dict(),
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_final_result(self, task_id: str, task_result):
+    def _report_final_result(self, task_no: str, task_result):
         """上报最终结果"""
         if self.message_sender:
             self.message_sender({
                 "type": "RESULT_REPORT",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": task_result.status,
                 "results": [r.to_dict() for r in task_result.results],
                 "summary": task_result.summary,

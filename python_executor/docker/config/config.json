@@ -45,8 +45,8 @@
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   },
   "network": {
-    "api_port": 5000,
-    "ws_port": 5001,
+    "api_port": 8180,
+    "ws_port": 8180,
     "cors_enabled": true,
     "cors_origins": "*"
   },

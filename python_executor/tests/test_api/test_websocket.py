@@ -99,7 +99,7 @@ class TestWebSocket:
             # 准备任务数据
             task_data = {
                 'type': 'TASK_DISPATCH',
-                'taskId': 'TEST-TASK-001',
+                'taskNo': 'TEST-TASK-001',
                 'deviceId': 'TEST-DEVICE-001',
                 'payload': {
                     'projectNo': 'TEST-001',
@@ -161,7 +161,7 @@ class TestWebSocket:
             # 先发送任务
             task_data = {
                 'type': 'TASK_DISPATCH',
-                'taskId': 'TEST-TASK-002',
+                'taskNo': 'TEST-TASK-002',
                 'deviceId': 'TEST-DEVICE-001',
                 'payload': {
                     'projectNo': 'TEST-001',
@@ -181,7 +181,7 @@ class TestWebSocket:
             # 发送取消任务
             cancel_data = {
                 'type': 'TASK_CANCEL',
-                'taskId': 'TEST-TASK-002',
+                'taskNo': 'TEST-TASK-002',
                 'timestamp': int(time.time() * 1000)
             }
             
