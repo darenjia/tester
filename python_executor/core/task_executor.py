@@ -58,7 +58,7 @@ class TaskExecutor:
         self._task_thread = threading.Thread(target=self._execute_task, args=(task,))
         self._task_thread.start()
         
-        logger.info(f"任务启动成功: {task.task_id}")
+        logger.info(f"任务启动成功: {task.taskNo}")
         return True
     
     def cancel_task(self) -> bool:
@@ -72,7 +72,7 @@ class TaskExecutor:
             logger.warning("没有正在执行的任务")
             return False
         
-        logger.info(f"正在取消任务: {self.current_task.task_id}")
+        logger.info(f"正在取消任务: {self.current_task.taskNo}")
         self._stop_event.set()
         return True
     
@@ -81,13 +81,13 @@ class TaskExecutor:
         self._start_time = time.time()
         
         try:
-            logger.info(f"开始执行任务: {task.task_id}")
+            logger.info(f"开始执行任务: {task.taskNo}")
             
             # 初始化结果收集器
-            self.current_collector = ResultCollector(task.task_id)
+            self.current_collector = ResultCollector(task.taskNo)
             
             # 更新状态为运行中
-            self._update_task_status(task.task_id, TaskStatus.RUNNING)
+            self._update_task_status(task.taskNo, TaskStatus.RUNNING)
             
             # 根据工具类型选择控制器
             if task.tool_type == TestToolType.CANOE.value:
@@ -206,7 +206,7 @@ class TaskExecutor:
             
             # 更新进度
             self._update_task_status(
-                task.task_id, 
+                task.taskNo, 
                 TaskStatus.RUNNING, 
                 f"执行测试项 {i}/{total_items}: {test_item.name}",
                 progress
@@ -220,7 +220,7 @@ class TaskExecutor:
             self.current_collector.add_test_result(result)
             
             # 上报进度
-            self._report_progress(task.task_id, test_item, result)
+            self._report_progress(task.taskNo, test_item, result)
             
             # 短暂延时，避免执行过快
             time.sleep(0.5)
@@ -301,28 +301,28 @@ class TaskExecutor:
         """完成任务"""
         duration = time.time() - self._start_time
         
-        logger.info(f"任务执行完成: {task.task_id}, 耗时: {duration:.1f}秒")
+        logger.info(f"任务执行完成: {task.taskNo}, 耗时: {duration:.1f}秒")
         
         # 完成结果收集
         task_result = self.current_collector.finalize(TaskStatus.COMPLETED.value)
         
         # 上报最终结果
-        self._report_final_result(task.task_id, task_result)
+        self._report_final_result(task.taskNo, task_result)
         
         # 更新状态
-        self._update_task_status(task.task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
+        self._update_task_status(task.taskNo, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
     
     def _fail_task(self, task: Task, error_message: str):
         """任务失败"""
-        logger.error(f"任务失败: {task.task_id}, 错误: {error_message}")
+        logger.error(f"任务失败: {task.taskNo}, 错误: {error_message}")
         
         # 完成结果收集（失败状态）
         if self.current_collector:
             task_result = self.current_collector.finalize(TaskStatus.FAILED.value, error_message)
-            self._report_final_result(task.task_id, task_result)
+            self._report_final_result(task.taskNo, task_result)
         
         # 更新状态
-        self._update_task_status(task.task_id, TaskStatus.FAILED, error_message)
+        self._update_task_status(task.taskNo, TaskStatus.FAILED, error_message)
     
     def _cleanup(self):
         """清理资源"""
@@ -333,7 +333,7 @@ class TaskExecutor:
         except Exception as e:
             logger.warning(f"清理控制器资源失败: {e}")
     
-    def _update_task_status(self, task_id: str, status: TaskStatus, message: str = None, progress: int = None):
+    def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):
         """更新任务状态"""
         if self.current_collector:
             self.current_collector.add_status_update(status.value, message, progress)
@@ -342,31 +342,31 @@ class TaskExecutor:
         if self.message_sender:
             self.message_sender({
                 "type": "TASK_STATUS",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": status.value,
                 "message": message,
                 "progress": progress,
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_progress(self, task_id: str, test_item, result: TestResult):
+    def _report_progress(self, task_no: str, test_item, result: TestResult):
         """上报执行进度"""
         if self.message_sender:
             self.message_sender({
                 "type": "LOG_STREAM",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "level": "INFO",
                 "message": f"执行测试项: {test_item.name}",
                 "result": result.to_dict(),
                 "timestamp": int(time.time() * 1000)
             })
     
-    def _report_final_result(self, task_id: str, task_result: TaskResult):
+    def _report_final_result(self, task_no: str, task_result: TaskResult):
         """上报最终结果"""
         if self.message_sender:
             self.message_sender({
                 "type": "RESULT_REPORT",
-                "taskId": task_id,
+                "taskNo": task_no,
                 "status": task_result.status,
                 "results": [r.to_dict() for r in task_result.results],
                 "summary": task_result.summary,
@@ -380,7 +380,7 @@ class TaskExecutor:
         
         return {
             "status": "running",
-            "task_id": self.current_task.task_id,
+            "taskNo": self.current_task.taskNo,
             "tool_type": self.current_task.tool_type,
             "start_time": datetime.fromtimestamp(self._start_time).isoformat(),
             "duration": time.time() - self._start_time,

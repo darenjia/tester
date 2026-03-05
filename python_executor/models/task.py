@@ -140,7 +140,29 @@ class Task:
     configPath: Optional[str] = None # 配置文件路径
     timeout: int = 3600              # 超时时间(秒)
     timestamp: Optional[int] = None  # 时间戳
-    
+
+    # 兼容属性 - 用于core/task_executor.py
+    @property
+    def tool_type(self) -> Optional[str]:
+        """测试工具类型 - 兼容下划线命名"""
+        return self.toolType
+
+    @property
+    def config_path(self) -> Optional[str]:
+        """配置文件路径 - 兼容下划线命名"""
+        return self.configPath
+
+    @property
+    def device_id(self) -> Optional[str]:
+        """设备ID - 兼容下划线命名"""
+        return self.deviceId
+
+    @property
+    def test_items(self) -> List:
+        """测试项列表 - 兼容core/task_executor.py"""
+        # 将caseList转换为test_items格式
+        return self.caseList
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Task':
         """从字典创建任务 - 支持TDM2.0字段名"""
