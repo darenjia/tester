@@ -4,6 +4,7 @@
 提供统一的测试工具接口适配器，支持CANoe、TSMaster、TTworkbench等多种测试工具
 """
 
+import logging
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
 from .canoe import CANoeAdapter
 from .tsmaster_adapter import TSMasterAdapter
@@ -37,6 +38,9 @@ class AdapterFactory:
     
     # 单例实例缓存
     _instances: dict = {}
+    
+    # 日志记录器
+    logger = logging.getLogger(__name__)
     
     @classmethod
     def create_adapter(cls, 

@@ -120,12 +120,13 @@ class CANoeAdapter(BaseTestAdapter):
             self._set_error(f"CANoe断开连接失败: {str(e)}")
             return False
     
-    def load_configuration(self, config_path: str) -> bool:
+    def load_configuration(self, config_path: str, timeout: int = 30) -> bool:
         """
         加载CANoe配置文件
         
         Args:
             config_path: 配置文件路径(.cfg)
+            timeout: 加载超时时间（秒），默认30秒
             
         Returns:
             加载成功返回True，否则返回False
@@ -136,9 +137,34 @@ class CANoeAdapter(BaseTestAdapter):
         
         try:
             self.logger.info(f"正在加载配置文件: {config_path}")
+            
+            # 停止当前测量（如果正在运行）
+            if self._measurement and self._measurement.Running:
+                self.logger.info("停止当前测量...")
+                self._measurement.Stop()
+                time.sleep(1)
+            
+            # 打开配置
             self._app.Open(config_path)
-            self.logger.info("配置文件加载成功")
-            return True
+            
+            # 等待配置加载完成
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    result = self._app.Configuration.OpenConfigurationResult
+                    if result == 0:
+                        self.logger.info("配置文件加载成功")
+                        return True
+                    else:
+                        self._set_error(f"配置文件加载失败，错误码: {result}")
+                        return False
+                except:
+                    # 配置还在加载中，继续等待
+                    time.sleep(0.5)
+            
+            # 超时
+            self._set_error(f"配置文件加载超时（{timeout}秒）")
+            return False
             
         except Exception as e:
             self._set_error(f"配置文件加载失败: {str(e)}")

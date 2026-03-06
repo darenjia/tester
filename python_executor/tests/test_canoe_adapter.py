@@ -14,8 +14,10 @@ CANoe适配器单元测试
 
 import unittest
 import logging
+import time
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+from core.adapters.canoe import CANoeAdapter
 
 # 配置日志
 logging.basicConfig(
@@ -444,14 +446,16 @@ class TestIntegration(unittest.TestCase):
     def setUpClass(cls):
         """测试类开始前准备"""
         # 检查是否有CANoe环境
+        cls.CANOE_AVAILABLE = True
         try:
             import win32com.client
             win32com.client.Dispatch("CANoe.Application")
-            cls.CANOE_AVAILABLE = True
-        except:
-            cls.CANOE_AVAILABLE = False
+            time.sleep(5)
+            
+        except Exception as e:
+            print(f"【失败】错误详情: {e}")
+            # cls.CANOE_AVAILABLE = False
     
-    @unittest.skipUnless(CANOE_AVAILABLE, "CANoe不可用")
     def test_full_workflow(self):
         """测试完整工作流程"""
         from core.adapters.canoe import CANoeAdapter
@@ -478,6 +482,132 @@ class TestIntegration(unittest.TestCase):
             self.fail(f"集成测试失败: {e}")
         finally:
             if adapter.is_connected:
+                adapter.disconnect()
+    
+    def test_load_config_file(self):
+        """测试加载指定配置文件"""
+        from core.adapters.canoe import CANoeAdapter
+        
+        config_path = r"D:\TAMS\DTTC_CONFIG\S59\BCANFD\SMFT\FDCANC_E\TestProjectFile\COMTest.cfg"
+        adapter = CANoeAdapter()
+        
+        try:
+            # 1. 连接CANoe
+            self.assertTrue(adapter.connect())
+            self.assertTrue(adapter.is_connected)
+            
+            # 2. 加载配置文件
+            result = adapter.load_configuration(config_path)
+            self.assertTrue(result, f"加载配置文件失败: {config_path}")
+            
+            # 3. 验证配置已加载（通过检查状态）
+            status = adapter.get_status()
+            self.assertEqual(status["tool_type"], "canoe")
+            self.assertTrue(status["is_connected"])
+            
+            # 4. 断开连接
+            self.assertTrue(adapter.disconnect())
+            self.assertFalse(adapter.is_connected)
+            
+        except Exception as e:
+            self.fail(f"加载配置文件测试失败: {e}")
+        finally:
+            if adapter.is_connected:
+                adapter.disconnect()
+
+    def test_load_s59_bcanfd_config(self):
+        """测试加载S59 BCANFD SMFT FDCANC_E配置文件"""
+        from core.adapters.canoe import CANoeAdapter
+        
+        config_path = r"D:\TAMS\DTTC_CONFIG\S59\BCANFD\SMFT\FDCANC_E\TestProjectFile\COMTest.cfg"
+        adapter = CANoeAdapter()
+        
+        try:
+            # 1. 连接CANoe
+            result = adapter.connect()
+            self.assertTrue(result, "CANoe连接失败")
+            self.assertTrue(adapter.is_connected)
+            
+            # 2. 加载S59 BCANFD配置文件
+            result = adapter.load_configuration(config_path)
+            self.assertTrue(result, f"加载配置文件失败: {config_path}")
+            
+            # 3. 验证配置已加载
+            status = adapter.get_status()
+            self.assertEqual(status["tool_type"], "canoe")
+            self.assertTrue(status["is_connected"])
+            
+            # 4. 获取CANoe版本信息
+            version = adapter.canoe_version
+            self.assertIsNotNone(version)
+            
+            # 5. 断开连接
+            self.assertTrue(adapter.disconnect())
+            self.assertFalse(adapter.is_connected)
+            
+        except Exception as e:
+            self.fail(f"加载S59 BCANFD配置文件测试失败: {e}")
+        finally:
+            if adapter.is_connected:
+                adapter.disconnect()
+
+    def test_s59_bcanfd_config_execution(self):
+        """测试S59 BCANFD配置文件加载、执行测试和获取结果"""
+        from core.adapters.canoe import CANoeAdapter
+        
+        config_path = r"D:\TAMS\DTTC_CONFIG\S59\BCAN\SGW_BCAN\DNMAS_E\TestProjectFile\AUTOSARNMTest.cfg"
+        adapter = CANoeAdapter()
+        
+        try:
+            # 1. 连接CANoe
+            result = adapter.connect()
+            self.assertTrue(result, "CANoe连接失败")
+            self.assertTrue(adapter.is_connected)
+            
+            # 2. 加载S59 BCANFD配置文件
+            result = adapter.load_configuration(config_path)
+            self.assertTrue(result, f"加载配置文件失败: {config_path}")
+            
+            # 3. 启动测量
+            result = adapter.start_test()
+            self.assertTrue(result, "启动测量失败")
+            self.assertTrue(adapter.is_running)
+            
+            # 4. 等待测量稳定运行
+            import time
+            time.sleep(5)
+            
+            # 5. 获取状态
+            status = adapter.get_status()
+            print(status)
+            self.assertEqual(status["tool_type"], "canoe")
+            self.assertTrue(status["is_connected"])
+            self.assertTrue(status["is_running"])
+            
+            # 6. 执行设备自检
+            self_check_result = adapter.execute_test_item({
+                "type": "self_check",
+                "name": "S59设备自检",
+                "timeout": 300
+            })
+            self.assertIsNotNone(self_check_result)
+            self.assertIn("status", self_check_result)
+            
+            # 7. 停止测量
+            result = adapter.stop_test()
+            self.assertTrue(result, "停止测量失败")
+            self.assertFalse(adapter.is_running)
+            
+            # 8. 断开连接
+            self.assertTrue(adapter.disconnect())
+            self.assertFalse(adapter.is_connected)
+            
+        except Exception as e:
+            self.fail(f"S59 BCANFD配置执行测试失败: {e}")
+        finally:
+            if adapter.is_connected:
+                if adapter.is_running:
+                    adapter.stop_test()
                 adapter.disconnect()
 
 
