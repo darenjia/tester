@@ -1,17 +1,45 @@
 """
-PyInstaller打包脚本
-将Python执行器打包为独立的exe可执行文件
+PyInstaller打包脚本 - 跨平台版本
+将Python执行器打包为独立的可执行文件
+
+支持平台:
+    - Windows (.exe)
+    - macOS (可执行文件 或 .app)
+    - Linux (可执行文件)
 
 使用方法:
-    python build_exe.py
+    python build_exe.py [选项]
 
-打包后的文件位于 dist/PythonExecutor 目录
+选项:
+    --platform [win|mac|linux]  指定目标平台（默认自动检测）
+    --onefile                   打包为单个文件（默认启用）
+    --windowed                  不显示控制台窗口（仅Windows/Mac）
+    --clean                     清理之前的构建文件
+    --help                      显示帮助信息
+
+示例:
+    python build_exe.py
+    python build_exe.py --platform mac
+    python build_exe.py --onefile --windowed
 """
 
 import PyInstaller.__main__
 import os
 import sys
 import shutil
+import platform
+import argparse
+
+def get_platform():
+    """获取当前平台"""
+    system = platform.system().lower()
+    if system == 'darwin':
+        return 'mac'
+    elif system == 'windows':
+        return 'win'
+    elif system == 'linux':
+        return 'linux'
+    return system
 
 def clean_build():
     """清理之前的构建文件"""
@@ -23,117 +51,140 @@ def clean_build():
     
     # 清理 .spec 文件
     for file in os.listdir('.'):
-        if file.endswith('.spec'):
+        if file.endswith('.spec') and file != 'PythonExecutor.spec' and file != 'PythonExecutor_mac.spec':
             print(f"删除 {file}...")
             os.remove(file)
-
-def get_hidden_imports():
-    """获取需要显式导入的隐藏模块"""
-    return [
-        # Flask相关
-        'flask',
-        'flask_socketio',
-        'flask_cors',
-        'werkzeug',
-        'jinja2',
-        'markupsafe',
-        'itsdangerous',
-        'click',
-        # SocketIO相关
-        'socketio',
-        'engineio',
-        'gevent',
-        'geventwebsocket',
-        # 项目模块
-        'core.task_executor',
-        'core.task_store',
-        'core.result_collector',
-        'core.adapters',
-        'core.adapters.canoe',
-        'core.adapters.canoe.adapter',
-        'core.adapters.tsmaster',
-        'core.adapters.tsmaster.rpc_client',
-        'api.routes',
-        'api.task_executor',
-        'models.task',
-        'models.result',
-        'utils.logger',
-        'utils.exceptions',
-        'utils.validators',
-        'utils.retry',
-        'utils.metrics',
-        'config.settings',
-        'ws_server.client',
-        # 其他依赖
-        'json',
-        'datetime',
-        'typing',
-        'signal',
-        'time',
-        'logging',
-        'pathlib',
-        'dataclasses',
-        'enum',
-        'threading',
-        'queue',
-    ]
-
-def get_data_files():
-    """获取需要包含的数据文件"""
-    datas = []
     
-    # 配置文件
-    if os.path.exists('config/executor_config.json'):
-        datas.append(('config/executor_config.json', 'config'))
-    
-    # 模板文件
-    if os.path.exists('deploy/config'):
-        datas.append(('deploy/config', 'deploy/config'))
-    
-    return datas
+    # 清理Python缓存
+    for root, dirs, files in os.walk('.'):
+        for dir_name in dirs:
+            if dir_name == '__pycache__':
+                cache_path = os.path.join(root, dir_name)
+                print(f"清理 {cache_path}...")
+                shutil.rmtree(cache_path)
 
-def build_exe():
+def get_spec_file(target_platform):
+    """获取对应平台的spec文件"""
+    if target_platform == 'mac':
+        return 'PythonExecutor_mac.spec'
+    else:
+        return 'PythonExecutor.spec'
+
+def build_exe(target_platform=None, onefile=True, windowed=False, clean=True):
     """执行打包"""
+    
+    # 自动检测平台
+    if target_platform is None:
+        target_platform = get_platform()
+    
     print("=" * 60)
-    print("开始打包 Python执行器")
+    print(f"开始打包 Python执行器")
+    print(f"目标平台: {target_platform}")
+    print(f"单文件模式: {onefile}")
+    print(f"窗口模式: {windowed}")
     print("=" * 60)
     
     # 清理旧文件
-    clean_build()
+    if clean:
+        clean_build()
+    
+    # 获取spec文件
+    spec_file = get_spec_file(target_platform)
+    
+    if not os.path.exists(spec_file):
+        print(f"错误: 找不到spec文件 {spec_file}")
+        print(f"请确保 {spec_file} 存在于当前目录")
+        return False
+    
+    print(f"使用配置: {spec_file}")
+    print("-" * 60)
     
     # 构建参数
     args = [
-        'main.py',  # 入口文件
-        '--name=PythonExecutor',  # 输出名称
-        '--onefile',  # 打包为单个文件
-        '--windowed',  # Windows下不显示控制台窗口（如需调试可改为 --console）
-        # '--console',  # 如需调试，注释掉 --windowed，取消注释此行
-        '--clean',  # 清理临时文件
-        '--noconfirm',  # 不确认覆盖
+        spec_file,
+        '--clean',
+        '--noconfirm',
     ]
-    
-    # 添加隐藏导入
-    for hidden_import in get_hidden_imports():
-        args.append(f'--hidden-import={hidden_import}')
-    
-    # 添加数据文件
-    for src, dst in get_data_files():
-        args.append(f'--add-data={src}{os.pathsep}{dst}')
-    
-    # 添加图标（如果有）
-    if os.path.exists('icon.ico'):
-        args.append('--icon=icon.ico')
     
     print(f"打包参数: {' '.join(args)}")
     print("-" * 60)
     
     # 执行打包
-    PyInstaller.__main__.run(args)
+    try:
+        PyInstaller.__main__.run(args)
+    except Exception as e:
+        print(f"打包失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
     
     print("-" * 60)
     print("打包完成!")
-    print(f"可执行文件位于: {os.path.abspath('dist/PythonExecutor.exe')}")
+    
+    # 显示输出路径
+    if target_platform == 'win':
+        exe_path = os.path.abspath('dist/PythonExecutor.exe')
+    elif target_platform == 'mac':
+        exe_path = os.path.abspath('dist/PythonExecutor')
+        app_path = os.path.abspath('dist/PythonExecutor.app')
+    else:
+        exe_path = os.path.abspath('dist/PythonExecutor')
+    
+    print(f"可执行文件: {exe_path}")
+    if target_platform == 'mac' and os.path.exists(app_path):
+        print(f"App Bundle: {app_path}")
+    
     print("=" * 60)
+    return True
+
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(
+        description='Python执行器打包工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+    python build_exe.py                          # 自动检测平台并打包
+    python build_exe.py --platform mac           # 打包为Mac版本
+    python build_exe.py --platform win           # 打包为Windows版本
+    python build_exe.py --clean                  # 清理后打包
+        """
+    )
+    
+    parser.add_argument(
+        '--platform',
+        choices=['win', 'mac', 'linux'],
+        help='目标平台 (默认: 自动检测)'
+    )
+    
+    parser.add_argument(
+        '--no-clean',
+        action='store_true',
+        help='不清理之前的构建文件'
+    )
+    
+    parser.add_argument(
+        '--windowed',
+        action='store_true',
+        help='窗口模式（不显示控制台）'
+    )
+    
+    args = parser.parse_args()
+    
+    # 执行打包
+    success = build_exe(
+        target_platform=args.platform,
+        onefile=True,
+        windowed=args.windowed,
+        clean=not args.no_clean
+    )
+    
+    if success:
+        print("\n✓ 打包成功!")
+        sys.exit(0)
+    else:
+        print("\n✗ 打包失败!")
+        sys.exit(1)
 
 if __name__ == '__main__':
-    build_exe()
+    main()
