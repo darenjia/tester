@@ -108,6 +108,7 @@ class CANoeAdapter(BaseTestAdapter):
         # 当前执行状态
         self._current_task: Optional[Dict[str, Any]] = None
         self._last_result: Optional[Dict[str, Any]] = None
+        self.error_message: Optional[str] = None
         
     @property
     def tool_type(self) -> TestToolType:
@@ -742,7 +743,7 @@ if __name__ == "__main__":
             print(f"CANoe版本: {adapter.canoe_version}")
             
             # 加载配置
-            if adapter.load_configuration("test.cfg"):
+            if adapter.load_configuration("D:\TAMS\DTTC_CONFIG\S59\BCANFD\SMFT\FDCANC_E\TestProjectFile\COMTest.cfg"):
                 print("配置加载成功")
                 
                 # 执行信号检查

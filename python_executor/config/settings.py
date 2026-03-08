@@ -1,98 +1,216 @@
 """
-配置文件管理模块
+配置管理模块
 """
-import os
 import json
-from typing import Dict, Any
+import os
+import sys
+from typing import Dict, Any, Optional
 
-class Settings:
-    """配置管理类"""
+
+class ConfigManager:
+    """配置管理器"""
     
-    def __init__(self):
-        # WebSocket配置
-        self.websocket_host = "0.0.0.0"
-        self.websocket_port = 8180
-        self.heartbeat_interval = 30  # 秒
-        self.reconnect_interval = 5   # 秒
-        self.max_reconnect_attempts = 3
-        
-        # 日志配置
-        self.log_level = "INFO"
-        self.log_file = "logs/executor.log"
-        self.log_max_size = 10 * 1024 * 1024  # 10MB
-        self.log_backup_count = 5
-        
-        # 任务执行配置
-        self.task_timeout = 3600  # 秒
-        self.task_check_interval = 1  # 秒
-        self.max_concurrent_tasks = 1  # 串行执行
-        
-        # CANoe配置
-        self.canoe_timeout = 30  # 连接超时
-        self.canoe_config_timeout = 60  # 配置加载超时
-        
-        # TSMaster配置
-        self.tsmaster_timeout = 30  # 连接超时
-        self.tsmaster_config_timeout = 60  # 配置加载超时
-        
-        # 结果上报配置
-        self.result_batch_size = 10
-        self.result_upload_interval = 5  # 秒
-        
-        # 从配置文件加载自定义设置
-        self._load_from_file()
-    
-    def _load_from_file(self):
-        """从配置文件加载设置"""
-        config_file = "config/executor_config.json"
-        if os.path.exists(config_file):
-            try:
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    self._update_config(config)
-            except Exception as e:
-                print(f"加载配置文件失败: {e}")
-    
-    def _update_config(self, config: Dict[str, Any]):
-        """更新配置"""
-        for key, value in config.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
-        return {
-            "websocket": {
-                "host": self.websocket_host,
-                "port": self.websocket_port,
-                "heartbeat_interval": self.heartbeat_interval,
-                "reconnect_interval": self.reconnect_interval,
-                "max_reconnect_attempts": self.max_reconnect_attempts
-            },
-            "logging": {
-                "level": self.log_level,
-                "file": self.log_file,
-                "max_size": self.log_max_size,
-                "backup_count": self.log_backup_count
-            },
-            "task": {
-                "timeout": self.task_timeout,
-                "check_interval": self.task_check_interval,
-                "max_concurrent": self.max_concurrent_tasks
-            },
-            "canoe": {
-                "timeout": self.canoe_timeout,
-                "config_timeout": self.canoe_config_timeout
-            },
-            "tsmaster": {
-                "timeout": self.tsmaster_timeout,
-                "config_timeout": self.tsmaster_config_timeout
-            },
-            "result": {
-                "batch_size": self.result_batch_size,
-                "upload_interval": self.result_upload_interval
-            }
+    # 默认配置
+    DEFAULT_CONFIG = {
+        "server": {
+            "websocket_url": "ws://localhost:8080/ws/executor",
+            "heartbeat_interval": 30,
+            "reconnect_interval": 5,
+            "max_reconnect_attempts": 10
+        },
+        "device": {
+            "device_id": "DEVICE_001",
+            "device_name": "测试执行设备-01",
+            "location": "实验室"
+        },
+        "software": {
+            "canoe_path": "C:\\Program Files\\Vector\\CANoe 17\\Exec64\\CANoe64.exe",
+            "tsmaster_path": "C:\\Program Files\\TSMaster",
+            "ttman_path": "C:\\Spirent\\TTman.bat",
+            "workspace_path": "C:\\TestWorkspace"
+        },
+        "logging": {
+            "level": "INFO",
+            "log_dir": "logs",
+            "max_log_files": 10,
+            "max_log_size_mb": 100
+        },
+        "execution": {
+            "default_timeout": 3600,
+            "auto_start": True,
+            "keep_alive": True
         }
+    }
+    
+    def __init__(self, config_path: str = None):
+        """
+        初始化配置管理器
+        
+        Args:
+            config_path: 配置文件路径，默认为程序目录下的 config.json
+        """
+        if config_path is None:
+            # 获取程序所在目录
+            if getattr(sys, 'frozen', False):
+                # 打包后的exe运行
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境运行
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            config_path = os.path.join(base_dir, "config.json")
+        
+        self.config_path = config_path
+        self._config = {}
+        self._load_config()
+    
+    def _load_config(self):
+        """加载配置文件"""
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    loaded_config = json.load(f)
+                    # 合并配置，确保所有默认配置项都存在
+                    self._config = self._merge_config(self.DEFAULT_CONFIG, loaded_config)
+            except Exception as e:
+                print(f"加载配置文件失败: {e}，使用默认配置")
+                self._config = self.DEFAULT_CONFIG.copy()
+                self.save_config()
+        else:
+            # 配置文件不存在，创建默认配置
+            self._config = self.DEFAULT_CONFIG.copy()
+            self.save_config()
+    
+    def _merge_config(self, default: Dict, loaded: Dict) -> Dict:
+        """
+        递归合并配置
+        
+        Args:
+            default: 默认配置
+            loaded: 已加载的配置
+            
+        Returns:
+            合并后的配置
+        """
+        result = default.copy()
+        for key, value in loaded.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._merge_config(result[key], value)
+            else:
+                result[key] = value
+        return result
+    
+    def save_config(self) -> bool:
+        """
+        保存配置到文件
+        
+        Returns:
+            是否保存成功
+        """
+        try:
+            # 确保目录存在
+            config_dir = os.path.dirname(self.config_path)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+            
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(self._config, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"保存配置文件失败: {e}")
+            return False
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        获取配置项
+        
+        Args:
+            key: 配置键，支持点号分隔（如 "server.websocket_url"）
+            default: 默认值
+            
+        Returns:
+            配置值
+        """
+        keys = key.split('.')
+        value = self._config
+        for k in keys:
+            if isinstance(value, dict) and k in value:
+                value = value[k]
+            else:
+                return default
+        return value
+    
+    def set(self, key: str, value: Any) -> bool:
+        """
+        设置配置项
+        
+        Args:
+            key: 配置键，支持点号分隔
+            value: 配置值
+            
+        Returns:
+            是否设置成功
+        """
+        keys = key.split('.')
+        config = self._config
+        for k in keys[:-1]:
+            if k not in config:
+                config[k] = {}
+            config = config[k]
+        config[keys[-1]] = value
+        return self.save_config()
+    
+    def get_all(self) -> Dict[str, Any]:
+        """
+        获取所有配置
+        
+        Returns:
+            完整配置字典
+        """
+        return self._config.copy()
+    
+    def update(self, config: Dict[str, Any]) -> bool:
+        """
+        批量更新配置
+        
+        Args:
+            config: 新的配置字典
+            
+        Returns:
+            是否更新成功
+        """
+        self._config = self._merge_config(self._config, config)
+        return self.save_config()
+    
+    def reset_to_default(self) -> bool:
+        """
+        重置为默认配置
+        
+        Returns:
+            是否重置成功
+        """
+        self._config = self.DEFAULT_CONFIG.copy()
+        return self.save_config()
+
 
 # 全局配置实例
-settings = Settings()
+_config_instance: Optional[ConfigManager] = None
+
+
+def get_config(config_path: str = None) -> ConfigManager:
+    """
+    获取配置管理器实例（单例模式）
+    
+    Args:
+        config_path: 配置文件路径
+        
+    Returns:
+        ConfigManager 实例
+    """
+    global _config_instance
+    if _config_instance is None:
+        _config_instance = ConfigManager(config_path)
+    return _config_instance
+
+
+# 全局设置实例（兼容旧代码）
+settings = get_config()

@@ -1,154 +1,128 @@
 """
-Flask-SocketIO WebSocket服务端
-需要安装: pip install flask flask-socketio
+测试执行器主入口
+使用 PyWebView 创建桌面应用程序
 """
-from gevent import monkey
-monkey.patch_all()
+import os
+import sys
+import threading
+import time
 
-from flask import Flask
-from flask_socketio import SocketIO, emit, request
-from datetime import datetime
-import json
+# 添加当前目录到路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'python-executor-secret-key'
+import webview
+from web.server import app as flask_app
+from config.settings import get_config
+from utils.logger import get_logger, setup_logging
 
-# 配置SocketIO
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode='gevent',
-    logger=True,
-    engineio_logger=True
-)
 
-# 存储客户端信息
-clients = {}
-
-@app.route('/')
-def index():
-    return "Python执行器WebSocket服务端"
-
-@app.route('/health')
-def health_check():
-    return {
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'clients': len(clients)
-    }
-
-@socketio.on('connect')
-def handle_connect():
-    """处理客户端连接"""
-    sid = request.sid
-    clients[sid] = {
-        'connected_at': datetime.now(),
-        'last_heartbeat': datetime.now()
-    }
-    print(f"客户端连接: {sid}")
+class TestExecutorApp:
+    """测试执行器应用程序"""
     
-    # 发送欢迎消息
-    emit('welcome', {
-        'message': 'Python执行器已连接',
-        'timestamp': int(datetime.now().timestamp() * 1000)
-    })
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """处理客户端断开连接"""
-    sid = request.sid
-    if sid in clients:
-        client_info = clients.pop(sid)
-        connected_time = datetime.now() - client_info['connected_at']
-        print(f"客户端断开连接: {sid}, 连接时长: {connected_time}")
-
-@socketio.on('heartbeat')
-def handle_heartbeat(data):
-    """处理心跳消息"""
-    sid = request.sid
-    if sid in clients:
-        clients[sid]['last_heartbeat'] = datetime.now()
-        print(f"收到心跳: {sid}")
+    def __init__(self):
+        self.window = None
+        self.server_thread = None
+        self.server_running = False
+        self.server_port = 0
+        self.logger = None
         
-        # 回复心跳
-        emit('heartbeat_response', {
-            'timestamp': int(datetime.now().timestamp() * 1000)
-        })
-
-@socketio.on('message')
-def handle_message(data):
-    """处理通用消息"""
-    try:
-        print(f"收到消息: {data}")
-        
-        # 这里可以添加消息处理逻辑
-        message_type = data.get('type')
-        
-        # 回复确认
-        emit('message_response', {
-            'status': 'received',
-            'type': message_type,
-            'timestamp': int(datetime.now().timestamp() * 1000)
-        })
-        
-    except Exception as e:
-        print(f"处理消息失败: {e}")
-        emit('error', {
-            'error': str(e),
-            'timestamp': int(datetime.now().timestamp() * 1000)
-        })
-
-@socketio.on('task_dispatch')
-def handle_task_dispatch(data):
-    """处理任务下发"""
-    try:
-        print(f"收到任务下发: {data}")
-        
-        # 这里可以添加任务执行逻辑
-        task_no = data.get('taskNo')
-        
-        # 模拟任务接收确认
-        emit('task_response', {
-            'taskNo': task_no,
-            'status': 'accepted',
-            'message': '任务已接收，正在执行',
-            'timestamp': int(datetime.now().timestamp() * 1000)
-        })
-        
-        # 模拟任务执行
-        import threading
-        def execute_task():
-            # 这里应该调用实际的执行器
-            print(f"开始执行任务: {task_no}")
+    def start_server(self):
+        """在后台线程启动 Flask 服务器"""
+        try:
+            from werkzeug.serving import make_server
             
-            # 模拟执行过程
-            import time
-            time.sleep(2)
+            # 找一个可用端口
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(('127.0.0.1', 0))
+            self.server_port = sock.getsockname()[1]
+            sock.close()
             
-            # 发送完成消息
-            emit('task_completed', {
-                'taskNo': task_no,
-                'status': 'completed',
-                'results': [],
-                'timestamp': int(datetime.now().timestamp() * 1000)
-            })
+            # 创建服务器
+            self.server = make_server('127.0.0.1', self.server_port, flask_app)
+            self.server_running = True
+            
+            # 初始化日志
+            config = get_config()
+            setup_logging(
+                log_dir=config.get('logging.log_dir', 'logs'),
+                level=config.get('logging.level', 'INFO')
+            )
+            self.logger = get_logger()
+            self.logger.info(f"Flask 服务器启动在端口 {self.server_port}")
+            
+            # 启动服务器
+            self.server.serve_forever()
+        except Exception as e:
+            print(f"服务器启动失败: {e}")
+            self.server_running = False
+            raise
+    
+    def stop_server(self):
+        """停止 Flask 服务器"""
+        if self.server_running and self.server:
+            self.server.shutdown()
+            self.server_running = False
+            if self.logger:
+                self.logger.info("Flask 服务器已停止")
+    
+    def on_closed(self):
+        """窗口关闭时的回调"""
+        if self.logger:
+            self.logger.info("应用程序关闭")
+        self.stop_server()
+    
+    def create_window(self):
+        """创建主窗口"""
+        # 等待服务器启动
+        timeout = 10
+        while self.server_port == 0 and timeout > 0:
+            time.sleep(0.5)
+            timeout -= 0.5
         
-        threading.Thread(target=execute_task, daemon=True).start()
+        if self.server_port == 0:
+            print("服务器启动超时")
+            sys.exit(1)
         
-    except Exception as e:
-        print(f"处理任务下发失败: {e}")
-        emit('error', {
-            'error': str(e),
-            'timestamp': int(datetime.now().timestamp() * 1000)
-        })
+        # 获取配置
+        config = get_config()
+        device_name = config.get('device.device_name', '测试执行器')
+        
+        # 创建窗口
+        self.window = webview.create_window(
+            title=f'{device_name} - 测试执行器',
+            url=f'http://127.0.0.1:{self.server_port}',
+            width=1200,
+            height=800,
+            min_size=(900, 600),
+            resizable=True,
+            fullscreen=False,
+            confirm_close=True,
+            text_select=True
+        )
+        
+        # 设置关闭回调
+        self.window.events.closed += self.on_closed
+        
+        # 启动 WebView
+        webview.start(debug=False)
+    
+    def run(self):
+        """运行应用程序"""
+        # 在后台线程启动 Flask 服务器
+        self.server_thread = threading.Thread(target=self.start_server)
+        self.server_thread.daemon = True
+        self.server_thread.start()
+        
+        # 在主线程创建窗口
+        self.create_window()
+
+
+def main():
+    """主函数"""
+    app = TestExecutorApp()
+    app.run()
+
 
 if __name__ == '__main__':
-    print("启动Python执行器WebSocket服务端...")
-    print("监听地址: ws://localhost:8180")
-    
-    socketio.run(
-        app,
-        host='0.0.0.0',
-        port=8180,
-        debug=True
-    )
+    main()

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from utils.logger import get_logger
 
-logger = get_logger("metrics")
+logger = get_logger()
 
 @dataclass
 class MetricPoint:

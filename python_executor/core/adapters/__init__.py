@@ -4,10 +4,12 @@
 提供统一的测试工具接口适配器，支持CANoe、TSMaster、TTworkbench等多种测试工具
 """
 
+import logging
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
 from .canoe import CANoeAdapter
 from .tsmaster_adapter import TSMasterAdapter
 from .ttworkbench_adapter import TTworkbenchAdapter
+from .adapter_wrapper import AdapterWrapper
 
 __all__ = [
     'BaseTestAdapter',
@@ -16,7 +18,9 @@ __all__ = [
     'CANoeAdapter',
     'TSMasterAdapter',
     'TTworkbenchAdapter',
+    'AdapterWrapper',
     'create_adapter',
+    'create_adapter_with_wrapper',
     'AdapterFactory',
 ]
 
@@ -37,6 +41,9 @@ class AdapterFactory:
     
     # 单例实例缓存
     _instances: dict = {}
+    
+    # 日志记录器
+    logger = logging.getLogger(__name__)
     
     @classmethod
     def create_adapter(cls, 
@@ -165,3 +172,25 @@ def create_adapter(tool_type: TestToolType, config: dict = None) -> BaseTestAdap
         >>> adapter = create_adapter(TestToolType.CANOE, {"start_timeout": 60})
     """
     return AdapterFactory.create_adapter(tool_type, config, singleton=True)
+
+
+def create_adapter_with_wrapper(tool_type: TestToolType, config: dict = None) -> AdapterWrapper:
+    """
+    创建带包装器的适配器实例
+    
+    返回的包装器提供与原有Controller类相同的接口
+    
+    Args:
+        tool_type: 测试工具类型
+        config: 适配器配置
+        
+    Returns:
+        AdapterWrapper实例
+        
+    Example:
+        >>> controller = create_adapter_with_wrapper(TestToolType.CANOE)
+        >>> controller.connect()
+        >>> controller.open_configuration("test.cfg")
+    """
+    adapter = AdapterFactory.create_adapter(tool_type, config, singleton=True)
+    return AdapterWrapper(adapter)

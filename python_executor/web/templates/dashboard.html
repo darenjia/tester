@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}仪表盘 - 测试执行器{% endblock %}
+{% block page_title %}系统概览{% endblock %}
+{% set active_page = 'dashboard' %}
+
+{% block content %}
+<!-- 状态卡片 -->
+<div class="status-cards">
+    <!-- WebSocket 连接状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">服务端连接</span>
+            <div id="ws-indicator" class="status-indicator offline"></div>
+        </div>
+        <div id="ws-status-value" class="status-card-value">未连接</div>
+        <div id="ws-status-desc" class="status-card-desc">最后心跳: 从未</div>
+    </div>
+    
+    <!-- 当前任务状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">当前任务</span>
+            <div id="task-indicator" class="status-indicator idle"></div>
+        </div>
+        <div id="task-status-value" class="status-card-value">空闲</div>
+        <div id="task-status-desc" class="status-card-desc">等待任务下发</div>
+    </div>
+    
+    <!-- CANoe 状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">CANoe</span>
+            <div id="canoe-indicator" class="status-indicator offline"></div>
+        </div>
+        <div id="canoe-status-value" class="status-card-value">未就绪</div>
+        <div class="status-card-desc">Vector CANoe 测试软件</div>
+    </div>
+    
+    <!-- TSMaster 状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">TSMaster</span>
+            <div id="tsmaster-indicator" class="status-indicator offline"></div>
+        </div>
+        <div id="tsmaster-status-value" class="status-card-value">未就绪</div>
+        <div class="status-card-desc">TSMaster 测试软件</div>
+    </div>
+</div>
+
+<!-- 当前任务详情 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">当前任务详情</span>
+        <span id="task-badge" class="badge" style="display: none;"></span>
+    </div>
+    <div class="content-card-body">
+        <div id="task-details">
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-clipboard-list"></i>
+                </div>
+                <div class="empty-state-text">当前没有正在执行的任务</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 测试软件状态 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">测试软件状态</span>
+        <button class="btn btn-sm btn-secondary" onclick="refreshSoftwareStatus()">
+            <i class="fas fa-sync-alt"></i> 刷新
+        </button>
+    </div>
+    <div class="content-card-body">
+        <div class="software-list">
+            <div class="software-item">
+                <div class="software-name">
+                    <i class="fas fa-car" style="color: #3b82f6;"></i>
+                    <span>Vector CANoe</span>
+                </div>
+                <div class="software-status">
+                    <span id="canoe-status-text" class="badge badge-secondary">未安装</span>
+                </div>
+            </div>
+            <div class="software-item">
+                <div class="software-name">
+                    <i class="fas fa-microchip" style="color: #10b981;"></i>
+                    <span>TSMaster</span>
+                </div>
+                <div class="software-status">
+                    <span id="tsmaster-status-text" class="badge badge-secondary">未安装</span>
+                </div>
+            </div>
+            <div class="software-item">
+                <div class="software-name">
+                    <i class="fas fa-network-wired" style="color: #f59e0b;"></i>
+                    <span>TTworkbench</span>
+                </div>
+                <div class="software-status">
+                    <span id="ttworkbench-status-text" class="badge badge-secondary">未安装</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 系统资源 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">系统资源</span>
+        <span style="font-size: 12px; color: var(--text-secondary);">自动刷新</span>
+    </div>
+    <div class="content-card-body">
+        <div class="resource-grid">
+            <div class="resource-item">
+                <div id="cpu-value" class="resource-value">--%</div>
+                <div class="resource-label">CPU 使用率</div>
+            </div>
+            <div class="resource-item">
+                <div id="memory-value" class="resource-value">--%</div>
+                <div class="resource-label">内存使用率</div>
+            </div>
+            <div class="resource-item">
+                <div id="memory-used-value" class="resource-value">--</div>
+                <div class="resource-label">已用内存</div>
+            </div>
+            <div class="resource-item">
+                <div id="disk-value" class="resource-value">--%</div>
+                <div class="resource-label">磁盘使用率</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 更新仪表盘数据
+    async function updateDashboard() {
+        try {
+            const response = await fetch('/api/status');
+            const result = await response.json();
+            
+            if (result.success) {
+                const data = result.data;
+                
+                // 更新 WebSocket 状态
+                updateWebSocketStatus(data.websocket);
+                
+                // 更新任务状态
+                updateTaskStatus(data.task);
+                
+                // 更新软件状态
+                updateSoftwareStatus(data.software);
+                
+                // 更新系统资源
+                updateSystemResources(data.system);
+            }
+        } catch (error) {
+            console.error('更新仪表盘失败:', error);
+        }
+    }
+    
+    // 更新 WebSocket 状态
+    function updateWebSocketStatus(wsData) {
+        const indicator = document.getElementById('ws-indicator');
+        const value = document.getElementById('ws-status-value');
+        const desc = document.getElementById('ws-status-desc');
+        
+        if (wsData.connected) {
+            indicator.className = 'status-indicator online';
+            value.textContent = '已连接';
+            value.style.color = 'var(--success-color)';
+        } else {
+            indicator.className = 'status-indicator offline';
+            value.textContent = '未连接';
+            value.style.color = 'var(--danger-color)';
+        }
+        
+        desc.textContent = `最后心跳: ${wsData.last_heartbeat_display}`;
+    }
+    
+    // 更新任务状态
+    function updateTaskStatus(taskData) {
+        const indicator = document.getElementById('task-indicator');
+        const value = document.getElementById('task-status-value');
+        const desc = document.getElementById('task-status-desc');
+        const details = document.getElementById('task-details');
+        
+        value.textContent = taskData.status_display || '空闲';
+        
+        if (taskData.has_task) {
+            indicator.className = 'status-indicator warning';
+            desc.textContent = taskData.task_id || '执行中...';
+            
+            // 显示任务详情
+            const progress = taskData.progress || 0;
+            details.innerHTML = `
+                <div class="task-info">
+                    <div class="task-info-row">
+                        <span class="task-info-label">任务ID</span>
+                        <span class="task-info-value">${taskData.task_id || '--'}</span>
+                    </div>
+                    <div class="task-info-row">
+                        <span class="task-info-label">任务类型</span>
+                        <span class="task-info-value">${taskData.tool_type || '--'}</span>
+                    </div>
+                    <div class="task-info-row">
+                        <span class="task-info-label">运行时间</span>
+                        <span class="task-info-value">${taskData.elapsed_display || '--'}</span>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span>进度</span>
+                            <span>${progress}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            indicator.className = 'status-indicator idle';
+            desc.textContent = '等待任务下发';
+            details.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </div>
+                    <div class="empty-state-text">当前没有正在执行的任务</div>
+                </div>
+            `;
+        }
+    }
+    
+    // 更新软件状态
+    function updateSoftwareStatus(softwareData) {
+        // CANoe
+        const canoeIndicator = document.getElementById('canoe-indicator');
+        const canoeValue = document.getElementById('canoe-status-value');
+        const canoeText = document.getElementById('canoe-status-text');
+        
+        canoeValue.textContent = softwareData.canoe.status_display;
+        canoeText.textContent = softwareData.canoe.status_display;
+        
+        if (softwareData.canoe.ready) {
+            canoeIndicator.className = 'status-indicator online';
+            canoeValue.style.color = 'var(--success-color)';
+            canoeText.className = 'badge';
+            canoeText.style.background = 'var(--success-color)';
+            canoeText.style.color = 'white';
+        } else {
+            canoeIndicator.className = 'status-indicator offline';
+            canoeValue.style.color = 'var(--text-secondary)';
+            canoeText.className = 'badge';
+            canoeText.style.background = 'var(--bg-color)';
+            canoeText.style.color = 'var(--text-secondary)';
+        }
+        
+        // TSMaster
+        const tsmasterIndicator = document.getElementById('tsmaster-indicator');
+        const tsmasterValue = document.getElementById('tsmaster-status-value');
+        const tsmasterText = document.getElementById('tsmaster-status-text');
+        
+        tsmasterValue.textContent = softwareData.tsmaster.status_display;
+        tsmasterText.textContent = softwareData.tsmaster.status_display;
+        
+        if (softwareData.tsmaster.ready) {
+            tsmasterIndicator.className = 'status-indicator online';
+            tsmasterValue.style.color = 'var(--success-color)';
+            tsmasterText.className = 'badge';
+            tsmasterText.style.background = 'var(--success-color)';
+            tsmasterText.style.color = 'white';
+        } else {
+            tsmasterIndicator.className = 'status-indicator offline';
+            tsmasterValue.style.color = 'var(--text-secondary)';
+            tsmasterText.className = 'badge';
+            tsmasterText.style.background = 'var(--bg-color)';
+            tsmasterText.style.color = 'var(--text-secondary)';
+        }
+        
+        // TTworkbench
+        const ttworkbenchText = document.getElementById('ttworkbench-status-text');
+        ttworkbenchText.textContent = softwareData.ttworkbench.status_display;
+        if (softwareData.ttworkbench.ready) {
+            ttworkbenchText.className = 'badge';
+            ttworkbenchText.style.background = 'var(--success-color)';
+            ttworkbenchText.style.color = 'white';
+        } else {
+            ttworkbenchText.className = 'badge';
+            ttworkbenchText.style.background = 'var(--bg-color)';
+            ttworkbenchText.style.color = 'var(--text-secondary)';
+        }
+    }
+    
+    // 更新系统资源
+    function updateSystemResources(systemData) {
+        document.getElementById('cpu-value').textContent = `${systemData.cpu_percent.toFixed(1)}%`;
+        document.getElementById('memory-value').textContent = `${systemData.memory_percent.toFixed(1)}%`;
+        document.getElementById('memory-used-value').textContent = 
+            `${systemData.memory_used_gb.toFixed(1)} / ${systemData.memory_total_gb.toFixed(1)} GB`;
+        document.getElementById('disk-value').textContent = `${systemData.disk_percent.toFixed(1)}%`;
+    }
+    
+    // 刷新软件状态
+    function refreshSoftwareStatus() {
+        updateDashboard();
+        showMessage('软件状态已刷新', 'success');
+    }
+    
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        updateDashboard();
+        // 每 3 秒刷新一次
+        setInterval(updateDashboard, 3000);
+    });
+</script>
+{% endblock %}

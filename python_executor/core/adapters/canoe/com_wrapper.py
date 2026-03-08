@@ -18,7 +18,9 @@ CANoe COM接口包装器
 """
 
 import time
+import threading
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -29,6 +31,7 @@ CANOE_AVAILABLE = False
 
 try:
     import win32com.client
+    import pythoncom
     WIN32COM_AVAILABLE = True
     
     # 尝试连接CANoe以验证可用性
@@ -164,6 +167,11 @@ class CANoeCOMWrapper:
         self.config_path: Optional[str] = None
         self.open_timeout = 30  # 打开配置超时时间（秒）
         self.measurement_timeout = 3600  # 测量超时时间（秒）
+        self.config_load_wait_time = 15  # 配置加载等待时间（秒）
+        
+        # 线程安全
+        self._lock = threading.RLock()
+        self._com_initialized = False
         
     def _check_win32com(self) -> bool:
         """检查win32com是否可用"""
@@ -173,6 +181,26 @@ class CANoeCOMWrapper:
                 "请执行: pip install pywin32"
             )
         return True
+    
+    def _init_com(self):
+        """初始化COM环境（线程安全）"""
+        if not self._com_initialized:
+            try:
+                pythoncom.CoInitialize()
+                self._com_initialized = True
+                self.logger.debug("COM环境初始化成功")
+            except Exception as e:
+                self.logger.warning(f"COM环境初始化失败（可能已初始化）: {e}")
+    
+    def _uninit_com(self):
+        """反初始化COM环境"""
+        if self._com_initialized:
+            try:
+                pythoncom.CoUninitialize()
+                self._com_initialized = False
+                self.logger.debug("COM环境反初始化成功")
+            except Exception as e:
+                self.logger.warning(f"COM环境反初始化失败: {e}")
     
     def connect(self, retry_count: int = 3, retry_interval: float = 2.0) -> bool:
         """
@@ -196,51 +224,62 @@ class CANoeCOMWrapper:
             >>> success = wrapper.connect(retry_count=5)
             >>> print(f"连接状态: {success}")
         """
-        self._check_win32com()
-        
-        for attempt in range(retry_count):
-            try:
-                self.logger.info(f"正在连接CANoe (尝试 {attempt + 1}/{retry_count})...")
-                
-                # 创建CANoe应用程序对象
-                self._app = win32com.client.Dispatch("CANoe.Application")
-                
-                # 获取测量对象
-                self._measurement = self._app.Measurement
-                
-                # 获取系统对象
-                self._system = self._app.System
-                
-                # 获取命名空间集合
-                self._namespaces = self._system.Namespaces
-                
-                # 获取版本信息
-                self._load_version_info()
-                
-                self.is_connected = True
-                self.logger.info(f"CANoe连接成功 (版本: {self.version})")
+        with self._lock:
+            if self.is_connected:
+                self.logger.warning("CANoe已连接")
                 return True
-                
-            except Exception as e:
-                self.logger.warning(f"连接尝试 {attempt + 1} 失败: {e}")
-                if attempt < retry_count - 1:
-                    time.sleep(retry_interval)
-                else:
-                    raise CANoeConnectionError(
-                        f"连接CANoe失败（已重试{retry_count}次）: {e}"
-                    )
-        
-        return False
+            
+            self._check_win32com()
+            self._init_com()
+            
+            for attempt in range(retry_count):
+                try:
+                    self.logger.info(f"正在连接CANoe (尝试 {attempt + 1}/{retry_count})...")
+                    
+                    # 创建CANoe应用程序对象
+                    self._app = win32com.client.Dispatch("CANoe.Application")
+                    
+                    # 获取测量对象
+                    self._measurement = self._app.Measurement
+                    
+                    # 获取系统对象
+                    self._system = self._app.System
+                    
+                    # 获取命名空间集合
+                    self._namespaces = self._system.Namespaces
+                    
+                    # 获取版本信息
+                    self._load_version_info()
+                    
+                    self.is_connected = True
+                    self.logger.info(f"CANoe连接成功 (版本: {self.version})")
+                    return True
+                    
+                except Exception as e:
+                    self.logger.warning(f"连接尝试 {attempt + 1} 失败: {e}")
+                    if attempt < retry_count - 1:
+                        time.sleep(retry_interval)
+                    else:
+                        raise CANoeConnectionError(
+                            f"连接CANoe失败（已重试{retry_count}次）: {e}"
+                        )
+            
+            return False
     
     def _load_version_info(self):
         """加载CANoe版本信息"""
         try:
-            version_str = self._app.Version
-            # 解析版本号，格式通常为 "17.3.91"
-            parts = version_str.split('.')
-            major = int(parts[0]) if len(parts) > 0 else 0
-            minor = int(parts[1]) if len(parts) > 1 else 0
-            patch = int(parts[2]) if len(parts) > 2 else 0
+            version_str = str(self._app.Version)
+            # 解析版本号，格式通常为 "17.3.91" 或 "CANoe 17 SP5"
+            # 提取数字部分
+            import re
+            version_match = re.search(r'(\d+)(?:\.(\d+))?(?:\.(\d+))?', version_str)
+            if version_match:
+                major = int(version_match.group(1)) if version_match.group(1) else 0
+                minor = int(version_match.group(2)) if version_match.group(2) else 0
+                patch = int(version_match.group(3)) if version_match.group(3) else 0
+            else:
+                major, minor, patch = 0, 0, 0
             
             self.version = CANoeVersion(
                 major=major,
@@ -248,6 +287,7 @@ class CANoeCOMWrapper:
                 patch=patch,
                 full_version=version_str
             )
+            self.logger.info(f"CANoe版本信息: {self.version}")
         except Exception as e:
             self.logger.warning(f"获取CANoe版本信息失败: {e}")
             self.version = CANoeVersion(0, 0, 0, "unknown")
@@ -266,38 +306,46 @@ class CANoeCOMWrapper:
             >>> print(f"连接状态: {wrapper.is_connected}")
             False
         """
-        try:
-            self.logger.info("正在断开CANoe连接...")
-            
-            # 停止测量
-            if self._measurement and self.is_measurement_running:
-                self.stop_measurement()
-            
-            # 关闭CANoe应用程序（可选）
-            # if self._app:
-            #     self._app.Quit()
-            
-            # 释放对象
-            self._app = None
-            self._measurement = None
-            self._system = None
-            self._namespaces = None
-            self._namespace_cache.clear()
-            self._variable_cache.clear()
-            
-            self.is_connected = False
-            self.is_measurement_running = False
-            
-            self.logger.info("CANoe连接已断开")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"断开CANoe连接时出错: {e}")
-            # 强制重置状态
-            self._app = None
-            self._measurement = None
-            self.is_connected = False
-            return False
+        with self._lock:
+            try:
+                self.logger.info("正在断开CANoe连接...")
+                
+                # 停止测量
+                if self._measurement and self.is_measurement_running:
+                    self.stop_measurement()
+                
+                # 尝试关闭CANoe应用程序
+                if self._app:
+                    try:
+                        self._app.Quit()
+                    except:
+                        pass
+                    
+                    self._app = None
+                    self._measurement = None
+                
+                # 释放对象
+                self._system = None
+                self._namespaces = None
+                self._namespace_cache.clear()
+                self._variable_cache.clear()
+                
+                self.is_connected = False
+                self.is_measurement_running = False
+                
+                # 反初始化COM环境
+                self._uninit_com()
+                
+                self.logger.info("CANoe连接已断开")
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"断开CANoe连接时出错: {e}")
+                # 强制重置状态
+                self._app = None
+                self._measurement = None
+                self.is_connected = False
+                return False
     
     def open_configuration(self, config_path: str, timeout: Optional[int] = None) -> bool:
         """
@@ -317,41 +365,35 @@ class CANoeCOMWrapper:
             >>> wrapper.open_configuration("C:/Test/config.cfg")
             True
         """
-        if not self.is_connected:
-            raise CANoeConnectionError("CANoe未连接，无法打开配置")
-        
-        timeout = timeout or self.open_timeout
-        
-        try:
-            self.logger.info(f"正在打开配置文件: {config_path}")
+        with self._lock:
+            if not self.is_connected:
+                raise CANoeConnectionError("CANoe未连接，无法打开配置")
             
-            # 停止当前测量（如果正在运行）
-            if self.is_measurement_running:
-                self.stop_measurement()
+            # 验证文件是否存在
+            path = Path(config_path)
+            if not path.exists():
+                raise CANoeConfigurationError(f"配置文件不存在: {config_path}")
             
-            # 打开配置
-            self._app.Open(config_path)
-            
-            # 等待配置加载完成
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                try:
-                    result = self._app.Configuration.OpenConfigurationResult
-                    if result == 0:
-                        self.config_path = config_path
-                        self.logger.info("配置文件打开成功")
-                        return True
-                    else:
-                        raise CANoeConfigurationError(f"配置文件打开失败，错误码: {result}")
-                except:
-                    time.sleep(0.5)
-            
-            raise CANoeConfigurationError(f"配置文件打开超时（{timeout}秒）")
-            
-        except CANoeConfigurationError:
-            raise
-        except Exception as e:
-            raise CANoeConfigurationError(f"打开配置文件失败: {e}")
+            try:
+                self.logger.info(f"正在打开配置文件: {config_path}")
+                
+                # 停止当前测量（如果正在运行）
+                if self.is_measurement_running:
+                    self.stop_measurement()
+                
+                # 打开配置
+                self._app.Open(str(config_path))
+                
+                # 等待配置加载完成
+                self.logger.info(f"等待配置加载完成（{self.config_load_wait_time}秒）...")
+                time.sleep(self.config_load_wait_time)
+                
+                self.config_path = str(config_path)
+                self.logger.info("配置文件打开成功")
+                return True
+                
+            except Exception as e:
+                raise CANoeConfigurationError(f"打开配置文件失败: {e}")
     
     def close_configuration(self) -> bool:
         """
@@ -360,24 +402,25 @@ class CANoeCOMWrapper:
         Returns:
             关闭成功返回True
         """
-        if not self.is_connected:
-            return True
-        
-        try:
-            # 停止测量
-            if self.is_measurement_running:
-                self.stop_measurement()
+        with self._lock:
+            if not self.is_connected:
+                return True
             
-            # 关闭配置
-            self._app.CloseConfiguration()
-            self.config_path = None
-            
-            self.logger.info("配置文件已关闭")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"关闭配置文件失败: {e}")
-            return False
+            try:
+                # 停止测量
+                if self.is_measurement_running:
+                    self.stop_measurement()
+                
+                # 关闭配置
+                self._app.CloseConfiguration()
+                self.config_path = None
+                
+                self.logger.info("配置文件已关闭")
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"关闭配置文件失败: {e}")
+                return False
     
     def start_measurement(self, timeout: int = 30) -> bool:
         """
@@ -396,36 +439,39 @@ class CANoeCOMWrapper:
             >>> wrapper.start_measurement(timeout=60)
             True
         """
-        if not self.is_connected:
-            raise CANoeConnectionError("CANoe未连接，无法启动测量")
-        
-        try:
-            self.logger.info("正在启动CANoe测量...")
+        with self._lock:
+            if not self.is_connected:
+                raise CANoeConnectionError("CANoe未连接，无法启动测量")
             
-            # 检查是否已经在运行
-            if self._measurement.Running:
-                self.logger.info("测量已经在运行")
-                self.is_measurement_running = True
+            if self.is_measurement_running:
+                self.logger.warning("测量已在运行中")
                 return True
             
-            # 启动测量
-            self._measurement.Start()
-            
-            # 等待测量启动
-            start_time = time.time()
-            while time.time() - start_time < timeout:
+            try:
+                self.logger.info("正在启动CANoe测量...")
+                
+                # 检查是否已经在运行
                 if self._measurement.Running:
+                    self.logger.info("测量已经在运行")
                     self.is_measurement_running = True
-                    self.logger.info("CANoe测量已启动")
                     return True
-                time.sleep(0.5)
-            
-            raise CANoeMeasurementError(f"测量启动超时（{timeout}秒）")
-            
-        except CANoeMeasurementError:
-            raise
-        except Exception as e:
-            raise CANoeMeasurementError(f"启动测量失败: {e}")
+                
+                # 启动测量
+                self._measurement.Start()
+                
+                # 等待测量启动
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    if self._measurement.Running:
+                        self.is_measurement_running = True
+                        self.logger.info("CANoe测量已启动")
+                        return True
+                    time.sleep(0.5)
+                
+                raise CANoeMeasurementError(f"测量启动超时（{timeout}秒）")
+                
+            except Exception as e:
+                raise CANoeMeasurementError(f"启动测量失败: {e}")
     
     def stop_measurement(self, timeout: int = 10) -> bool:
         """
@@ -441,35 +487,39 @@ class CANoeCOMWrapper:
             >>> wrapper.stop_measurement()
             True
         """
-        if not self.is_connected or not self._measurement:
-            return True
-        
-        try:
-            self.logger.info("正在停止CANoe测量...")
-            
-            # 检查是否已经在停止
-            if not self._measurement.Running:
-                self.is_measurement_running = False
+        with self._lock:
+            if not self.is_connected:
                 return True
             
-            # 停止测量
-            self._measurement.Stop()
+            if not self.is_measurement_running:
+                return True
             
-            # 等待测量停止
-            start_time = time.time()
-            while time.time() - start_time < timeout:
+            try:
+                self.logger.info("正在停止CANoe测量...")
+                
+                # 检查是否已经在停止
                 if not self._measurement.Running:
                     self.is_measurement_running = False
-                    self.logger.info("CANoe测量已停止")
                     return True
-                time.sleep(0.5)
-            
-            self.logger.warning(f"测量停止超时（{timeout}秒）")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"停止测量失败: {e}")
-            return False
+                
+                # 停止测量
+                self._measurement.Stop()
+                
+                # 等待测量停止
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    if not self._measurement.Running:
+                        self.is_measurement_running = False
+                        self.logger.info("CANoe测量已停止")
+                        return True
+                    time.sleep(0.5)
+                
+                self.logger.warning(f"测量停止超时（{timeout}秒）")
+                return False
+                
+            except Exception as e:
+                self.logger.error(f"停止测量失败: {e}")
+                return False
     
     def get_measurement_state(self) -> bool:
         """

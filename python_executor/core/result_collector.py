@@ -15,35 +15,35 @@ logger = get_logger("result_collector")
 @dataclass
 class ResultCollector:
     """结果收集器"""
-    
-    task_id: str
+
+    taskNo: str
     start_time: datetime = field(default_factory=datetime.now)
     end_time: Optional[datetime] = None
     results: List[TestResult] = field(default_factory=list)
     logs: List[LogEntry] = field(default_factory=list)
     status_updates: List[StatusUpdate] = field(default_factory=list)
-    
+
     def add_test_result(self, result: TestResult):
         """添加测试结果"""
         self.results.append(result)
         logger.debug(f"收集测试结果: {result.name} - {'通过' if result.passed else '失败'}")
-    
+
     def add_log(self, level: str, message: str, details: Dict[str, Any] = None):
         """添加日志"""
         log_entry = LogEntry(
             level=level,
             message=message,
             timestamp=datetime.now(),
-            task_id=self.task_id,
+            taskNo=self.taskNo,
             details=details
         )
         self.logs.append(log_entry)
-        logger.log(getattr(logger, level.lower(), logger.info), f"[{self.task_id}] {message}")
-    
+        logger.log(getattr(logger, level.lower(), logger.info), f"[{self.taskNo}] {message}")
+
     def add_status_update(self, status: str, message: str = None, progress: int = None):
         """添加状态更新"""
         status_update = StatusUpdate(
-            task_id=self.task_id,
+            taskNo=self.taskNo,
             status=status,
             message=message,
             progress=progress,
@@ -51,18 +51,18 @@ class ResultCollector:
         )
         self.status_updates.append(status_update)
         logger.info(f"任务状态更新: {status} - {message if message else ''}")
-    
+
     def finalize(self, status: str = "completed", error_message: str = None):
         """完成结果收集"""
         self.end_time = datetime.now()
-        
+
         # 生成结果摘要
         total = len(self.results)
         passed = sum(1 for r in self.results if r.passed is True)
         failed = total - passed
-        
+
         duration = (self.end_time - self.start_time).total_seconds()
-        
+
         summary = {
             "total": total,
             "passed": passed,
@@ -72,18 +72,18 @@ class ResultCollector:
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat()
         }
-        
+
         # 创建最终结果对象
         task_result = TaskResult(
-            task_id=self.task_id,
+            taskNo=self.taskNo,
             status=status,
-            start_time=self.start_time,
-            end_time=self.end_time,
+            startTime=self.start_time,
+            endTime=self.end_time,
             results=self.results,
             summary=summary,
-            error_message=error_message
+            errorMessage=error_message
         )
-        
+
         logger.info(f"结果收集完成 - 总计: {total}, 通过: {passed}, 失败: {failed}, 耗时: {duration:.1f}秒")
         return task_result
     
