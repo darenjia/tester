@@ -31,6 +31,5 @@ Thumbs.db
 htmlcov/
 
 # 忽略打包文件
-build/
 dist/
 *.egg-info/
