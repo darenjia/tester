@@ -14,6 +14,7 @@ from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType
 from core.result_collector import ResultCollector
 from core.canoe_controller import CANoeController
 from core.tsmaster_controller import TSMasterController
+from core.config_manager import TestConfigManager
 
 logger = get_logger("task_executor")
 
@@ -34,6 +35,9 @@ class TaskExecutor:
         self._stop_event = threading.Event()
         self._task_thread = None
         self._start_time = None
+        
+        # 初始化配置管理器
+        self.config_manager: Optional[TestConfigManager] = None
         
         logger.info("任务执行器初始化完成")
     
@@ -77,7 +81,7 @@ class TaskExecutor:
         return True
     
     def _execute_task(self, task: Task):
-        """执行任务主逻辑"""
+        """执行任务主逻辑 - 支持配置驱动的用例执行"""
         self._start_time = time.time()
         
         try:
@@ -88,6 +92,35 @@ class TaskExecutor:
             
             # 更新状态为运行中
             self._update_task_status(task.taskNo, TaskStatus.RUNNING)
+            
+            # ========== 新流程：准备配置 ==========
+            cfg_path = None
+            if task.config_name or task.base_config_dir:
+                # 使用配置管理器准备配置
+                self.current_collector.add_log("INFO", "正在准备测试配置...")
+                
+                base_dir = task.base_config_dir or settings.config_base_dir
+                self.config_manager = TestConfigManager(base_config_dir=base_dir)
+                
+                # 确定配置名称
+                config_name = task.config_name
+                if not config_name and task.config_path:
+                    # 从config_path提取配置名称
+                    import os
+                    config_name = os.path.basename(task.config_path).replace('.cfg', '')
+                
+                if config_name:
+                    config_info = self.config_manager.prepare_config_for_task(
+                        task_config_name=config_name,
+                        test_cases=[item.to_dict() for item in task.test_items],
+                        variables=task.variables
+                    )
+                    cfg_path = config_info['cfg_path']
+                    ini_path = config_info['ini_path']
+                    
+                    self.current_collector.add_log("INFO", f"cfg文件: {cfg_path}")
+                    self.current_collector.add_log("INFO", f"ini文件: {ini_path}")
+                    logger.info(f"配置准备完成: cfg={cfg_path}, ini={ini_path}")
             
             # 根据工具类型选择控制器
             if task.tool_type == TestToolType.CANOE.value:
@@ -100,14 +133,22 @@ class TaskExecutor:
             # 连接测试软件
             self._connect_tool(task)
             
-            # 加载配置
-            self._load_configuration(task)
+            # 加载配置（使用新路径或原有路径）
+            if cfg_path:
+                self._load_configuration_by_path(cfg_path)
+            else:
+                self._load_configuration(task)
             
             # 启动测量/仿真
             self._start_measurement(task)
             
-            # 执行测试项
-            results = self._execute_test_items(task)
+            # 执行测试项（使用新的配置驱动方式）
+            if hasattr(self.controller, 'run_test_case_with_config') and task.config_name:
+                # 新方式：通过系统变量控制用例执行
+                results = self._execute_test_items_with_config(task)
+            else:
+                # 回退到原有执行方式
+                results = self._execute_test_items(task)
             
             # 停止测量/仿真
             self._stop_measurement(task)
@@ -132,6 +173,7 @@ class TaskExecutor:
             self._cleanup()
             self.current_task = None
             self.current_collector = None
+            self.config_manager = None
     
     def _connect_tool(self, task: Task):
         """连接测试工具"""
@@ -161,6 +203,18 @@ class TaskExecutor:
         
         try:
             self.controller.open_configuration(task.config_path)
+            logger.info("配置文件加载成功")
+            self.current_collector.add_log("INFO", "配置文件加载成功")
+        except Exception as e:
+            raise ToolException(f"配置文件加载失败: {e}")
+
+    def _load_configuration_by_path(self, config_path: str):
+        """通过路径加载配置文件"""
+        logger.info(f"正在加载配置文件: {config_path}")
+        self.current_collector.add_log("INFO", f"正在加载配置文件: {config_path}")
+        
+        try:
+            self.controller.open_configuration(config_path)
             logger.info("配置文件加载成功")
             self.current_collector.add_log("INFO", "配置文件加载成功")
         except Exception as e:
@@ -278,6 +332,85 @@ class TaskExecutor:
                 type=test_item.type,
                 error=f"执行失败: {e}"
             )
+
+    def _execute_test_items_with_config(self, task: Task) -> list:
+        """
+        使用配置执行测试项 - 新的配置驱动执行方式
+        
+        执行流程：
+        1. 遍历任务中的测试用例
+        2. 对每个用例，通过CANoe系统变量设置用例名称和参数
+        3. 触发测试执行
+        4. 等待并获取结果
+        """
+        results = []
+        total_items = len(task.test_items)
+        
+        logger.info(f"开始执行{total_items}个测试项（配置驱动方式）")
+        self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
+        
+        # 获取命名空间
+        namespace = task.canoe_namespace or settings.canoe_namespace
+        
+        for i, test_item in enumerate(task.test_items, 1):
+            # 检查是否被取消
+            if self._stop_event.is_set():
+                logger.info("任务被取消")
+                self.current_collector.add_log("INFO", "任务被取消")
+                break
+            
+            progress = int((i / total_items) * 100)
+            logger.info(f"执行测试项 {i}/{total_items}: {test_item.name}")
+            
+            # 更新进度
+            self._update_task_status(
+                task.taskNo, 
+                TaskStatus.RUNNING, 
+                f"执行测试项 {i}/{total_items}: {test_item.name}",
+                progress
+            )
+            
+            # 使用新的用例执行方式
+            if hasattr(self.controller, 'run_test_case_with_config'):
+                # 新方式：通过系统变量控制用例执行
+                result = self.controller.run_test_case_with_config(
+                    test_case_name=test_item.name,
+                    config={
+                        'dtc_info': getattr(test_item, 'dtc_info', None),
+                        'params': getattr(test_item, 'params', {}),
+                        'repeat': getattr(test_item, 'repeat', 1)
+                    },
+                    namespace=namespace,
+                    timeout=task.timeout // max(len(task.test_items), 1)  # 每个用例的超时时间
+                )
+                
+                # 转换结果为TestResult格式
+                if result.get('success'):
+                    test_result = TestResult(
+                        name=test_item.name,
+                        type=test_item.type or 'test_case',
+                        verdict="PASS" if result.get('result') == 0 else "FAIL",
+                        details=result
+                    )
+                else:
+                    test_result = TestResult(
+                        name=test_item.name,
+                        type=test_item.type or 'test_case',
+                        error=result.get('error', '执行失败'),
+                        details=result
+                    )
+            else:
+                # 回退到原有执行方式
+                test_result = self._execute_single_item(test_item)
+            
+            results.append(test_result)
+            self.current_collector.add_test_result(test_result)
+            self._report_progress(task.taskNo, test_item, test_result)
+            
+            # 短暂延时
+            time.sleep(0.5)
+        
+        return results
     
     def _stop_measurement(self, task: Task):
         """停止测量/仿真"""

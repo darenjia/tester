@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}运行日志 - 测试执行器{% endblock %}
+{% block page_title %}运行日志{% endblock %}
+{% set active_page = 'logs' %}
+
+{% block content %}
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">日志查看</span>
+        <div>
+            <span id="log-count" style="font-size: 13px; color: var(--text-secondary); margin-right: 12px;">共 0 条</span>
+            <button class="btn btn-sm btn-secondary" onclick="toggleAutoScroll()" id="auto-scroll-btn">
+                <i class="fas fa-arrow-down"></i> 自动滚动
+            </button>
+        </div>
+    </div>
+    <div class="content-card-body">
+        <!-- 工具栏 -->
+        <div class="logs-toolbar">
+            <div class="logs-filter">
+                <label style="font-size: 14px; color: var(--text-secondary);">级别:</label>
+                <select class="form-select" id="log-level-filter" style="width: 120px;" onchange="loadLogs()">
+                    <option value="">全部</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO" selected>INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            
+            <div class="logs-filter" style="flex: 1;">
+                <input type="text" class="form-input" id="log-search" placeholder="搜索日志内容..." 
+                       style="width: 250px;" onkeyup="if(event.key==='Enter') loadLogs()">
+                <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
+                    <i class="fas fa-search"></i> 搜索
+                </button>
+            </div>
+            
+            <div>
+                <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="clearLogs()">
+                    <i class="fas fa-trash"></i> 清空
+                </button>
+                <button class="btn btn-sm btn-primary" onclick="exportLogs()">
+                    <i class="fas fa-download"></i> 导出
+                </button>
+            </div>
+        </div>
+        
+        <!-- 日志容器 -->
+        <div class="logs-container" id="logs-container">
+            <div class="empty-state" style="color: #64748b;">
+                <div class="empty-state-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="empty-state-text">暂无日志</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let autoScroll = true;
+    let refreshInterval = null;
+    
+    // 切换自动滚动
+    function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const btn = document.getElementById('auto-scroll-btn');
+        if (autoScroll) {
+            btn.innerHTML = '<i class="fas fa-arrow-down"></i> 自动滚动';
+            btn.classList.add('btn-secondary');
+            btn.classList.remove('btn-primary');
+            scrollToBottom();
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i> 暂停滚动';
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-primary');
+        }
+    }
+    
+    // 滚动到底部
+    function scrollToBottom() {
+        if (autoScroll) {
+            const container = document.getElementById('logs-container');
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+    
+    // 加载日志
+    async function loadLogs() {
+        try {
+            const level = document.getElementById('log-level-filter').value;
+            const search = document.getElementById('log-search').value;
+            
+            let url = '/api/logs?limit=500';
+            if (level) url += `&level=${level}`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+            
+            const response = await fetch(url);
+            const result = await response.json();
+            
+            if (result.success) {
+                displayLogs(result.data);
+                document.getElementById('log-count').textContent = `共 ${result.total} 条`;
+            } else {
+                showMessage('加载日志失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('加载日志失败:', error);
+            showMessage('加载日志失败', 'error');
+        }
+    }
+    
+    // 显示日志
+    function displayLogs(logs) {
+        const container = document.getElementById('logs-container');
+        
+        if (logs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="color: #64748b;">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div class="empty-state-text">暂无日志</div>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        logs.forEach(log => {
+            html += `
+                <div class="log-entry">
+                    <span class="log-time">${log.timestamp}</span>
+                    <span class="log-level ${log.level}">${log.level}</span>
+                    <span class="log-message">${escapeHtml(log.message)}</span>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+        scrollToBottom();
+    }
+    
+    // 转义 HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // 清空日志
+    async function clearLogs() {
+        if (!confirm('确定要清空所有日志吗？此操作不可恢复。')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/logs/clear', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showMessage('日志已清空', 'success');
+                loadLogs();
+            } else {
+                showMessage('清空日志失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('清空日志失败:', error);
+            showMessage('清空日志失败', 'error');
+        }
+    }
+    
+    // 导出日志
+    async function exportLogs() {
+        try {
+            const level = document.getElementById('log-level-filter').value;
+            
+            const response = await fetch('/api/logs/export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ level })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showMessage(`日志已导出到: ${result.data.filename}`, 'success');
+            } else {
+                showMessage('导出日志失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('导出日志失败:', error);
+            showMessage('导出日志失败', 'error');
+        }
+    }
+    
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadLogs();
+        // 每 2 秒刷新一次日志
+        refreshInterval = setInterval(loadLogs, 2000);
+    });
+    
+    // 页面卸载时清理
+    window.addEventListener('beforeunload', function() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
+</script>
+{% endblock %}

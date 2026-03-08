@@ -70,6 +70,27 @@ class Case:
     actualResult: Optional[str] = None   # 实际结果
     testStatus: Optional[str] = None     # 测试状态
     
+    # 新增字段 - 用于配置驱动的用例执行
+    dtcInfo: Optional[str] = None        # DTC信息
+    params: Dict[str, Any] = field(default_factory=dict)  # 测试参数
+    repeat: int = 1                      # 重复执行次数
+    
+    # 兼容属性
+    @property
+    def name(self) -> str:
+        """用例名称 - 兼容core/task_executor.py"""
+        return self.caseName
+    
+    @property
+    def type(self) -> str:
+        """用例类型 - 兼容core/task_executor.py"""
+        return self.caseType
+    
+    @property
+    def dtc_info(self) -> Optional[str]:
+        """DTC信息 - 兼容下划线命名"""
+        return self.dtcInfo
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Case':
         """从字典创建用例 - 支持TDM2.0字段名"""
@@ -89,7 +110,11 @@ class Case:
             changeRecord=data.get("changeRecord"),
             tags=data.get("tags"),
             actualResult=data.get("actualResult"),
-            testStatus=data.get("testStatus")
+            testStatus=data.get("testStatus"),
+            # 新增字段
+            dtcInfo=data.get("dtcInfo"),
+            params=data.get("params", {}),
+            repeat=data.get("repeat", 1)
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -117,6 +142,13 @@ class Case:
             result["actualResult"] = self.actualResult
         if self.testStatus is not None:
             result["testStatus"] = self.testStatus
+        # 新增字段
+        if self.dtcInfo is not None:
+            result["dtcInfo"] = self.dtcInfo
+        if self.params:
+            result["params"] = self.params
+        if self.repeat != 1:
+            result["repeat"] = self.repeat
             
         return result
 
@@ -137,9 +169,15 @@ class Task:
     # 内部使用字段
     deviceId: Optional[str] = None   # 设备ID
     toolType: Optional[str] = None   # 测试工具类型
-    configPath: Optional[str] = None # 配置文件路径
+    configPath: Optional[str] = None # 配置文件路径（直接指定cfg路径）
     timeout: int = 3600              # 超时时间(秒)
     timestamp: Optional[int] = None  # 时间戳
+    
+    # 新增字段 - 用于配置驱动的用例执行
+    configName: Optional[str] = None     # 配置名称（用于查找cfg文件）
+    variables: Dict[str, Any] = field(default_factory=dict)  # 测试变量值字典
+    baseConfigDir: Optional[str] = None  # 基础配置目录
+    canoeNamespace: Optional[str] = None # CANoe系统变量命名空间
 
     # 兼容属性 - 用于core/task_executor.py
     @property
@@ -162,6 +200,21 @@ class Task:
         """测试项列表 - 兼容core/task_executor.py"""
         # 将caseList转换为test_items格式
         return self.caseList
+    
+    @property
+    def config_name(self) -> Optional[str]:
+        """配置名称 - 兼容下划线命名"""
+        return self.configName
+    
+    @property
+    def base_config_dir(self) -> Optional[str]:
+        """基础配置目录 - 兼容下划线命名"""
+        return self.baseConfigDir
+    
+    @property
+    def canoe_namespace(self) -> Optional[str]:
+        """CANoe命名空间 - 兼容下划线命名"""
+        return self.canoeNamespace
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Task':
@@ -179,7 +232,12 @@ class Task:
             toolType=data.get("toolType"),
             configPath=data.get("configPath"),
             timeout=data.get("timeout", 3600),
-            timestamp=data.get("timestamp")
+            timestamp=data.get("timestamp"),
+            # 新增字段
+            configName=data.get("configName"),
+            variables=data.get("variables", {}),
+            baseConfigDir=data.get("baseConfigDir"),
+            canoeNamespace=data.get("canoeNamespace")
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -199,6 +257,15 @@ class Task:
             result["configPath"] = self.configPath
         if self.timestamp is not None:
             result["timestamp"] = self.timestamp
+        # 新增字段
+        if self.configName is not None:
+            result["configName"] = self.configName
+        if self.variables:
+            result["variables"] = self.variables
+        if self.baseConfigDir is not None:
+            result["baseConfigDir"] = self.baseConfigDir
+        if self.canoeNamespace is not None:
+            result["canoeNamespace"] = self.canoeNamespace
             
         return result
 

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}测试执行器{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>
+                    <i class="fas fa-microchip"></i>
+                    <span>测试执行器</span>
+                </h1>
+                <div class="version">v1.0.0</div>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="/dashboard" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/config" class="nav-item {% if active_page == 'config' %}active{% endif %}">
+                    <i class="fas fa-cog"></i>
+                    <span>系统配置</span>
+                </a>
+                <a href="/logs" class="nav-item {% if active_page == 'logs' %}active{% endif %}">
+                    <i class="fas fa-file-alt"></i>
+                    <span>运行日志</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div id="uptime">运行时间: --</div>
+            </div>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部栏 -->
+            <header class="top-bar">
+                <h2 class="page-title">{% block page_title %}仪表盘{% endblock %}</h2>
+                <div class="top-actions">
+                    <span id="connection-status" class="status-badge">
+                        <i class="fas fa-circle"></i> 检查中...
+                    </span>
+                </div>
+            </header>
+            
+            <!-- 内容区域 -->
+            <div class="content-area">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    <!-- 消息提示容器 -->
+    <div id="message-container" style="position: fixed; top: 20px; right: 20px; z-index: 1000;"></div>
+    
+    <script>
+        // 全局配置
+        const API_BASE = '';
+        
+        // 显示消息
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message message-${type}`;
+            msgDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'exclamation-triangle'}"></i>
+                <span>${message}</span>
+            `;
+            container.appendChild(msgDiv);
+            
+            setTimeout(() => {
+                msgDiv.remove();
+            }, 3000);
+        }
+        
+        // 更新连接状态
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connection-status');
+            if (connected) {
+                statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--success-color);"></i> 已连接';
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--danger-color);"></i> 未连接';
+            }
+        }
+        
+        // 更新运行时间
+        function updateUptime(uptime) {
+            const uptimeEl = document.getElementById('uptime');
+            if (uptimeEl && uptime) {
+                uptimeEl.textContent = `运行时间: ${uptime}`;
+            }
+        }
+        
+        // 获取状态
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const result = await response.json();
+                if (result.success) {
+                    updateConnectionStatus(result.data.websocket.connected);
+                    updateUptime(result.data.uptime);
+                }
+            } catch (error) {
+                console.error('获取状态失败:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchStatus();
+            // 每 5 秒更新一次状态
+            setInterval(fetchStatus, 5000);
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
