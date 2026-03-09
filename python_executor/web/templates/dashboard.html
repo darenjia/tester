@@ -46,6 +46,26 @@
         <div id="system-status-value" class="status-card-value">正常</div>
         <div id="system-status-desc" class="status-card-desc">所有服务运行正常</div>
     </div>
+    
+    <!-- 上报服务状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">上报服务</span>
+            <div id="report-indicator" class="status-indicator offline"></div>
+        </div>
+        <div id="report-status-value" class="status-card-value">未配置</div>
+        <div id="report-status-desc" class="status-card-desc">最近上报: <span id="last-report-time">-</span></div>
+    </div>
+    
+    <!-- 配置缓存状态 -->
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">配置缓存</span>
+            <div id="cache-indicator" class="status-indicator online"></div>
+        </div>
+        <div id="cache-status-value" class="status-card-value">0 MB</div>
+        <div id="cache-status-desc" class="status-card-desc">缓存文件: <span id="cache-file-count">0</span> 个</div>
+    </div>
 </div>
 
 <!-- 当前任务详情 -->
@@ -149,7 +169,7 @@
                 
                 // 更新 HTTP 配置显示
                 if (config.http) {
-                    document.getElementById('http-port').textContent = config.http.port || '2887';
+                    document.getElementById('http-port').textContent = config.http.port || '8180';
                 }
                 
                 // 根据 WebSocket 配置显示/隐藏 WebSocket 状态卡片
@@ -409,6 +429,74 @@
         showMessage('软件状态已刷新', 'success');
     }
     
+    // 更新上报服务状态
+    function updateReportStatus(reportData) {
+        const indicator = document.getElementById('report-indicator');
+        const value = document.getElementById('report-status-value');
+        const desc = document.getElementById('report-status-desc');
+        const lastTime = document.getElementById('last-report-time');
+        
+        if (!indicator || !value) return;
+        
+        if (reportData.enabled) {
+            indicator.className = 'status-indicator online';
+            value.textContent = '已启用';
+            value.style.color = 'var(--success-color)';
+            desc.textContent = '上报服务正常运行';
+        } else {
+            indicator.className = 'status-indicator offline';
+            value.textContent = '未配置';
+            value.style.color = 'var(--text-secondary)';
+            desc.textContent = '请在配置页面设置上报服务器';
+        }
+    }
+    
+    // 更新配置缓存状态
+    function updateCacheStatus(cacheData) {
+        const indicator = document.getElementById('cache-indicator');
+        const value = document.getElementById('cache-status-value');
+        const desc = document.getElementById('cache-status-desc');
+        const fileCount = document.getElementById('cache-file-count');
+        
+        if (!indicator || !value) return;
+        
+        if (cacheData.enabled) {
+            indicator.className = 'status-indicator online';
+            value.textContent = `${cacheData.total_size_mb || 0} MB`;
+            value.style.color = 'var(--success-color)';
+            fileCount.textContent = cacheData.file_count || 0;
+        } else {
+            indicator.className = 'status-indicator offline';
+            value.textContent = '已禁用';
+            value.style.color = 'var(--text-secondary)';
+            fileCount.textContent = '0';
+        }
+    }
+    
+    // 获取Dashboard状态（包含缓存和上报状态）
+    async function loadDashboardStatus() {
+        try {
+            const response = await fetch('/api/dashboard/status');
+            const result = await response.json();
+            
+            if (result.success) {
+                const data = result.data;
+                
+                // 更新上报状态
+                if (data.report) {
+                    updateReportStatus(data.report);
+                }
+                
+                // 更新缓存状态
+                if (data.cache) {
+                    updateCacheStatus(data.cache);
+                }
+            }
+        } catch (error) {
+            console.error('加载Dashboard状态失败:', error);
+        }
+    }
+    
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
         // 页面加载时，HTTP 服务肯定是正常的（因为页面能加载）
@@ -418,6 +506,9 @@
         // 然后加载配置并更新仪表盘
         loadConfig().then(() => {
             return updateDashboard();
+        }).then(() => {
+            // 加载Dashboard状态（缓存和上报）
+            return loadDashboardStatus();
         }).catch(error => {
             console.error('初始化失败:', error);
             // 如果出错，保持运行中状态（因为页面能加载说明服务正常）
@@ -426,6 +517,8 @@
         
         // 每 3 秒刷新一次
         setInterval(updateDashboard, 3000);
+        // 每 10 秒刷新一次Dashboard状态
+        setInterval(loadDashboardStatus, 10000);
     });
 </script>
 {% endblock %}

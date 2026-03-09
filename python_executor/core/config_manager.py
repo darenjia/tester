@@ -85,7 +85,7 @@ class RuntimeConfigManager:
     def get_http_config(self) -> Dict[str, Any]:
         """获取HTTP服务配置"""
         return {
-            "port": self.get("http.port", 2887),
+            "port": self.get("http.port", 8180),
             "host": self.get("http.host", "0.0.0.0"),
             "debug": self.get("http.debug", False)
         }

@@ -499,7 +499,7 @@ class EnvironmentChecker:
         # 检测本地 HTTP 服务
         try:
             import urllib.request
-            port = get_config().get('http.port', 2887)
+            port = get_config().get('http.port', 8180)
             url = f"http://127.0.0.1:{port}/api/status"
             
             self._log(f"测试连接: {url}")

@@ -35,7 +35,7 @@ class TestExecutorApp:
             
             # 从配置获取端口
             config = get_config()
-            self.server_port = config.get('http.port', 2887)
+            self.server_port = config.get('http.port', 8180)
             host = config.get('http.host', '127.0.0.1')
             
             # 创建服务器

@@ -128,6 +128,70 @@
                 </div>
             </div>
             
+            <!-- 配置缓存管理 -->
+            <div class="form-section">
+                <h3 class="form-section-title">配置缓存管理</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="cache_enabled" name="config_cache.enabled" style="margin-right: 8px;">
+                        启用配置缓存
+                    </label>
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                        开启后，配置文件会被缓存到本地，提高加载速度
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">缓存目录</label>
+                    <input type="text" class="form-input" id="cache_dir" name="config_cache.cache_dir" 
+                           placeholder="workspace/cache/configs" readonly>
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        缓存文件存储位置（只读）
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">最大缓存数量</label>
+                    <input type="number" class="form-input" id="max_cache_count" name="config_cache.max_cache_count" 
+                           min="10" max="200" placeholder="50">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">缓存有效期（小时）</label>
+                    <input type="number" class="form-input" id="cache_ttl_hours" name="config_cache.cache_ttl_hours" 
+                           min="24" max="720" placeholder="168">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        超过此时间的缓存会被自动清理
+                    </small>
+                </div>
+                
+                <!-- 缓存状态显示 -->
+                <div id="cache-status-section" style="background: var(--bg-color); padding: 16px; border-radius: 8px; margin-top: 16px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-secondary);">当前缓存状态</h4>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">缓存文件数</div>
+                            <div id="cache-file-count" style="font-size: 20px; font-weight: 600; color: var(--text-color);">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">缓存大小</div>
+                            <div id="cache-total-size" style="font-size: 20px; font-weight: 600; color: var(--text-color);">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">缓存目录</div>
+                            <div id="cache-dir-display" style="font-size: 12px; color: var(--text-color); word-break: break-all;">-</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="clearCache()">
+                            <i class="fas fa-trash-alt"></i> 清理缓存
+                        </button>
+                        <span id="cache-clear-result" style="margin-left: 12px; font-size: 12px;"></span>
+                    </div>
+                </div>
+            </div>
+            
             <!-- 操作按钮 -->
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" onclick="resetConfig()">
@@ -190,6 +254,63 @@
         // 执行配置
         document.getElementById('default_timeout').value = config.execution?.default_timeout || '';
         document.getElementById('auto_start').checked = config.execution?.auto_start || false;
+        
+        // 配置缓存
+        document.getElementById('cache_enabled').checked = config.config_cache?.enabled ?? true;
+        document.getElementById('cache_dir').value = config.config_cache?.cache_dir || 'workspace/cache/configs';
+        document.getElementById('max_cache_count').value = config.config_cache?.max_cache_count || '';
+        document.getElementById('cache_ttl_hours').value = config.config_cache?.cache_ttl_hours || '';
+    }
+    
+    // 加载缓存状态
+    async function loadCacheStatus() {
+        try {
+            const response = await fetch('/api/config/cache/status');
+            const result = await response.json();
+            
+            if (result.success) {
+                const data = result.data;
+                const stats = data.stats || {};
+                
+                document.getElementById('cache-file-count').textContent = stats.cache_count || 0;
+                document.getElementById('cache-total-size').textContent = (stats.total_size_mb || 0) + ' MB';
+                document.getElementById('cache-dir-display').textContent = data.cache_dir || '-';
+            }
+        } catch (error) {
+            console.error('加载缓存状态失败:', error);
+        }
+    }
+    
+    // 清理缓存
+    async function clearCache() {
+        if (!confirm('确定要清理所有配置缓存吗？')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/config/cache/clear', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showMessage('缓存已清理', 'success');
+                document.getElementById('cache-clear-result').textContent = '清理成功';
+                document.getElementById('cache-clear-result').style.color = 'var(--success-color)';
+                // 刷新缓存状态
+                loadCacheStatus();
+            } else {
+                showMessage('清理失败: ' + result.message, 'error');
+                document.getElementById('cache-clear-result').textContent = '清理失败';
+                document.getElementById('cache-clear-result').style.color = 'var(--danger-color)';
+            }
+        } catch (error) {
+            console.error('清理缓存失败:', error);
+            showMessage('清理缓存失败', 'error');
+            document.getElementById('cache-clear-result').textContent = '清理失败';
+            document.getElementById('cache-clear-result').style.color = 'var(--danger-color)';
+        }
     }
     
     // 收集表单数据
@@ -288,7 +409,10 @@
     
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
-        loadConfig();
+        loadConfig().then(() => {
+            // 加载缓存状态
+            loadCacheStatus();
+        });
     });
 </script>
 {% endblock %}

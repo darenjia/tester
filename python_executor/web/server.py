@@ -18,6 +18,7 @@ from api.service_api import service_bp
 from api.config_api import config_bp
 from api.docs_api import docs_bp
 from api.env_api import env_bp
+from api.functional_test_api import functional_test_bp
 
 
 def create_app() -> Flask:
@@ -63,6 +64,7 @@ def create_app() -> Flask:
     app.register_blueprint(config_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(env_bp)
+    app.register_blueprint(functional_test_bp)
     
     # 注册路由
     register_routes(app)
@@ -119,6 +121,11 @@ def register_routes(app: Flask):
     def report_config_page():
         """上报配置页面"""
         return render_template('report_config.html')
+    
+    @app.route('/functional-test')
+    def functional_test_page():
+        """功能测试页面"""
+        return render_template('functional_test.html')
     
     # ========== API 路由 ==========
     
@@ -289,6 +296,136 @@ def register_routes(app: Flask):
             return jsonify({
                 'success': False,
                 'message': f'获取系统信息失败: {str(e)}'
+            }), 500
+    
+    @app.route('/api/dashboard/status')
+    def api_dashboard_status():
+        """获取Dashboard状态（聚合所有状态信息）"""
+        try:
+            from core.config_cache_manager import get_config_cache_manager
+            from utils.report_client import get_report_client
+            from core.status_monitor import get_status_monitor
+            
+            config = get_config()
+            monitor = get_status_monitor()
+            
+            # 获取系统状态
+            system_status = monitor.get_all_status()
+            
+            # 获取缓存状态
+            try:
+                cache_mgr = get_config_cache_manager()
+                cache_stats = cache_mgr.get_cache_stats()
+                cache_status = {
+                    'enabled': cache_mgr.enabled,
+                    'file_count': cache_stats.get('cache_count', 0),
+                    'total_size_mb': cache_stats.get('total_size_mb', 0),
+                    'cache_dir': cache_stats.get('cache_dir', '')
+                }
+            except Exception as e:
+                cache_status = {
+                    'enabled': False,
+                    'error': str(e)
+                }
+            
+            # 获取上报状态
+            try:
+                report_client = get_report_client()
+                report_status = {
+                    'enabled': report_client.enabled,
+                    'api_url': report_client._api_url or '',
+                    'file_upload_url': report_client._file_upload_url or ''
+                }
+            except Exception as e:
+                report_status = {
+                    'enabled': False,
+                    'error': str(e)
+                }
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'system': system_status,
+                    'cache': cache_status,
+                    'report': report_status,
+                    'timestamp': datetime.now().isoformat()
+                }
+            })
+        except Exception as e:
+            get_logger().error(f"获取Dashboard状态失败: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'获取Dashboard状态失败: {str(e)}'
+            }), 500
+    
+    @app.route('/api/config/cache/status')
+    def api_config_cache_status():
+        """获取配置缓存状态"""
+        try:
+            from core.config_cache_manager import get_config_cache_manager
+            
+            cache_mgr = get_config_cache_manager()
+            stats = cache_mgr.get_cache_stats()
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'enabled': cache_mgr.enabled,
+                    'cache_dir': cache_mgr.cache_dir,
+                    'stats': stats
+                }
+            })
+        except Exception as e:
+            get_logger().error(f"获取缓存状态失败: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'获取缓存状态失败: {str(e)}'
+            }), 500
+    
+    @app.route('/api/config/cache/clear', methods=['POST'])
+    def api_config_cache_clear():
+        """清理配置缓存"""
+        try:
+            from core.config_cache_manager import get_config_cache_manager
+            
+            cache_mgr = get_config_cache_manager()
+            cache_mgr.clear_all_cache()
+            
+            get_logger().info("配置缓存已清理")
+            return jsonify({
+                'success': True,
+                'message': '缓存已清理'
+            })
+        except Exception as e:
+            get_logger().error(f"清理缓存失败: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'清理缓存失败: {str(e)}'
+            }), 500
+    
+    @app.route('/api/report/status')
+    def api_report_status():
+        """获取上报服务状态"""
+        try:
+            from utils.report_client import get_report_client
+            
+            report_client = get_report_client()
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'enabled': report_client.enabled,
+                    'api_url': report_client._api_url,
+                    'file_upload_url': report_client._file_upload_url,
+                    'timeout': report_client._timeout,
+                    'max_retries': report_client._max_retries
+                }
+            })
+        except Exception as e:
+            get_logger().error(f"获取上报状态失败: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'获取上报状态失败: {str(e)}'
             }), 500
 
 

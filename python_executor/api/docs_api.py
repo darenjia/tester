@@ -174,7 +174,7 @@ API_ENDPOINTS = {
             "response_example": {
                 "success": True,
                 "data": {
-                    "http": {"port": 2887, "host": "0.0.0.0"},
+                    "http": {"port": 8180, "host": "0.0.0.0"},
                     "websocket": {"enabled": False, "port": 8080}
                 }
             }
@@ -198,7 +198,7 @@ API_ENDPOINTS = {
             "description": "获取HTTP服务配置",
             "response_example": {
                 "success": True,
-                "data": {"port": 2887, "host": "0.0.0.0", "debug": False}
+                "data": {"port": 8180, "host": "0.0.0.0", "debug": False}
             }
         },
         "POST": {

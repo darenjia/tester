@@ -19,7 +19,7 @@ class ConfigManager:
             "max_reconnect_attempts": 10
         },
         "http": {
-            "port": 2887,
+            "port": 8180,
             "host": "0.0.0.0",
             "debug": False
         },

@@ -83,6 +83,22 @@ class ConfigManager:
                 "validate_inputs": True,
                 "max_config_file_size_mb": 100,
                 "allowed_config_extensions": [".cfg", ".xml", ".json", ".dbc", ".ldf"]
+            },
+            "config_cache": {
+                "enabled": True,
+                "cache_dir": "workspace/cache/configs",
+                "max_cache_count": 50,
+                "cache_ttl_hours": 168,
+                "auto_cleanup": True
+            },
+            "report": {
+                "enabled": False,
+                "api_url": "",
+                "file_upload_url": "",
+                "timeout": 30,
+                "max_retries": 3,
+                "retry_delay": 2.0,
+                "headers": {}
             }
         }
     
