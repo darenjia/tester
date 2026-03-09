@@ -7,14 +7,24 @@
 {% block content %}
 <!-- 状态卡片 -->
 <div class="status-cards">
-    <!-- WebSocket 连接状态 -->
+    <!-- HTTP 服务状态 -->
     <div class="status-card">
         <div class="status-card-header">
-            <span class="status-card-title">服务端连接</span>
+            <span class="status-card-title">HTTP 服务</span>
+            <div id="http-indicator" class="status-indicator online"></div>
+        </div>
+        <div id="http-status-value" class="status-card-value">运行中</div>
+        <div id="http-status-desc" class="status-card-desc">端口: <span id="http-port">-</span></div>
+    </div>
+    
+    <!-- WebSocket 服务状态（可选） -->
+    <div class="status-card" id="ws-status-card" style="display: none;">
+        <div class="status-card-header">
+            <span class="status-card-title">WebSocket 服务</span>
             <div id="ws-indicator" class="status-indicator offline"></div>
         </div>
-        <div id="ws-status-value" class="status-card-value">未连接</div>
-        <div id="ws-status-desc" class="status-card-desc">最后心跳: 从未</div>
+        <div id="ws-status-value" class="status-card-value">未启用</div>
+        <div id="ws-status-desc" class="status-card-desc">端口: <span id="ws-port">-</span></div>
     </div>
     
     <!-- 当前任务状态 -->
@@ -27,24 +37,14 @@
         <div id="task-status-desc" class="status-card-desc">等待任务下发</div>
     </div>
     
-    <!-- CANoe 状态 -->
+    <!-- 系统健康状态 -->
     <div class="status-card">
         <div class="status-card-header">
-            <span class="status-card-title">CANoe</span>
-            <div id="canoe-indicator" class="status-indicator offline"></div>
+            <span class="status-card-title">系统状态</span>
+            <div id="system-indicator" class="status-indicator online"></div>
         </div>
-        <div id="canoe-status-value" class="status-card-value">未就绪</div>
-        <div class="status-card-desc">Vector CANoe 测试软件</div>
-    </div>
-    
-    <!-- TSMaster 状态 -->
-    <div class="status-card">
-        <div class="status-card-header">
-            <span class="status-card-title">TSMaster</span>
-            <div id="tsmaster-indicator" class="status-indicator offline"></div>
-        </div>
-        <div id="tsmaster-status-value" class="status-card-value">未就绪</div>
-        <div class="status-card-desc">TSMaster 测试软件</div>
+        <div id="system-status-value" class="status-card-value">正常</div>
+        <div id="system-status-desc" class="status-card-desc">所有服务运行正常</div>
     </div>
 </div>
 
@@ -138,6 +138,35 @@
 
 {% block extra_js %}
 <script>
+    // 加载配置
+    async function loadConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const result = await response.json();
+            
+            if (result.success) {
+                const config = result.data;
+                
+                // 更新 HTTP 配置显示
+                if (config.http) {
+                    document.getElementById('http-port').textContent = config.http.port || '2887';
+                }
+                
+                // 根据 WebSocket 配置显示/隐藏 WebSocket 状态卡片
+                if (config.websocket && config.websocket.enabled) {
+                    document.getElementById('ws-status-card').style.display = 'block';
+                    document.getElementById('ws-port').textContent = config.websocket.port || '-';
+                } else {
+                    document.getElementById('ws-status-card').style.display = 'none';
+                }
+            }
+            return result;
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            throw error;
+        }
+    }
+    
     // 更新仪表盘数据
     async function updateDashboard() {
         try {
@@ -147,40 +176,108 @@
             if (result.success) {
                 const data = result.data;
                 
-                // 更新 WebSocket 状态
-                updateWebSocketStatus(data.websocket);
+                // 更新 HTTP 服务状态（API调用成功说明HTTP服务正常）
+                updateHttpStatus(true);
+                
+                // 更新 WebSocket 状态（如果启用）
+                if (data.websocket) {
+                    updateWebSocketStatus(data.websocket);
+                }
                 
                 // 更新任务状态
                 updateTaskStatus(data.task);
+                
+                // 更新系统健康状态
+                updateSystemStatus(data.system);
                 
                 // 更新软件状态
                 updateSoftwareStatus(data.software);
                 
                 // 更新系统资源
                 updateSystemResources(data.system);
+            } else {
+                // API 返回 success: false，但 HTTP 服务仍然是正常的（因为能收到响应）
+                console.warn('API 返回失败:', result.message);
+                updateHttpStatus(true);
             }
+            return result;
         } catch (error) {
             console.error('更新仪表盘失败:', error);
+            // 如果 API 请求失败，保持之前的 HTTP 状态
+            // 因为页面能加载说明 HTTP 服务是正常的
+        }
+    }
+    
+    // 更新 HTTP 服务状态
+    function updateHttpStatus(isRunning) {
+        const indicator = document.getElementById('http-indicator');
+        const value = document.getElementById('http-status-value');
+        
+        if (!indicator || !value) {
+            console.error('HTTP 状态元素未找到');
+            return;
+        }
+        
+        if (isRunning) {
+            // HTTP 服务运行中（因为页面能加载）
+            indicator.className = 'status-indicator online';
+            value.textContent = '运行中';
+            value.style.color = 'var(--success-color)';
+        } else {
+            // API 请求失败
+            indicator.className = 'status-indicator offline';
+            value.textContent = '异常';
+            value.style.color = 'var(--danger-color)';
         }
     }
     
     // 更新 WebSocket 状态
     function updateWebSocketStatus(wsData) {
+        const card = document.getElementById('ws-status-card');
+        
+        // 如果 WebSocket 未启用，不显示
+        if (card.style.display === 'none') {
+            return;
+        }
+        
         const indicator = document.getElementById('ws-indicator');
         const value = document.getElementById('ws-status-value');
         const desc = document.getElementById('ws-status-desc');
         
         if (wsData.connected) {
             indicator.className = 'status-indicator online';
-            value.textContent = '已连接';
+            value.textContent = '运行中';
             value.style.color = 'var(--success-color)';
+            desc.textContent = `端口: ${wsData.port || '-'}`;
         } else {
             indicator.className = 'status-indicator offline';
             value.textContent = '未连接';
             value.style.color = 'var(--danger-color)';
+            desc.textContent = `端口: ${wsData.port || '-'}`;
         }
+    }
+    
+    // 更新系统健康状态
+    function updateSystemStatus(systemData) {
+        const indicator = document.getElementById('system-indicator');
+        const value = document.getElementById('system-status-value');
+        const desc = document.getElementById('system-status-desc');
         
-        desc.textContent = `最后心跳: ${wsData.last_heartbeat_display}`;
+        // 根据系统资源使用情况判断健康状态
+        const cpuPercent = systemData ? systemData.cpu_percent : 0;
+        const memoryPercent = systemData ? systemData.memory_percent : 0;
+        
+        if (cpuPercent > 90 || memoryPercent > 90) {
+            indicator.className = 'status-indicator warning';
+            value.textContent = '警告';
+            value.style.color = 'var(--warning-color)';
+            desc.textContent = '系统资源使用率较高';
+        } else {
+            indicator.className = 'status-indicator online';
+            value.textContent = '正常';
+            value.style.color = 'var(--success-color)';
+            desc.textContent = '所有服务运行正常';
+        }
     }
     
     // 更新任务状态
@@ -314,7 +411,19 @@
     
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
-        updateDashboard();
+        // 页面加载时，HTTP 服务肯定是正常的（因为页面能加载）
+        // 所以先设置为运行中
+        updateHttpStatus(true);
+        
+        // 然后加载配置并更新仪表盘
+        loadConfig().then(() => {
+            return updateDashboard();
+        }).catch(error => {
+            console.error('初始化失败:', error);
+            // 如果出错，保持运行中状态（因为页面能加载说明服务正常）
+            updateHttpStatus(true);
+        });
+        
         // 每 3 秒刷新一次
         setInterval(updateDashboard, 3000);
     });

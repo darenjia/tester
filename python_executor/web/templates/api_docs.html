@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}接口文档 - 测试执行器{% endblock %}
+{% block page_title %}<i class="fas fa-book"></i> 接口文档{% endblock %}
+{% set active_page = 'api-docs' %}
+
+{% block extra_css %}
+<style>
+    .docs-container {
+        padding: 20px;
+    }
+    
+    .docs-header {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .search-box {
+        width: 100%;
+        max-width: 400px;
+        padding: 10px 15px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .category-filter {
+        margin-top: 15px;
+    }
+    
+    .category-btn {
+        padding: 6px 12px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #dee2e6;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .category-btn:hover {
+        background: #e9ecef;
+    }
+    
+    .category-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .endpoint-list {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .endpoint-item {
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .endpoint-item:last-child {
+        border-bottom: none;
+    }
+    
+    .endpoint-header {
+        padding: 15px 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        transition: background 0.3s;
+    }
+    
+    .endpoint-header:hover {
+        background: #f8f9fa;
+    }
+    
+    .method-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75em;
+        font-weight: bold;
+        margin-right: 12px;
+        min-width: 60px;
+        text-align: center;
+    }
+    
+    .method-GET { background: #28a745; color: white; }
+    .method-POST { background: #007bff; color: white; }
+    .method-PUT { background: #ffc107; color: #212529; }
+    .method-DELETE { background: #dc3545; color: white; }
+    .method-PATCH { background: #6f42c1; color: white; }
+    
+    .endpoint-path {
+        font-family: monospace;
+        font-size: 0.95em;
+        color: #333;
+        margin-right: 15px;
+    }
+    
+    .endpoint-summary {
+        color: #666;
+        flex: 1;
+    }
+    
+    .endpoint-toggle {
+        color: #adb5bd;
+        transition: transform 0.3s;
+    }
+    
+    .endpoint-item.expanded .endpoint-toggle {
+        transform: rotate(180deg);
+    }
+    
+    .endpoint-detail {
+        display: none;
+        padding: 0 20px 20px;
+        background: #f8f9fa;
+    }
+    
+    .endpoint-item.expanded .endpoint-detail {
+        display: block;
+    }
+    
+    .detail-section {
+        margin-bottom: 20px;
+    }
+    
+    .detail-section h4 {
+        margin-bottom: 10px;
+        color: #333;
+        font-size: 0.95em;
+    }
+    
+    .params-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .params-table th,
+    .params-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .params-table th {
+        background: #e9ecef;
+        font-weight: 600;
+        font-size: 0.85em;
+    }
+    
+    .params-table td {
+        font-size: 0.9em;
+    }
+    
+    .param-required {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .param-optional {
+        color: #6c757d;
+    }
+    
+    .param-type {
+        color: #007bff;
+        font-family: monospace;
+        font-size: 0.85em;
+    }
+    
+    .code-block {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 15px;
+        overflow-x: auto;
+    }
+    
+    .code-block pre {
+        margin: 0;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.85em;
+        line-height: 1.5;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3em;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-container">
+    <!-- 头部搜索和筛选 -->
+    <div class="docs-header">
+        <input type="text" class="search-box" id="search-input" placeholder="搜索接口..." oninput="searchEndpoints()">
+        
+        <div class="category-filter" id="category-filter">
+            <button class="category-btn active" data-category="all" onclick="filterByCategory('all')">全部</button>
+            <!-- 分类按钮将动态生成 -->
+        </div>
+    </div>
+    
+    <!-- 接口列表 -->
+    <div class="endpoint-list" id="endpoint-list">
+        <!-- 接口列表将动态生成 -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 全局数据
+    let allEndpoints = [];
+    let categories = [];
+    let currentCategory = 'all';
+    let searchKeyword = '';
+    
+    // 页面加载
+    document.addEventListener('DOMContentLoaded', function() {
+        loadEndpoints();
+    });
+    
+    // 加载接口列表
+    async function loadEndpoints() {
+        try {
+            const response = await fetch('/api/docs/endpoints');
+            const result = await response.json();
+            
+            if (result.success) {
+                allEndpoints = result.data.endpoints;
+                categories = result.data.categories;
+                
+                renderCategoryButtons();
+                renderEndpoints();
+            }
+        } catch (error) {
+            console.error('加载接口列表失败:', error);
+            document.getElementById('endpoint-list').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>加载接口列表失败</p>
+                </div>
+            `;
+        }
+    }
+    
+    // 渲染分类按钮
+    function renderCategoryButtons() {
+        const container = document.getElementById('category-filter');
+        
+        categories.forEach(category => {
+            const btn = document.createElement('button');
+            btn.className = 'category-btn';
+            btn.dataset.category = category;
+            btn.textContent = category;
+            btn.onclick = () => filterByCategory(category);
+            container.appendChild(btn);
+        });
+    }
+    
+    // 渲染接口列表
+    function renderEndpoints() {
+        const container = document.getElementById('endpoint-list');
+        
+        // 筛选接口
+        let filtered = allEndpoints;
+        
+        if (currentCategory !== 'all') {
+            filtered = filtered.filter(e => e.category === currentCategory);
+        }
+        
+        if (searchKeyword) {
+            const keyword = searchKeyword.toLowerCase();
+            filtered = filtered.filter(e => 
+                e.path.toLowerCase().includes(keyword) ||
+                e.summary.toLowerCase().includes(keyword) ||
+                e.description.toLowerCase().includes(keyword)
+            );
+        }
+        
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <p>没有找到匹配的接口</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = filtered.map(endpoint => `
+            <div class="endpoint-item" data-path="${endpoint.path}" data-method="${endpoint.method}">
+                <div class="endpoint-header" onclick="toggleEndpoint(this)">
+                    <span class="method-badge method-${endpoint.method}">${endpoint.method}</span>
+                    <span class="endpoint-path">${endpoint.path}</span>
+                    <span class="endpoint-summary">${endpoint.summary}</span>
+                    <i class="fas fa-chevron-down endpoint-toggle"></i>
+                </div>
+                <div class="endpoint-detail" id="detail-${endpoint.path.replace(/\//g, '-').replace(/[{}]/g, '')}-${endpoint.method}">
+                    <div class="detail-section">
+                        <h4>接口说明</h4>
+                        <p>${endpoint.description || '暂无说明'}</p>
+                    </div>
+                    <div class="detail-params">
+                        <!-- 参数详情将通过AJAX加载 -->
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // 切换接口详情展开/收起
+    async function toggleEndpoint(header) {
+        const item = header.parentElement;
+        const detail = item.querySelector('.endpoint-detail');
+        const paramsContainer = detail.querySelector('.detail-params');
+        
+        // 如果已经展开，则收起
+        if (item.classList.contains('expanded')) {
+            item.classList.remove('expanded');
+            return;
+        }
+        
+        // 收起其他已展开的项
+        document.querySelectorAll('.endpoint-item.expanded').forEach(el => {
+            el.classList.remove('expanded');
+        });
+        
+        // 展开当前项
+        item.classList.add('expanded');
+        
+        // 如果还没有加载详情，则加载
+        if (!paramsContainer.dataset.loaded) {
+            const path = item.dataset.path;
+            const method = item.dataset.method;
+            await loadEndpointDetail(path, method, paramsContainer);
+            paramsContainer.dataset.loaded = 'true';
+        }
+    }
+    
+    // 加载接口详情
+    async function loadEndpointDetail(path, method, container) {
+        try {
+            const encodedPath = encodeURIComponent(path.substring(1));
+            const response = await fetch(`/api/docs/endpoints/${encodedPath}?method=${method}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                const doc = result.data;
+                
+                let html = '';
+                
+                // 请求参数
+                if (doc.params && Object.keys(doc.params).length > 0) {
+                    html += `
+                        <div class="detail-section">
+                            <h4>请求参数</h4>
+                            <table class="params-table">
+                                <thead>
+                                    <tr>
+                                        <th>参数名</th>
+                                        <th>类型</th>
+                                        <th>必填</th>
+                                        <th>说明</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${Object.entries(doc.params).map(([name, param]) => `
+                                        <tr>
+                                            <td><code>${name}</code></td>
+                                            <td><span class="param-type">${param.type}</span></td>
+                                            <td><span class="${param.required ? 'param-required' : 'param-optional'}">${param.required ? '是' : '否'}</span></td>
+                                            <td>${param.description || '-'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+                
+                // 响应示例
+                if (doc.response_example) {
+                    html += `
+                        <div class="detail-section">
+                            <h4>响应示例</h4>
+                            <div class="code-block">
+                                <pre>${JSON.stringify(doc.response_example, null, 2)}</pre>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                container.innerHTML = html;
+            }
+        } catch (error) {
+            console.error('加载接口详情失败:', error);
+            container.innerHTML = '<p style="color: #dc3545;">加载详情失败</p>';
+        }
+    }
+    
+    // 按分类筛选
+    function filterByCategory(category) {
+        currentCategory = category;
+        
+        // 更新按钮样式
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === category);
+        });
+        
+        renderEndpoints();
+    }
+    
+    // 搜索接口
+    function searchEndpoints() {
+        searchKeyword = document.getElementById('search-input').value.trim();
+        renderEndpoints();
+    }
+</script>
+{% endblock %}

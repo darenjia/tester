@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}上报配置 - 测试执行器{% endblock %}
+{% block page_title %}上报服务器配置{% endblock %}
+{% set active_page = 'report-config' %}
+
+{% block content %}
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">任务结果上报配置</span>
+    </div>
+    <div class="content-card-body">
+        <form id="report-config-form">
+            <!-- 上报服务开关 -->
+            <div class="form-section">
+                <h3 class="form-section-title">上报服务开关</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="enabled" name="report_server.enabled" style="margin-right: 8px;">
+                        启用任务结果上报
+                    </label>
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                        开启后，任务执行完成会自动上报结果到指定服务器
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 服务器配置 -->
+            <div class="form-section">
+                <h3 class="form-section-title">服务器配置</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">服务器地址 <span style="color: var(--danger-color);">*</span></label>
+                    <input type="text" class="form-input" id="host" name="report_server.host" 
+                           placeholder="192.168.1.100">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        上报服务器的IP地址或域名
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">服务器端口 <span style="color: var(--danger-color);">*</span></label>
+                    <input type="number" class="form-input" id="port" name="report_server.port" 
+                           min="1" max="65535" placeholder="8080">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">上报接口路径</label>
+                    <input type="text" class="form-input" id="path" name="report_server.path" 
+                           placeholder="/api/report">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        接收任务结果的上报接口路径
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 上报选项 -->
+            <div class="form-section">
+                <h3 class="form-section-title">上报选项</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="upload_report" name="report_server.upload_report" style="margin-right: 8px;">
+                        上传报告文件
+                    </label>
+                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                        开启后，会同时上传生成的测试报告文件
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">超时时间（秒）</label>
+                    <input type="number" class="form-input" id="timeout" name="report_server.timeout" 
+                           min="5" max="300" placeholder="30">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        上报请求的超时时间
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">重试次数</label>
+                    <input type="number" class="form-input" id="retry_count" name="report_server.retry_count" 
+                           min="0" max="10" placeholder="3">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        上报失败时的重试次数
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 连接测试 -->
+            <div class="form-section">
+                <h3 class="form-section-title">连接测试</h3>
+                
+                <div class="form-group">
+                    <button type="button" class="btn btn-secondary" onclick="testConnection()">
+                        <i class="fas fa-plug"></i> 测试连接
+                    </button>
+                    <span id="test-result" style="margin-left: 12px; font-size: 14px;"></span>
+                </div>
+            </div>
+            
+            <!-- 操作按钮 -->
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="resetConfig()">
+                    <i class="fas fa-undo"></i> 重置默认
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 保存配置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 当前配置
+    let currentConfig = {};
+    
+    // 加载配置
+    async function loadConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const result = await response.json();
+            
+            if (result.success) {
+                currentConfig = result.data;
+                fillForm(currentConfig);
+            } else {
+                showMessage('加载配置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            showMessage('加载配置失败', 'error');
+        }
+    }
+    
+    // 填充表单
+    function fillForm(config) {
+        const reportConfig = config.report_server || {};
+        
+        // 上报服务开关
+        document.getElementById('enabled').checked = reportConfig.enabled || false;
+        
+        // 服务器配置
+        document.getElementById('host').value = reportConfig.host || '';
+        document.getElementById('port').value = reportConfig.port || '';
+        document.getElementById('path').value = reportConfig.path || '';
+        
+        // 上报选项
+        document.getElementById('upload_report').checked = reportConfig.upload_report || false;
+        document.getElementById('timeout').value = reportConfig.timeout || '';
+        document.getElementById('retry_count').value = reportConfig.retry_count || '';
+    }
+    
+    // 收集表单数据
+    function collectFormData() {
+        const config = {
+            report_server: {
+                enabled: document.getElementById('enabled').checked,
+                host: document.getElementById('host').value.trim(),
+                port: parseInt(document.getElementById('port').value) || 8080,
+                path: document.getElementById('path').value.trim() || '/api/report',
+                upload_report: document.getElementById('upload_report').checked,
+                timeout: parseInt(document.getElementById('timeout').value) || 30,
+                retry_count: parseInt(document.getElementById('retry_count').value) || 3
+            }
+        };
+        
+        return config;
+    }
+    
+    // 验证配置
+    function validateConfig(config) {
+        const reportConfig = config.report_server;
+        
+        if (reportConfig.enabled) {
+            if (!reportConfig.host) {
+                showMessage('服务器地址不能为空', 'error');
+                return false;
+            }
+            if (!reportConfig.port || reportConfig.port < 1 || reportConfig.port > 65535) {
+                showMessage('服务器端口必须是1-65535之间的整数', 'error');
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    // 保存配置
+    async function saveConfig(config) {
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showMessage('配置保存成功', 'success');
+                currentConfig = result.data;
+            } else {
+                showMessage('保存失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            showMessage('保存配置失败', 'error');
+        }
+    }
+    
+    // 重置配置
+    async function resetConfig() {
+        if (!confirm('确定要重置为默认配置吗？当前配置将丢失。')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/config/reset', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showMessage('配置已重置为默认值', 'success');
+                fillForm(result.data);
+            } else {
+                showMessage('重置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('重置配置失败:', error);
+            showMessage('重置配置失败', 'error');
+        }
+    }
+    
+    // 测试连接
+    async function testConnection() {
+        const config = collectFormData();
+        
+        if (!validateConfig(config)) {
+            return;
+        }
+        
+        const resultEl = document.getElementById('test-result');
+        resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 测试中...';
+        resultEl.style.color = 'var(--text-secondary)';
+        
+        try {
+            const response = await fetch('/api/config/report-server/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config.report_server)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                resultEl.innerHTML = '<i class="fas fa-check-circle" style="color: var(--success-color);"></i> 连接成功';
+                resultEl.style.color = 'var(--success-color)';
+            } else {
+                resultEl.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> ' + (result.message || '连接失败');
+                resultEl.style.color = 'var(--danger-color)';
+            }
+        } catch (error) {
+            console.error('测试连接失败:', error);
+            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> 测试失败';
+            resultEl.style.color = 'var(--danger-color)';
+        }
+    }
+    
+    // 表单提交事件
+    document.getElementById('report-config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const config = collectFormData();
+        if (validateConfig(config)) {
+            saveConfig(config);
+        }
+    });
+    
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadConfig();
+    });
+</script>
+{% endblock %}

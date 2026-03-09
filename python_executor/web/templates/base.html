@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>{% block title %}测试执行器{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -25,13 +28,29 @@
                     <i class="fas fa-chart-line"></i>
                     <span>仪表盘</span>
                 </a>
-                <a href="/config" class="nav-item {% if active_page == 'config' %}active{% endif %}">
+                <a href="/tasks" class="nav-item {% if active_page == 'tasks' %}active{% endif %}">
+                    <i class="fas fa-tasks"></i>
+                    <span>任务管理</span>
+                </a>
+                <a href="/service-config" class="nav-item {% if active_page == 'service-config' %}active{% endif %}">
                     <i class="fas fa-cog"></i>
-                    <span>系统配置</span>
+                    <span>服务配置</span>
+                </a>
+                <a href="/api-docs" class="nav-item {% if active_page == 'api-docs' %}active{% endif %}">
+                    <i class="fas fa-book"></i>
+                    <span>接口文档</span>
                 </a>
                 <a href="/logs" class="nav-item {% if active_page == 'logs' %}active{% endif %}">
                     <i class="fas fa-file-alt"></i>
                     <span>运行日志</span>
+                </a>
+                <a href="/env-check" class="nav-item {% if active_page == 'env-check' %}active{% endif %}">
+                    <i class="fas fa-stethoscope"></i>
+                    <span>环境检测</span>
+                </a>
+                <a href="/report-config" class="nav-item {% if active_page == 'report-config' %}active{% endif %}">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>上报配置</span>
                 </a>
             </nav>
             
@@ -48,6 +67,9 @@
                 <div class="top-actions">
                     <span id="connection-status" class="status-badge">
                         <i class="fas fa-circle"></i> 检查中...
+                    </span>
+                    <span id="http-status" class="status-badge" style="display: none;">
+                        <i class="fas fa-circle" style="color: var(--success-color);"></i> HTTP服务正常
                     </span>
                 </div>
             </header>
@@ -106,12 +128,29 @@
                 const response = await fetch('/api/status');
                 const result = await response.json();
                 if (result.success) {
-                    updateConnectionStatus(result.data.websocket.connected);
+                    // 检查 WebSocket 是否启用
+                    const configResponse = await fetch('/api/config/websocket');
+                    const configResult = await configResponse.json();
+                    
+                    if (configResult.success && configResult.data.enabled) {
+                        // WebSocket 启用，显示 WebSocket 状态
+                        document.getElementById('connection-status').style.display = 'inline';
+                        document.getElementById('http-status').style.display = 'none';
+                        updateConnectionStatus(result.data.websocket.connected);
+                    } else {
+                        // WebSocket 未启用，显示 HTTP 状态
+                        document.getElementById('connection-status').style.display = 'none';
+                        document.getElementById('http-status').style.display = 'inline';
+                    }
+                    
                     updateUptime(result.data.uptime);
                 }
             } catch (error) {
                 console.error('获取状态失败:', error);
-                updateConnectionStatus(false);
+                // 如果 API 调用失败，显示 HTTP 异常
+                document.getElementById('connection-status').style.display = 'none';
+                document.getElementById('http-status').innerHTML = '<i class="fas fa-circle" style="color: var(--danger-color);"></i> HTTP服务异常';
+                document.getElementById('http-status').style.display = 'inline';
             }
         }
         

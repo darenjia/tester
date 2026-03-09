@@ -14,6 +14,8 @@ import webview
 from web.server import app as flask_app
 from config.settings import get_config
 from utils.logger import get_logger, setup_logging
+from core.task_executor import task_executor
+from core.task_scheduler import task_scheduler
 
 
 class TestExecutorApp:
@@ -31,15 +33,13 @@ class TestExecutorApp:
         try:
             from werkzeug.serving import make_server
             
-            # 找一个可用端口
-            import socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind(('127.0.0.1', 0))
-            self.server_port = sock.getsockname()[1]
-            sock.close()
+            # 从配置获取端口
+            config = get_config()
+            self.server_port = config.get('http.port', 2887)
+            host = config.get('http.host', '127.0.0.1')
             
             # 创建服务器
-            self.server = make_server('127.0.0.1', self.server_port, flask_app)
+            self.server = make_server(host, self.server_port, flask_app)
             self.server_running = True
             
             # 初始化日志
@@ -50,6 +50,11 @@ class TestExecutorApp:
             )
             self.logger = get_logger()
             self.logger.info(f"Flask 服务器启动在端口 {self.server_port}")
+            
+            # 启动任务执行器和调度器
+            task_executor.start()
+            task_scheduler.start()
+            self.logger.info("任务执行器和调度器已启动")
             
             # 启动服务器
             self.server.serve_forever()
@@ -70,6 +75,9 @@ class TestExecutorApp:
         """窗口关闭时的回调"""
         if self.logger:
             self.logger.info("应用程序关闭")
+        # 停止任务执行器和调度器
+        task_scheduler.stop()
+        task_executor.stop()
         self.stop_server()
     
     def create_window(self):

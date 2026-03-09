@@ -14,6 +14,7 @@ from utils.exceptions import TaskException, ToolException
 from utils.retry import retry_with_config, RetryConfig, CircuitBreaker
 from utils.validators import InputValidator, ValidationError
 from utils.metrics import TaskMetrics, performance_monitor, record_metric
+from utils.report_client import ReportClient
 from config.settings import settings
 from config.config_manager import config_manager
 from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
@@ -111,6 +112,9 @@ class TaskExecutorProduction:
 
         # 配置管理器
         self.config_manager: Optional[TestConfigManager] = None
+
+        # 上报客户端
+        self.report_client = ReportClient(config_manager)
 
         logger.info("任务执行器（生产环境版）初始化完成")
     
@@ -613,27 +617,33 @@ class TaskExecutorProduction:
     def _complete_task(self, task: Task, results: list):
         """完成任务"""
         duration = time.time() - self._start_time
-        
+
         logger.info(f"任务执行完成: {task.task_id}, 耗时: {duration:.1f}秒")
-        
+
         # 完成结果收集
         task_result = self.current_collector.finalize(TaskStatus.COMPLETED.value)
-        
-        # 上报最终结果
+
+        # 上报最终结果到WebSocket客户端
         self._report_final_result(task.task_id, task_result)
-        
+
+        # 上报到远端服务器
+        self._report_to_remote(task, task_result)
+
         # 更新状态
         self._update_task_status(task.task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
     
     def _fail_task(self, task: Task, error_message: str):
         """任务失败"""
         logger.error(f"任务失败: {task.task_id}, 错误: {error_message}")
-        
+
         # 完成结果收集（失败状态）
         if self.current_collector:
             task_result = self.current_collector.finalize(TaskStatus.FAILED.value, error_message)
             self._report_final_result(task.task_id, task_result)
-        
+
+            # 上报到远端服务器
+            self._report_to_remote(task, task_result)
+
         # 更新状态
         self._update_task_status(task.task_id, TaskStatus.FAILED, error_message)
     
@@ -694,6 +704,38 @@ class TaskExecutorProduction:
                 "summary": task_result.summary,
                 "timestamp": int(time.time() * 1000)
             })
+
+    def _report_to_remote(self, task: Task, task_result: TaskResult):
+        """
+        上报任务结果到远端服务器
+
+        Args:
+            task: 任务对象
+            task_result: 任务结果对象
+        """
+        if not self.report_client or not self.report_client.enabled:
+            logger.debug("远端上报未启用，跳过")
+            return
+
+        try:
+            # 准备额外的任务信息
+            task_info = {
+                "projectNo": task.projectNo,
+                "deviceId": task.deviceId,
+                "taskName": task.taskName,
+                "toolType": task.toolType
+            }
+
+            # 上报结果
+            success = self.report_client.report_task_result(task_result, task_info)
+
+            if success:
+                logger.info(f"任务结果已提交到远端上报队列: {task.task_id}")
+            else:
+                logger.warning(f"任务结果提交到远端上报队列失败: {task.task_id}")
+
+        except Exception as e:
+            logger.error(f"远端上报任务结果时出错: {e}")
     
     def get_current_status(self) -> Dict[str, Any]:
         """获取当前状态"""

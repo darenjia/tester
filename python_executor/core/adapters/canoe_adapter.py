@@ -10,6 +10,7 @@ import logging
 from typing import Optional, Dict, Any
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
+from ..variable_cache import get_variable_cache
 
 # 尝试导入pywin32
 try:
@@ -52,6 +53,10 @@ class CANoeAdapter(BaseTestAdapter):
         self._measurement = None
         self._bus_systems = None
         self._system_variables = None
+        
+        # 初始化变量缓存
+        self._variable_cache = get_variable_cache(f"canoe_{id(self)}")
+        self._cache_enabled = True
         
     @property
     def tool_type(self) -> TestToolType:
@@ -443,23 +448,157 @@ class CANoeAdapter(BaseTestAdapter):
             self.logger.warning(f"写入信号失败: {str(e)}")
             return False
     
-    def _read_system_variable(self, namespace: str, variable: str) -> Any:
-        """读取系统变量"""
+    def _read_system_variable(self, namespace: str, variable: str, use_cache: bool = True) -> Any:
+        """
+        读取系统变量（支持缓存）
+        
+        Args:
+            namespace: 命名空间
+            variable: 变量名
+            use_cache: 是否使用缓存，默认True
+            
+        Returns:
+            变量值
+        """
+        cache_key = f"{namespace}.{variable}"
+        
+        # 尝试从缓存读取
+        if use_cache and self._cache_enabled:
+            cached = self._variable_cache.get(variable, namespace)
+            if cached and cached.var_object:
+                try:
+                    value = cached.var_object.Value
+                    cached.value = value
+                    self.logger.debug(f"从缓存读取变量: {cache_key} = {value}")
+                    return value
+                except Exception as e:
+                    self.logger.warning(f"缓存变量访问失败，重新获取: {str(e)}")
+                    self._variable_cache.invalidate(variable, namespace)
+        
+        # 从CANoe读取
         try:
             ns = self._system_variables.Namespaces(namespace)
             var = ns.Variables(variable)
-            return var.Value
+            value = var.Value
+            
+            # 缓存变量对象
+            if use_cache and self._cache_enabled:
+                self._variable_cache.put(variable, namespace, var, value)
+                self.logger.debug(f"缓存变量: {cache_key} = {value}")
+            
+            return value
         except Exception as e:
             self.logger.warning(f"读取系统变量失败: {str(e)}")
             return None
     
-    def _write_system_variable(self, namespace: str, variable: str, value: Any) -> bool:
-        """写入系统变量"""
+    def _write_system_variable(self, namespace: str, variable: str, value: Any, 
+                               use_cache: bool = True) -> bool:
+        """
+        写入系统变量（支持缓存）
+        
+        Args:
+            namespace: 命名空间
+            variable: 变量名
+            value: 要写入的值
+            use_cache: 是否使用缓存，默认True
+            
+        Returns:
+            写入成功返回True
+        """
+        cache_key = f"{namespace}.{variable}"
+        var_object = None
+        
+        # 尝试从缓存获取变量对象
+        if use_cache and self._cache_enabled:
+            cached = self._variable_cache.get(variable, namespace)
+            if cached and cached.var_object:
+                var_object = cached.var_object
+                self.logger.debug(f"从缓存获取变量对象: {cache_key}")
+        
+        # 如果缓存中没有，从CANoe获取
+        if var_object is None:
+            try:
+                ns = self._system_variables.Namespaces(namespace)
+                var_object = ns.Variables(variable)
+                
+                # 缓存变量对象
+                if use_cache and self._cache_enabled:
+                    self._variable_cache.put(variable, namespace, var_object, value)
+            except Exception as e:
+                self.logger.warning(f"获取变量对象失败: {str(e)}")
+                return False
+        
+        # 写入值
         try:
-            ns = self._system_variables.Namespaces(namespace)
-            var = ns.Variables(variable)
-            var.Value = value
+            var_object.Value = value
+            
+            # 更新缓存中的值
+            if use_cache and self._cache_enabled:
+                cached = self._variable_cache.get(variable, namespace)
+                if cached:
+                    cached.value = value
+            
+            self.logger.debug(f"写入变量: {cache_key} = {value}")
             return True
         except Exception as e:
             self.logger.warning(f"写入系统变量失败: {str(e)}")
+            # 使缓存失效
+            if use_cache and self._cache_enabled:
+                self._variable_cache.invalidate(variable, namespace)
             return False
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取变量缓存统计信息"""
+        return self._variable_cache.get_stats()
+    
+    def clear_variable_cache(self) -> None:
+        """清除变量缓存"""
+        self._variable_cache.invalidate_all()
+        self.logger.info("变量缓存已清除")
+    
+    def enable_variable_cache(self, enabled: bool = True) -> None:
+        """启用或禁用变量缓存"""
+        self._cache_enabled = enabled
+        self.logger.info(f"变量缓存已{'启用' if enabled else '禁用'}")
+    
+    def batch_read_variables(self, variables: list) -> Dict[str, Any]:
+        """
+        批量读取系统变量
+        
+        Args:
+            variables: 变量列表，每个元素为(namespace, variable)元组
+            
+        Returns:
+            变量值字典，键为"namespace.variable"
+        """
+        results = {}
+        
+        for namespace, variable in variables:
+            value = self._read_system_variable(namespace, variable)
+            key = f"{namespace}.{variable}"
+            results[key] = value
+        
+        return results
+    
+    def batch_write_variables(self, variables: Dict[str, Any]) -> Dict[str, bool]:
+        """
+        批量写入系统变量
+        
+        Args:
+            variables: 变量值字典，键为"namespace.variable"
+            
+        Returns:
+            写入结果字典
+        """
+        results = {}
+        
+        for key, value in variables.items():
+            parts = key.split('.', 1)
+            if len(parts) == 2:
+                namespace, variable = parts
+                success = self._write_system_variable(namespace, variable, value)
+                results[key] = success
+            else:
+                results[key] = False
+        
+        return results

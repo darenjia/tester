@@ -1,0 +1,920 @@
+{% extends "base.html" %}
+
+{% block title %}环境检测 - 测试执行器{% endblock %}
+{% block page_title %}<i class="fas fa-stethoscope"></i> 环境检测{% endblock %}
+{% set active_page = 'env-check' %}
+
+{% block extra_css %}
+<style>
+    .env-check-container {
+        padding: 20px;
+    }
+    
+    .check-control-panel {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .check-button {
+        padding: 12px 24px;
+        font-size: 16px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .check-button:hover {
+        background: #0056b3;
+    }
+    
+    .check-button:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+    }
+    
+    .check-button.checking {
+        background: #ffc107;
+        color: #212529;
+    }
+    
+    .progress-container {
+        margin-top: 20px;
+        display: none;
+    }
+    
+    .progress-container.active {
+        display: block;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 20px;
+        background: #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: #28a745;
+        transition: width 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 12px;
+    }
+    
+    .progress-text {
+        margin-top: 10px;
+        color: #666;
+    }
+    
+    .check-results {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .result-item {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .result-item:last-child {
+        border-bottom: none;
+    }
+    
+    .result-status {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 12px;
+    }
+    
+    .result-status.passed {
+        background: #28a745;
+    }
+    
+    .result-status.failed {
+        background: #dc3545;
+    }
+    
+    .result-status.warning {
+        background: #ffc107;
+        color: #212529;
+    }
+    
+    .result-name {
+        font-weight: 500;
+        min-width: 150px;
+    }
+    
+    .result-message {
+        color: #666;
+        flex: 1;
+    }
+    
+    .check-history {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .history-table th,
+    .history-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .history-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+    }
+    
+    .history-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .status-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+    
+    .status-passed {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status-failed {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .action-btn {
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85em;
+        margin-right: 4px;
+    }
+    
+    .action-btn.view {
+        background: #17a2b8;
+        color: white;
+    }
+    
+    .action-btn.delete {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal.active {
+        display: flex;
+    }
+    
+    .modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .log-content {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.9em;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .stats-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 0.9em;
+    }
+    
+    /* 检测步骤样式 */
+    .check-steps {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+    
+    .step-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px dashed #dee2e6;
+        transition: all 0.3s;
+    }
+    
+    .step-item:last-child {
+        border-bottom: none;
+    }
+    
+    .step-item.active {
+        background: #e3f2fd;
+        margin: 0 -15px;
+        padding: 10px 15px;
+        border-radius: 4px;
+    }
+    
+    .step-item.completed {
+        opacity: 0.7;
+    }
+    
+    .step-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        font-size: 12px;
+        transition: all 0.3s;
+    }
+    
+    .step-item.pending .step-icon {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    
+    .step-item.running .step-icon {
+        background: #007bff;
+        color: white;
+        animation: pulse 1.5s infinite;
+    }
+    
+    .step-item.success .step-icon {
+        background: #28a745;
+        color: white;
+    }
+    
+    .step-item.error .step-icon {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .step-item.warning .step-icon {
+        background: #ffc107;
+        color: #212529;
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+    
+    .step-name {
+        flex: 1;
+        font-weight: 500;
+    }
+    
+    .step-status {
+        font-size: 0.85em;
+        color: #6c757d;
+    }
+    
+    .step-item.running .step-status {
+        color: #007bff;
+        font-weight: 500;
+    }
+    
+    .step-item.success .step-status {
+        color: #28a745;
+    }
+    
+    .step-item.error .step-status {
+        color: #dc3545;
+    }
+    
+    .step-item.warning .step-status {
+        color: #856404;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="env-check-container">
+    <!-- 检测控制面板 -->
+    <div class="check-control-panel">
+        <h3>环境检测</h3>
+        <p style="color: #666; margin-bottom: 15px;">检测系统环境、软件安装、配置等是否正常</p>
+        
+        <button class="check-button" id="check-btn" onclick="startCheck()">
+            <i class="fas fa-play"></i> 开始检测
+        </button>
+        
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%">0%</div>
+            </div>
+            <div class="progress-text" id="progress-text">准备开始...</div>
+            
+            <!-- 检测步骤流程 -->
+            <div class="check-steps" id="check-steps" style="margin-top: 20px; display: none;">
+                <div class="step-item" id="step-python">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">Python环境</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-system">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">系统环境</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-canoe">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">CANoe检测</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-tsmaster">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">TSMaster检测</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-ttman">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">TTman检测</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-config">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">配置文件</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+                <div class="step-item" id="step-network">
+                    <div class="step-icon"><i class="fas fa-circle"></i></div>
+                    <div class="step-name">网络连接</div>
+                    <div class="step-status">等待中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 统计信息 -->
+    <div class="stats-cards" id="stats-container" style="display: none;">
+        <div class="stat-card">
+            <div class="stat-label">总检测次数</div>
+            <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">通过</div>
+            <div class="stat-value" id="stat-passed" style="color: #28a745;">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">失败</div>
+            <div class="stat-value" id="stat-failed" style="color: #dc3545;">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">通过率</div>
+            <div class="stat-value" id="stat-rate">0%</div>
+        </div>
+    </div>
+    
+    <!-- 检测结果 -->
+    <div class="check-results" id="results-container" style="display: none;">
+        <h3>检测结果</h3>
+        <div id="results-list"></div>
+    </div>
+    
+    <!-- 检测历史 -->
+    <div class="check-history">
+        <h3 style="margin-bottom: 15px;">检测历史</h3>
+        <div style="margin-bottom: 15px;">
+            <button class="btn btn-sm btn-secondary" onclick="loadHistory()">
+                <i class="fas fa-sync"></i> 刷新
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="clearHistory()">
+                <i class="fas fa-trash"></i> 清空历史
+            </button>
+        </div>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>检测时间</th>
+                    <th>状态</th>
+                    <th>耗时</th>
+                    <th>通过/失败/警告</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="history-list">
+                <!-- 历史记录将动态生成 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 日志详情模态框 -->
+<div class="modal" id="log-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>检测日志详情</h3>
+            <button onclick="closeModal()" style="background:none;border:none;font-size:1.5em;cursor:pointer;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="log-content" id="log-content"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let checkInterval = null;
+    
+    // 页面加载时加载历史记录和统计
+    document.addEventListener('DOMContentLoaded', function() {
+        loadHistory();
+        loadStats();
+    });
+    
+    // 步骤映射配置
+    const stepMapping = {
+        '检测 Python 环境': { id: 'step-python', name: 'Python环境' },
+        '检测系统环境': { id: 'step-system', name: '系统环境' },
+        '检测软件安装和调用能力': { id: 'step-software', name: '软件检测' },
+        '正在验证 CANoe': { id: 'step-canoe', name: 'CANoe检测' },
+        '正在验证 TSMaster': { id: 'step-tsmaster', name: 'TSMaster检测' },
+        '正在验证 TTman': { id: 'step-ttman', name: 'TTman检测' },
+        '检测配置文件': { id: 'step-config', name: '配置文件' },
+        '检测网络连接': { id: 'step-network', name: '网络连接' }
+    };
+    
+    // 开始检测
+    async function startCheck() {
+        const btn = document.getElementById('check-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const stepsContainer = document.getElementById('check-steps');
+        
+        btn.disabled = true;
+        btn.classList.add('checking');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 检测中...';
+        progressContainer.classList.add('active');
+        stepsContainer.style.display = 'block';
+        
+        // 重置所有步骤状态
+        resetStepStatus();
+        
+        try {
+            // 启动检测
+            const response = await fetch('/api/env/check', { method: 'POST' });
+            const result = await response.json();
+            
+            if (result.success) {
+                // 开始轮询进度
+                checkInterval = setInterval(checkProgress, 1000);
+            } else {
+                alert('启动检测失败: ' + result.message);
+                resetButton();
+            }
+        } catch (error) {
+            console.error('启动检测失败:', error);
+            alert('启动检测失败');
+            resetButton();
+        }
+    }
+    
+    // 检查进度
+    async function checkProgress() {
+        try {
+            const response = await fetch('/api/env/check/status');
+            const result = await response.json();
+            
+            if (result.success) {
+                const data = result.data;
+                updateProgress(data.progress, data.current);
+                
+                // 检测完成
+                if (!data.checking && data.progress === 100) {
+                    clearInterval(checkInterval);
+                    setTimeout(async () => {
+                        // 获取最新结果并更新步骤状态
+                        const response = await fetch('/api/env/check/logs?limit=1');
+                        const result = await response.json();
+                        if (result.success && result.data.logs.length > 0) {
+                            const log = result.data.logs[0];
+                            updateStepStatusFromResults(log.details.results);
+                            displayResults(log.details.results);
+                        }
+                        
+                        loadHistory();
+                        loadStats();
+                        resetButton();
+                    }, 500);
+                }
+            }
+        } catch (error) {
+            console.error('获取进度失败:', error);
+        }
+    }
+    
+    // 重置步骤状态
+    function resetStepStatus() {
+        const steps = ['step-python', 'step-system', 'step-canoe', 'step-tsmaster', 'step-ttman', 'step-config', 'step-network'];
+        steps.forEach(stepId => {
+            const stepEl = document.getElementById(stepId);
+            if (stepEl) {
+                stepEl.className = 'step-item pending';
+                stepEl.querySelector('.step-icon').innerHTML = '<i class="fas fa-circle"></i>';
+                stepEl.querySelector('.step-status').textContent = '等待中...';
+            }
+        });
+    }
+    
+    // 更新步骤状态
+    function updateStepStatus(currentText, progress) {
+        // 根据当前检测文本和进度更新步骤状态
+        for (const [key, config] of Object.entries(stepMapping)) {
+            if (currentText && currentText.includes(key.replace('检测 ', '').replace('正在 ', ''))) {
+                const stepEl = document.getElementById(config.id);
+                if (stepEl) {
+                    // 设置为进行中
+                    stepEl.className = 'step-item running active';
+                    stepEl.querySelector('.step-icon').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    stepEl.querySelector('.step-status').textContent = '检测中...';
+                }
+            }
+        }
+        
+        // 根据进度标记已完成的步骤
+        if (progress >= 10) markStepComplete('step-python', '通过');
+        if (progress >= 30) markStepComplete('step-system', '通过');
+        if (progress >= 50) {
+            markStepComplete('step-canoe', '通过');
+            markStepComplete('step-tsmaster', '通过');
+            markStepComplete('step-ttman', '通过');
+        }
+        if (progress >= 70) markStepComplete('step-config', '通过');
+        if (progress >= 90) markStepComplete('step-network', '通过');
+    }
+    
+    // 标记步骤完成
+    function markStepComplete(stepId, status) {
+        const stepEl = document.getElementById(stepId);
+        if (stepEl && !stepEl.classList.contains('running')) {
+            stepEl.className = 'step-item success completed';
+            stepEl.querySelector('.step-icon').innerHTML = '<i class="fas fa-check"></i>';
+            stepEl.querySelector('.step-status').textContent = status;
+        }
+    }
+    
+    // 根据检测结果更新步骤状态
+    function updateStepStatusFromResults(results) {
+        if (!results) return;
+        
+        results.forEach(item => {
+            let stepId = null;
+            if (item.name === 'Python 环境') stepId = 'step-python';
+            else if (item.name === '系统内存' || item.name === '磁盘空间' || item.name === '操作系统') stepId = 'step-system';
+            else if (item.name === 'CANoe') stepId = 'step-canoe';
+            else if (item.name === 'TSMaster') stepId = 'step-tsmaster';
+            else if (item.name === 'TTman') stepId = 'step-ttman';
+            else if (item.name === '配置文件') stepId = 'step-config';
+            else if (item.name === 'HTTP 服务') stepId = 'step-network';
+            
+            if (stepId) {
+                const stepEl = document.getElementById(stepId);
+                if (stepEl) {
+                    const statusClass = item.status === 'passed' ? 'success' : item.status === 'failed' ? 'error' : 'warning';
+                    const statusText = item.status === 'passed' ? '通过' : item.status === 'failed' ? '失败' : '警告';
+                    const iconClass = item.status === 'passed' ? 'check' : item.status === 'failed' ? 'times' : 'exclamation';
+                    
+                    stepEl.className = `step-item ${statusClass} completed`;
+                    stepEl.querySelector('.step-icon').innerHTML = `<i class="fas fa-${iconClass}"></i>`;
+                    stepEl.querySelector('.step-status').textContent = statusText;
+                }
+            }
+        });
+    }
+    
+    // 更新进度显示
+    function updateProgress(progress, current) {
+        const fill = document.getElementById('progress-fill');
+        const text = document.getElementById('progress-text');
+        
+        fill.style.width = progress + '%';
+        fill.textContent = progress + '%';
+        text.textContent = current || '检测中...';
+        
+        // 更新步骤状态
+        updateStepStatus(current, progress);
+    }
+    
+    // 重置按钮状态
+    function resetButton() {
+        const btn = document.getElementById('check-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const stepsContainer = document.getElementById('check-steps');
+        
+        btn.disabled = false;
+        btn.classList.remove('checking');
+        btn.innerHTML = '<i class="fas fa-play"></i> 开始检测';
+        
+        setTimeout(() => {
+            progressContainer.classList.remove('active');
+            stepsContainer.style.display = 'none';
+            updateProgress(0, '准备开始...');
+        }, 3000);
+    }
+    
+    // 显示最新结果
+    async function showLatestResult() {
+        try {
+            const response = await fetch('/api/env/check/logs?limit=1');
+            const result = await response.json();
+            
+            if (result.success && result.data.logs.length > 0) {
+                const log = result.data.logs[0];
+                displayResults(log.details.results);
+            }
+        } catch (error) {
+            console.error('获取最新结果失败:', error);
+        }
+    }
+    
+    // 显示检测结果
+    function displayResults(results) {
+        const container = document.getElementById('results-container');
+        const list = document.getElementById('results-list');
+        
+        if (!results || results.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        list.innerHTML = results.map(item => {
+            // 为软件检测结果添加详细信息展开
+            const isSoftware = ['CANoe', 'TSMaster', 'TTman'].includes(item.name);
+            const details = item.details || {};
+            
+            let detailHtml = '';
+            if (isSoftware && details.adapter_test) {
+                const adapterTest = details.adapter_test;
+                const configCheck = details.config_check || {};
+                
+                detailHtml = `
+                    <div class="software-details" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
+                        <div style="margin-bottom: 8px;"><strong>适配器测试结果:</strong></div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                            ${adapterTest.pywin32_available !== undefined ? `
+                                <div><i class="fas fa-${adapterTest.pywin32_available ? 'check text-success' : 'times text-danger'}"></i> pywin32: ${adapterTest.pywin32_available ? '可用' : '不可用'}</div>
+                            ` : ''}
+                            ${adapterTest.com_object_created !== undefined ? `
+                                <div><i class="fas fa-${adapterTest.com_object_created ? 'check text-success' : 'times text-danger'}"></i> COM对象: ${adapterTest.com_object_created ? '创建成功' : '创建失败'}</div>
+                            ` : ''}
+                            ${adapterTest.interface_accessible !== undefined ? `
+                                <div><i class="fas fa-${adapterTest.interface_accessible ? 'check text-success' : 'times text-danger'}"></i> 接口访问: ${adapterTest.interface_accessible ? '正常' : '失败'}</div>
+                            ` : ''}
+                            ${adapterTest.python_api_available !== undefined ? `
+                                <div><i class="fas fa-${adapterTest.python_api_available ? 'check text-success' : 'times text-danger'}"></i> Python API: ${adapterTest.python_api_available ? '可用' : '不可用'}</div>
+                            ` : ''}
+                            ${adapterTest.rpc_api_available !== undefined ? `
+                                <div><i class="fas fa-${adapterTest.rpc_api_available ? 'check text-success' : 'times text-danger'}"></i> RPC API: ${adapterTest.rpc_api_available ? '可用' : '不可用'}</div>
+                            ` : ''}
+                            ${adapterTest.connection_test ? `
+                                <div><i class="fas fa-${adapterTest.connection_test === 'success' ? 'check text-success' : 'times text-danger'}"></i> 连接测试: ${adapterTest.connection_test === 'success' ? '通过' : '失败'}</div>
+                            ` : ''}
+                            ${adapterTest.version ? `
+                                <div><i class="fas fa-info-circle text-info"></i> 版本: ${adapterTest.version}</div>
+                            ` : ''}
+                        </div>
+                        ${configCheck.path_exists !== undefined ? `
+                            <div style="margin-top: 8px;">
+                                <strong>配置文件:</strong>
+                                <div style="margin-top: 4px;">
+                                    <i class="fas fa-${configCheck.path_exists ? 'check text-success' : 'times text-danger'}"></i> 
+                                    路径: ${configCheck.config_path || details.config_path || ''} 
+                                    (${configCheck.path_exists ? '存在' : '不存在'})
+                                    ${configCheck.valid_cfg_files !== undefined ? `, cfg文件: ${configCheck.valid_cfg_files}个` : ''}
+                                    ${configCheck.valid_tproj_files !== undefined ? `, tproj文件: ${configCheck.valid_tproj_files}个` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${details.error ? `
+                            <div style="margin-top: 8px; color: #dc3545;">
+                                <strong>错误:</strong> ${details.error}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            return `
+                <div class="result-item">
+                    <div class="result-status ${item.status}">
+                        <i class="fas fa-${item.status === 'passed' ? 'check' : item.status === 'failed' ? 'times' : 'exclamation'}"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <div class="result-name">${item.name}</div>
+                        <div class="result-message">${item.message}</div>
+                        ${detailHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.style.display = 'block';
+    }
+    
+    // 加载历史记录
+    async function loadHistory() {
+        try {
+            const response = await fetch('/api/env/check/logs?limit=20');
+            const result = await response.json();
+            
+            if (result.success) {
+                const tbody = document.getElementById('history-list');
+                const logs = result.data.logs;
+                
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#666;">暂无检测记录</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = logs.map(log => {
+                    const details = log.details || {};
+                    const date = new Date(log.check_time).toLocaleString('zh-CN');
+                    return `
+                        <tr>
+                            <td>${date}</td>
+                            <td><span class="status-badge status-${log.overall_status}">${log.overall_status === 'passed' ? '通过' : '失败'}</span></td>
+                            <td>${log.duration.toFixed(2)}s</td>
+                            <td>${details.passed || 0}/${details.failed || 0}/${details.warning || 0}</td>
+                            <td>
+                                <button class="action-btn view" onclick="viewLog('${log.id}')">
+                                    <i class="fas fa-eye"></i> 查看
+                                </button>
+                                <button class="action-btn delete" onclick="deleteLog('${log.id}')">
+                                    <i class="fas fa-trash"></i> 删除
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        } catch (error) {
+            console.error('加载历史记录失败:', error);
+        }
+    }
+    
+    // 加载统计信息
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/env/check/stats');
+            const result = await response.json();
+            
+            if (result.success) {
+                const stats = result.data;
+                document.getElementById('stat-total').textContent = stats.total;
+                document.getElementById('stat-passed').textContent = stats.passed;
+                document.getElementById('stat-failed').textContent = stats.failed;
+                document.getElementById('stat-rate').textContent = stats.pass_rate.toFixed(1) + '%';
+                document.getElementById('stats-container').style.display = 'grid';
+            }
+        } catch (error) {
+            console.error('加载统计失败:', error);
+        }
+    }
+    
+    // 查看日志详情
+    async function viewLog(logId) {
+        try {
+            const response = await fetch(`/api/env/check/logs/${logId}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                const log = result.data;
+                const content = document.getElementById('log-content');
+                content.textContent = log.logs.join('\n');
+                document.getElementById('log-modal').classList.add('active');
+            }
+        } catch (error) {
+            console.error('获取日志详情失败:', error);
+        }
+    }
+    
+    // 删除日志
+    async function deleteLog(logId) {
+        if (!confirm('确定要删除这条检测记录吗？')) return;
+        
+        try {
+            const response = await fetch(`/api/env/check/logs/${logId}`, { method: 'DELETE' });
+            const result = await response.json();
+            
+            if (result.success) {
+                loadHistory();
+                loadStats();
+            }
+        } catch (error) {
+            console.error('删除日志失败:', error);
+        }
+    }
+    
+    // 清空历史
+    async function clearHistory() {
+        if (!confirm('确定要清空所有检测记录吗？此操作不可恢复。')) return;
+        
+        try {
+            const response = await fetch('/api/env/check/logs', { method: 'DELETE' });
+            const result = await response.json();
+            
+            if (result.success) {
+                loadHistory();
+                loadStats();
+            }
+        } catch (error) {
+            console.error('清空历史失败:', error);
+        }
+    }
+    
+    // 关闭模态框
+    function closeModal() {
+        document.getElementById('log-modal').classList.remove('active');
+    }
+    
+    // 点击模态框外部关闭
+    document.getElementById('log-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+</script>
+{% endblock %}

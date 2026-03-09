@@ -18,6 +18,16 @@ class ConfigManager:
             "reconnect_interval": 5,
             "max_reconnect_attempts": 10
         },
+        "http": {
+            "port": 2887,
+            "host": "0.0.0.0",
+            "debug": False
+        },
+        "websocket": {
+            "enabled": False,
+            "port": 8080,
+            "host": "0.0.0.0"
+        },
         "device": {
             "device_id": "DEVICE_001",
             "device_name": "测试执行设备-01",
@@ -39,6 +49,31 @@ class ConfigManager:
             "default_timeout": 3600,
             "auto_start": True,
             "keep_alive": True
+        },
+        "report": {
+            "enabled": False,
+            "api_url": "",
+            "file_upload_url": "",
+            "timeout": 30,
+            "max_retries": 3,
+            "retry_delay": 2.0,
+            "headers": {}
+        },
+        "report_server": {
+            "enabled": False,
+            "host": "",
+            "port": 8080,
+            "path": "/api/report",
+            "upload_report": False,
+            "timeout": 30,
+            "retry_count": 3
+        },
+        "config_cache": {
+            "enabled": True,
+            "cache_dir": "workspace/cache/configs",
+            "max_cache_count": 50,
+            "cache_ttl_hours": 168,
+            "auto_cleanup": True
         }
     }
     

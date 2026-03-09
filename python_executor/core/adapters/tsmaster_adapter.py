@@ -323,6 +323,14 @@ class TSMasterAdapter(BaseTestAdapter):
                 return self._execute_sysvar_check(item)
             elif item_type == "sysvar_set":
                 return self._execute_sysvar_set(item)
+            elif item_type == "test_module":
+                return self._execute_test_module(item)
+            elif item_type == "diagnostic":
+                return self._execute_diagnostic(item)
+            elif item_type == "wait":
+                return self._execute_wait(item)
+            elif item_type == "condition":
+                return self._execute_condition(item)
             else:
                 return {
                     "name": item_name,
@@ -577,15 +585,366 @@ class TSMasterAdapter(BaseTestAdapter):
     def _call_c_script(self, script_name: str, function_name: str, params: list) -> Any:
         """调用C脚本函数"""
         try:
-            # 加载C脚本
-            self._ts.load_c_script(script_name)
-            
-            # 调用函数
-            result = self._ts.call_c_function(function_name, *params)
-            return result
+            if self._using_rpc and self._rpc_client:
+                # RPC模式：通过RPC调用C脚本（如果TSMasterAPI支持）
+                # 注意：RPC模式可能不支持直接调用C脚本，需要回退到传统模式
+                self.logger.warning("RPC模式不支持直接调用C脚本，尝试回退到传统模式")
+                if self._ts:
+                    self._ts.load_c_script(script_name)
+                    result = self._ts.call_c_function(function_name, *params)
+                    return result
+                else:
+                    self.logger.error("传统模式未初始化，无法调用C脚本")
+                    return None
+            elif self._ts:
+                # 传统模式
+                self._ts.load_c_script(script_name)
+                result = self._ts.call_c_function(function_name, *params)
+                return result
+            else:
+                self.logger.error("未连接到TSMaster，无法调用C脚本")
+                return None
         except Exception as e:
             self.logger.warning(f"调用C脚本失败: {str(e)}")
             return None
+    
+    def _execute_test_module(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行测试模块
+        
+        支持执行TSMaster中的测试模块或测试序列
+        """
+        module_name = item.get("module_name") or item.get("sequence_name")
+        timeout = item.get("timeout", 60)
+        
+        if not module_name:
+            raise ValueError("测试模块执行需要指定module_name或sequence_name参数")
+        
+        try:
+            self.logger.info(f"执行测试模块: {module_name}")
+            
+            if self._using_rpc and self._rpc_client:
+                # RPC模式：使用test_sequence方式执行
+                result = self._rpc_client.execute_test_sequence(module_name)
+                success = result is not None
+            elif self._ts:
+                # 传统模式
+                result = self._ts.test_execute(module_name)
+                success = result
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "test_module",
+                    "module_name": module_name,
+                    "status": "error",
+                    "error": "未连接到TSMaster"
+                }
+            
+            return {
+                "name": item.get("name"),
+                "type": "test_module",
+                "module_name": module_name,
+                "result": result,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"执行测试模块失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "test_module",
+                "module_name": module_name,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_diagnostic(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行诊断操作
+        
+        支持发送诊断请求并接收响应
+        """
+        diag_request = item.get("diag_request")
+        expected_response = item.get("expected_response")
+        timeout = item.get("timeout", 5)
+        channel = item.get("channel", 0)
+        
+        if not diag_request:
+            raise ValueError("诊断操作需要指定diag_request参数")
+        
+        try:
+            self.logger.info(f"执行诊断请求: {diag_request}")
+            
+            if self._using_rpc and self._rpc_client:
+                # RPC模式：发送诊断请求
+                # 注意：需要检查TSMasterAPI是否支持诊断功能
+                if hasattr(self._rpc_client, 'send_diagnostic_request'):
+                    response = self._rpc_client.send_diagnostic_request(channel, diag_request, timeout)
+                else:
+                    self.logger.warning("RPC客户端不支持诊断功能，尝试使用传统模式")
+                    if self._ts:
+                        response = self._ts.send_diagnostic_request(channel, diag_request, timeout)
+                    else:
+                        response = None
+            elif self._ts:
+                # 传统模式
+                response = self._ts.send_diagnostic_request(channel, diag_request, timeout)
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "diagnostic",
+                    "status": "error",
+                    "error": "未连接到TSMaster"
+                }
+            
+            # 判断结果
+            passed = True
+            if expected_response and response:
+                passed = response == expected_response
+            
+            return {
+                "name": item.get("name"),
+                "type": "diagnostic",
+                "diag_request": diag_request,
+                "expected_response": expected_response,
+                "actual_response": response,
+                "passed": passed,
+                "status": "passed" if passed else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"执行诊断操作失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "diagnostic",
+                "diag_request": diag_request,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_wait(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行等待操作
+        
+        支持固定时间等待或条件等待
+        """
+        wait_time = item.get("wait_time", 1.0)  # 默认等待1秒
+        wait_condition = item.get("wait_condition")  # 可选的等待条件
+        timeout = item.get("timeout", 30.0)  # 条件等待的超时时间
+        
+        try:
+            self.logger.info(f"执行等待: {wait_time}秒")
+            
+            if wait_condition:
+                # 条件等待：等待某个条件满足
+                import time
+                start_time = time.time()
+                condition_met = False
+                
+                while time.time() - start_time < timeout:
+                    # 评估条件（简化实现，实际可能需要更复杂的条件解析）
+                    condition_type = wait_condition.get("type")
+                    if condition_type == "signal":
+                        signal_name = wait_condition.get("signal_name")
+                        expected_value = wait_condition.get("expected_value")
+                        tolerance = wait_condition.get("tolerance", 0.01)
+                        
+                        actual_value = self._get_signal(signal_name)
+                        if actual_value is not None and expected_value is not None:
+                            if abs(actual_value - expected_value) < tolerance:
+                                condition_met = True
+                                break
+                    elif condition_type == "system_var":
+                        var_name = wait_condition.get("var_name")
+                        expected_value = wait_condition.get("expected_value")
+                        
+                        actual_value = self._read_system_var(var_name)
+                        if actual_value is not None and expected_value is not None:
+                            if str(actual_value) == str(expected_value):
+                                condition_met = True
+                                break
+                    
+                    time.sleep(0.1)  # 100ms轮询间隔
+                
+                return {
+                    "name": item.get("name"),
+                    "type": "wait",
+                    "wait_time": wait_time,
+                    "wait_condition": wait_condition,
+                    "condition_met": condition_met,
+                    "actual_wait_time": time.time() - start_time,
+                    "status": "passed" if condition_met else "failed"
+                }
+            else:
+                # 固定时间等待
+                import time
+                time.sleep(wait_time)
+                
+                return {
+                    "name": item.get("name"),
+                    "type": "wait",
+                    "wait_time": wait_time,
+                    "status": "passed"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"执行等待操作失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "wait",
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_condition(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行条件判断
+        
+        支持信号值、系统变量等多种条件的判断
+        """
+        condition_type = item.get("condition_type", "signal")
+        condition_operator = item.get("operator", "==")  # ==, !=, <, >, <=, >=
+        
+        try:
+            self.logger.info(f"执行条件判断: {condition_type}")
+            
+            if condition_type == "signal":
+                signal_name = item.get("signal_name")
+                expected_value = item.get("expected_value")
+                tolerance = item.get("tolerance", 0.01)
+                
+                if not signal_name:
+                    raise ValueError("信号条件判断需要指定signal_name参数")
+                
+                actual_value = self._get_signal(signal_name)
+                
+                # 根据操作符判断
+                condition_met = self._evaluate_condition(
+                    actual_value, expected_value, condition_operator, tolerance
+                )
+                
+                return {
+                    "name": item.get("name"),
+                    "type": "condition",
+                    "condition_type": condition_type,
+                    "signal_name": signal_name,
+                    "expected_value": expected_value,
+                    "actual_value": actual_value,
+                    "operator": condition_operator,
+                    "condition_met": condition_met,
+                    "status": "passed" if condition_met else "failed"
+                }
+                
+            elif condition_type == "system_var":
+                var_name = item.get("var_name")
+                expected_value = item.get("expected_value")
+                
+                if not var_name:
+                    raise ValueError("系统变量条件判断需要指定var_name参数")
+                
+                actual_value = self._read_system_var(var_name)
+                
+                # 字符串比较
+                condition_met = str(actual_value) == str(expected_value)
+                
+                return {
+                    "name": item.get("name"),
+                    "type": "condition",
+                    "condition_type": condition_type,
+                    "var_name": var_name,
+                    "expected_value": expected_value,
+                    "actual_value": actual_value,
+                    "operator": condition_operator,
+                    "condition_met": condition_met,
+                    "status": "passed" if condition_met else "failed"
+                }
+                
+            elif condition_type == "logical":
+                # 逻辑组合条件（AND/OR）
+                sub_conditions = item.get("sub_conditions", [])
+                logic_operator = item.get("logic_operator", "AND")  # AND or OR
+                
+                results = []
+                for sub_condition in sub_conditions:
+                    sub_result = self._execute_condition(sub_condition)
+                    results.append(sub_result.get("condition_met", False))
+                
+                if logic_operator == "AND":
+                    condition_met = all(results)
+                else:  # OR
+                    condition_met = any(results)
+                
+                return {
+                    "name": item.get("name"),
+                    "type": "condition",
+                    "condition_type": condition_type,
+                    "logic_operator": logic_operator,
+                    "sub_conditions_count": len(sub_conditions),
+                    "condition_met": condition_met,
+                    "status": "passed" if condition_met else "failed"
+                }
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "condition",
+                    "status": "error",
+                    "error": f"不支持的条件类型: {condition_type}"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"执行条件判断失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "condition",
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _evaluate_condition(self, actual_value, expected_value, operator: str, tolerance: float = 0.01) -> bool:
+        """
+        评估条件
+        
+        Args:
+            actual_value: 实际值
+            expected_value: 期望值
+            operator: 操作符 (==, !=, <, >, <=, >=)
+            tolerance: 容差（用于浮点数比较）
+            
+        Returns:
+            条件是否满足
+        """
+        if actual_value is None or expected_value is None:
+            return False
+        
+        try:
+            # 尝试转换为数值进行比较
+            actual_float = float(actual_value)
+            expected_float = float(expected_value)
+            
+            if operator == "==":
+                return abs(actual_float - expected_float) < tolerance
+            elif operator == "!=":
+                return abs(actual_float - expected_float) >= tolerance
+            elif operator == "<":
+                return actual_float < expected_float
+            elif operator == ">":
+                return actual_float > expected_float
+            elif operator == "<=":
+                return actual_float <= expected_float
+            elif operator == ">=":
+                return actual_float >= expected_float
+            else:
+                self.logger.warning(f"未知的操作符: {operator}")
+                return False
+        except (ValueError, TypeError):
+            # 字符串比较
+            if operator == "==":
+                return str(actual_value) == str(expected_value)
+            elif operator == "!=":
+                return str(actual_value) != str(expected_value)
+            else:
+                self.logger.warning(f"字符串不支持的操作符: {operator}")
+                return False
     
     def register_callback(self, event_name: str, callback: Callable):
         """

@@ -12,14 +12,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import get_config
 from utils.logger import get_logger, logger_manager
 from core.status_monitor import get_status_monitor
+from api.task_api import task_bp
+from api.task_log_api import task_log_bp
+from api.service_api import service_bp
+from api.config_api import config_bp
+from api.docs_api import docs_bp
+from api.env_api import env_bp
 
 
 def create_app() -> Flask:
     """创建 Flask 应用"""
     # 确定模板和静态文件路径
     if getattr(sys, 'frozen', False):
-        # 打包后的exe运行
-        base_dir = os.path.dirname(os.sys.executable)
+        # 打包后的exe运行 - PyInstaller 使用 _MEIPASS 作为临时目录
+        if hasattr(sys, '_MEIPASS'):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.sys.executable)
         template_dir = os.path.join(base_dir, 'web', 'templates')
         static_dir = os.path.join(base_dir, 'web', 'static')
     else:
@@ -47,6 +56,14 @@ def create_app() -> Flask:
     logger = get_logger()
     logger.info("Flask Web 应用启动")
     
+    # 注册蓝图
+    app.register_blueprint(task_bp)
+    app.register_blueprint(task_log_bp)
+    app.register_blueprint(service_bp)
+    app.register_blueprint(config_bp)
+    app.register_blueprint(docs_bp)
+    app.register_blueprint(env_bp)
+    
     # 注册路由
     register_routes(app)
     
@@ -68,6 +85,11 @@ def register_routes(app: Flask):
         """仪表盘页面"""
         return render_template('dashboard.html')
     
+    @app.route('/tasks')
+    def tasks_page():
+        """任务管理页面"""
+        return render_template('tasks.html')
+    
     @app.route('/config')
     def config_page():
         """配置页面"""
@@ -77,6 +99,26 @@ def register_routes(app: Flask):
     def logs_page():
         """日志页面"""
         return render_template('logs.html')
+    
+    @app.route('/service-config')
+    def service_config_page():
+        """服务配置页面"""
+        return render_template('service_config.html')
+    
+    @app.route('/api-docs')
+    def api_docs_page():
+        """接口文档页面"""
+        return render_template('api_docs.html')
+    
+    @app.route('/env-check')
+    def env_check_page():
+        """环境检测页面"""
+        return render_template('env_check.html')
+    
+    @app.route('/report-config')
+    def report_config_page():
+        """上报配置页面"""
+        return render_template('report_config.html')
     
     # ========== API 路由 ==========
     

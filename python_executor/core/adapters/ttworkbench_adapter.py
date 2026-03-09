@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
+from ..realtime_logger import TaskLogAdapter
 
 
 class TTworkbenchAdapter(BaseTestAdapter):
@@ -54,6 +55,8 @@ class TTworkbenchAdapter(BaseTestAdapter):
         # 执行状态
         self._current_process: Optional[subprocess.Popen] = None
         self._execution_log: List[str] = []
+        self._realtime_logger: Optional[TaskLogAdapter] = None
+        self._enable_realtime_log = True
         
     @property
     def tool_type(self) -> TestToolType:
@@ -73,6 +76,11 @@ class TTworkbenchAdapter(BaseTestAdapter):
         try:
             self.status = AdapterStatus.CONNECTING
             self.logger.info("正在验证TTworkbench配置...")
+            
+            # 检查TTworkbench GUI是否正在运行
+            if self._check_ttworkbench_gui():
+                self.logger.warning("检测到TTworkbench GUI正在运行，建议关闭后再执行命令行测试")
+                # 不阻止连接，但给出警告
             
             # 验证必需配置
             required_paths = {
@@ -105,6 +113,43 @@ class TTworkbenchAdapter(BaseTestAdapter):
             self._set_error(f"TTworkbench配置验证失败: {str(e)}")
             return False
     
+    def _check_ttworkbench_gui(self) -> bool:
+        """
+        检查TTworkbench GUI是否正在运行
+        
+        Returns:
+            如果TTworkbench GUI正在运行返回True
+        """
+        try:
+            import psutil
+            
+            ttworkbench_processes = []
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    proc_name = proc.info['name']
+                    if proc_name and ('TTworkbench' in proc_name or 'ttworkbench' in proc_name.lower()):
+                        ttworkbench_processes.append({
+                            'pid': proc.info['pid'],
+                            'name': proc_name
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            if ttworkbench_processes:
+                self.logger.warning(f"发现 {len(ttworkbench_processes)} 个TTworkbench进程正在运行")
+                for proc in ttworkbench_processes:
+                    self.logger.warning(f"  - PID {proc['pid']}: {proc['name']}")
+                return True
+            
+            return False
+            
+        except ImportError:
+            self.logger.debug("psutil未安装，无法检测TTworkbench进程")
+            return False
+        except Exception as e:
+            self.logger.warning(f"检测TTworkbench进程时出错: {e}")
+            return False
+    
     def disconnect(self) -> bool:
         """
         断开TTworkbench
@@ -135,20 +180,97 @@ class TTworkbenchAdapter(BaseTestAdapter):
     
     def load_configuration(self, config_path: str) -> bool:
         """
-        验证clf文件路径
+        验证clf文件路径和格式
         
         Args:
             config_path: clf文件路径
             
         Returns:
-            文件存在返回True，否则返回False
+            验证通过返回True，否则返回False
         """
         if not os.path.isfile(config_path):
             self._set_error(f"clf文件不存在: {config_path}")
             return False
         
+        # 验证clf文件格式
+        validation_result = self._validate_clf_file(config_path)
+        if not validation_result["valid"]:
+            errors = "; ".join(validation_result["errors"])
+            self._set_error(f"clf文件验证失败: {errors}")
+            return False
+        
+        # 检查可执行case
+        executable_cases = validation_result.get("executable_cases", [])
+        if executable_cases:
+            self.logger.info(f"clf文件包含可执行case: {', '.join(executable_cases)}")
+        
+        # 验证clf文件是否在workspace目录下
+        if self.workspace_path:
+            clf_abs_path = os.path.abspath(config_path)
+            workspace_abs_path = os.path.abspath(self.workspace_path)
+            if not clf_abs_path.startswith(workspace_abs_path):
+                self.logger.warning(f"clf文件不在workspace目录下: {config_path}")
+        
         self.logger.info(f"clf文件验证通过: {config_path}")
         return True
+    
+    def _validate_clf_file(self, clf_file: str) -> Dict[str, Any]:
+        """
+        验证clf文件格式
+        
+        Args:
+            clf_file: clf文件路径
+            
+        Returns:
+            验证结果字典
+        """
+        result = {"valid": False, "errors": [], "executable_cases": []}
+        
+        try:
+            import xml.etree.ElementTree as ET
+            
+            # 解析XML
+            tree = ET.parse(clf_file)
+            root = tree.getroot()
+            
+            # 检查根元素
+            if root.tag != "TestConfiguration":
+                result["errors"].append(f"Invalid root element: {root.tag}, expected 'TestConfiguration'")
+                return result
+            
+            # 检查必需的子元素
+            required_elements = ["TestCases", "Parameters"]
+            for elem_name in required_elements:
+                elem = root.find(elem_name)
+                if elem is None:
+                    result["errors"].append(f"Missing required element: {elem_name}")
+            
+            # 检查是否有可执行的case（Runs=1）
+            test_cases = root.find("TestCases")
+            if test_cases is not None:
+                for case in test_cases.findall("TestCase"):
+                    runs = case.get("Runs", "0")
+                    case_name = case.get("Name", "Unknown")
+                    if runs == "1":
+                        result["executable_cases"].append(case_name)
+                
+                if not result["executable_cases"]:
+                    result["errors"].append("No executable test case found (Runs=1)")
+            
+            # 检查Parameters元素
+            parameters = root.find("Parameters")
+            if parameters is not None:
+                param_count = len(parameters.findall("Parameter"))
+                self.logger.debug(f"clf文件包含 {param_count} 个参数")
+            
+            result["valid"] = len(result["errors"]) == 0
+            
+        except ET.ParseError as e:
+            result["errors"].append(f"XML parse error: {str(e)}")
+        except Exception as e:
+            result["errors"].append(f"Failed to parse clf file: {str(e)}")
+        
+        return result
     
     def start_test(self) -> bool:
         """
@@ -305,9 +427,26 @@ class TTworkbenchAdapter(BaseTestAdapter):
         ]
         return cmd
     
-    def _run_ttman_command(self, cmd: List[str]) -> Dict[str, Any]:
-        """执行TTman命令"""
+    def _run_ttman_command(self, cmd: List[str], task_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        执行TTman命令，支持实时日志输出
+        
+        Args:
+            cmd: TTman命令列表
+            task_id: 任务ID（用于实时日志）
+            
+        Returns:
+            执行结果字典
+        """
+        import threading
+        
         start_time = time.time()
+        execution_log = []
+        finished_detected = False
+        
+        # 初始化实时日志适配器
+        if task_id and self._enable_realtime_log:
+            self._realtime_logger = TaskLogAdapter(task_id, "TTman")
         
         try:
             # 启动进程
@@ -317,38 +456,86 @@ class TTworkbenchAdapter(BaseTestAdapter):
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                errors='ignore'
+                errors='ignore',
+                bufsize=1,  # 行缓冲
+                universal_newlines=True
             )
             
-            # 等待执行完成
-            stdout, stderr = self._current_process.communicate(timeout=self.timeout)
+            # 实时读取输出的线程函数
+            def read_output(pipe, prefix):
+                nonlocal finished_detected
+                for line in iter(pipe.readline, ''):
+                    line = line.rstrip()
+                    if line:
+                        log_entry = f"{prefix}: {line}"
+                        execution_log.append(log_entry)
+                        
+                        # 实时推送日志
+                        if self._realtime_logger:
+                            level = "ERROR" if prefix == "ERR" else "INFO"
+                            self._realtime_logger.logger.log(level, line, "TTman", task_id)
+                        
+                        self.logger.info(f"TTman {prefix}: {line}")
+                        
+                        # 检测完成标志
+                        if "Test execution finished" in line:
+                            finished_detected = True
+                            self.logger.info("检测到测试完成标志: Test execution finished")
+                pipe.close()
+            
+            # 启动读取线程
+            stdout_thread = threading.Thread(target=read_output, args=(self._current_process.stdout, "OUT"))
+            stderr_thread = threading.Thread(target=read_output, args=(self._current_process.stderr, "ERR"))
+            stdout_thread.daemon = True
+            stderr_thread.daemon = True
+            stdout_thread.start()
+            stderr_thread.start()
+            
+            # 等待进程完成
+            self._current_process.wait(timeout=self.timeout)
+            
+            # 等待读取线程完成
+            stdout_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
             
             execution_time = time.time() - start_time
             
             return {
                 "return_code": self._current_process.returncode,
-                "stdout": stdout,
-                "stderr": stderr,
-                "execution_time": execution_time
+                "stdout": "\n".join([l for l in execution_log if l.startswith("OUT:")]),
+                "stderr": "\n".join([l for l in execution_log if l.startswith("ERR:")]),
+                "execution_log": execution_log,
+                "execution_time": execution_time,
+                "finished_detected": finished_detected
             }
             
         except subprocess.TimeoutExpired:
-            self._current_process.kill()
-            stdout, stderr = self._current_process.communicate()
+            self.logger.error("TTman命令执行超时")
+            if self._current_process:
+                self._current_process.kill()
+                try:
+                    self._current_process.wait(timeout=5)
+                except:
+                    pass
             
             return {
                 "return_code": -1,
-                "stdout": stdout,
-                "stderr": stderr + "\n[ERROR] 测试执行超时",
-                "execution_time": self.timeout
+                "stdout": "",
+                "stderr": "[ERROR] 测试执行超时",
+                "execution_log": execution_log,
+                "execution_time": time.time() - start_time,
+                "finished_detected": finished_detected
             }
             
         except Exception as e:
+            self.logger.error(f"执行TTman命令异常: {e}")
             return {
                 "return_code": -1,
                 "stdout": "",
                 "stderr": str(e),
-                "execution_time": time.time() - start_time
+                "execution_log": execution_log,
+                "execution_time": time.time() - start_time,
+                "finished_detected": False
             }
             
         finally:
