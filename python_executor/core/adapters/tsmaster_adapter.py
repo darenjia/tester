@@ -296,6 +296,10 @@ class TSMasterAdapter(BaseTestAdapter):
         - test_sequence: 执行测试序列
         - sysvar_check: 系统变量检查
         - sysvar_set: 系统变量设置
+        - system_api: 调用系统API
+        - run_form: 启动小程序
+        - stop_form: 停止小程序
+        - select_test_cases: 选择测试用例
         
         Args:
             item: 测试项配置字典
@@ -331,6 +335,14 @@ class TSMasterAdapter(BaseTestAdapter):
                 return self._execute_wait(item)
             elif item_type == "condition":
                 return self._execute_condition(item)
+            elif item_type == "system_api":
+                return self._execute_system_api(item)
+            elif item_type == "run_form":
+                return self._execute_run_form(item)
+            elif item_type == "stop_form":
+                return self._execute_stop_form(item)
+            elif item_type == "select_test_cases":
+                return self._execute_select_test_cases(item)
             else:
                 return {
                     "name": item_name,
@@ -357,24 +369,35 @@ class TSMasterAdapter(BaseTestAdapter):
         if not signal_name:
             raise ValueError("信号检查需要指定signal_name参数")
         
-        # 读取信号值
-        actual_value = self._get_signal(signal_name)
-        
-        # 判断结果
-        passed = False
-        if actual_value is not None and expected_value is not None:
-            passed = abs(actual_value - expected_value) < tolerance
-        
-        return {
-            "name": item.get("name"),
-            "type": "signal_check",
-            "signal_name": signal_name,
-            "expected_value": expected_value,
-            "actual_value": actual_value,
-            "tolerance": tolerance,
-            "passed": passed,
-            "status": "passed" if passed else "failed"
-        }
+        try:
+            self.logger.info(f"检查信号: {signal_name}")
+            
+            actual_value = self._get_signal(signal_name)
+            
+            passed = False
+            if actual_value is not None and expected_value is not None:
+                passed = abs(actual_value - expected_value) < tolerance
+            
+            return {
+                "name": item.get("name"),
+                "type": "signal_check",
+                "signal_name": signal_name,
+                "expected_value": expected_value,
+                "actual_value": actual_value,
+                "tolerance": tolerance,
+                "passed": passed,
+                "status": "passed" if passed else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"信号检查失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "signal_check",
+                "signal_name": signal_name,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_signal_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行信号设置"""
@@ -384,17 +407,30 @@ class TSMasterAdapter(BaseTestAdapter):
         if not signal_name or value is None:
             raise ValueError("信号设置需要指定signal_name和value参数")
         
-        # 设置信号值
-        success = self._set_signal(signal_name, value)
-        
-        return {
-            "name": item.get("name"),
-            "type": "signal_set",
-            "signal_name": signal_name,
-            "value": value,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
+        try:
+            self.logger.info(f"设置信号: {signal_name} = {value}")
+            
+            success = self._set_signal(signal_name, value)
+            
+            return {
+                "name": item.get("name"),
+                "type": "signal_set",
+                "signal_name": signal_name,
+                "value": value,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"信号设置失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "signal_set",
+                "signal_name": signal_name,
+                "value": value,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_message_send(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行报文发送"""
@@ -405,18 +441,31 @@ class TSMasterAdapter(BaseTestAdapter):
         if msg_id is None:
             raise ValueError("报文发送需要指定msg_id参数")
         
-        # 发送报文
-        success = self._send_message(channel, msg_id, data)
-        
-        return {
-            "name": item.get("name"),
-            "type": "message_send",
-            "channel": channel,
-            "msg_id": msg_id,
-            "data": data,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
+        try:
+            self.logger.info(f"发送报文: 通道{channel}, ID=0x{msg_id:X}")
+            
+            success = self._send_message(channel, msg_id, data)
+            
+            return {
+                "name": item.get("name"),
+                "type": "message_send",
+                "channel": channel,
+                "msg_id": msg_id,
+                "data": data,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"报文发送失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "message_send",
+                "channel": channel,
+                "msg_id": msg_id,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_c_script(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行C脚本"""
@@ -427,18 +476,31 @@ class TSMasterAdapter(BaseTestAdapter):
         if not script_name or not function_name:
             raise ValueError("C脚本执行需要指定script_name和function_name参数")
         
-        # 调用C脚本函数
-        result = self._call_c_script(script_name, function_name, params)
-        
-        return {
-            "name": item.get("name"),
-            "type": "c_script",
-            "script_name": script_name,
-            "function_name": function_name,
-            "params": params,
-            "result": result,
-            "status": "passed" if result is not None else "failed"
-        }
+        try:
+            self.logger.info(f"执行C脚本: {script_name}.{function_name}")
+            
+            result = self._call_c_script(script_name, function_name, params)
+            
+            return {
+                "name": item.get("name"),
+                "type": "c_script",
+                "script_name": script_name,
+                "function_name": function_name,
+                "params": params,
+                "result": result,
+                "status": "passed" if result is not None else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"执行C脚本失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "c_script",
+                "script_name": script_name,
+                "function_name": function_name,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_test_sequence(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行测试序列"""
@@ -447,16 +509,41 @@ class TSMasterAdapter(BaseTestAdapter):
         if not sequence_name:
             raise ValueError("测试序列执行需要指定sequence_name参数")
         
-        # 执行测试序列
-        result = self._ts.test_execute(sequence_name)
-        
-        return {
-            "name": item.get("name"),
-            "type": "test_sequence",
-            "sequence_name": sequence_name,
-            "result": result,
-            "status": "passed" if result else "failed"
-        }
+        try:
+            self.logger.info(f"执行测试序列: {sequence_name}")
+            
+            if self._using_rpc and self._rpc_client:
+                result = self._rpc_client.execute_test_sequence(sequence_name)
+                success = result is not None
+            elif self._ts:
+                result = self._ts.test_execute(sequence_name)
+                success = result
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "test_sequence",
+                    "sequence_name": sequence_name,
+                    "status": "error",
+                    "error": "未连接到TSMaster"
+                }
+            
+            return {
+                "name": item.get("name"),
+                "type": "test_sequence",
+                "sequence_name": sequence_name,
+                "result": result,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"执行测试序列失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "test_sequence",
+                "sequence_name": sequence_name,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_sysvar_check(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行系统变量检查"""
@@ -466,23 +553,34 @@ class TSMasterAdapter(BaseTestAdapter):
         if not var_name:
             raise ValueError("系统变量检查需要指定var_name参数")
         
-        # 读取系统变量值
-        actual_value = self._read_system_var(var_name)
-        
-        # 判断结果
-        passed = False
-        if actual_value is not None and expected_value is not None:
-            passed = str(actual_value) == str(expected_value)
-        
-        return {
-            "name": item.get("name"),
-            "type": "sysvar_check",
-            "var_name": var_name,
-            "expected_value": expected_value,
-            "actual_value": actual_value,
-            "passed": passed,
-            "status": "passed" if passed else "failed"
-        }
+        try:
+            self.logger.info(f"检查系统变量: {var_name}")
+            
+            actual_value = self._read_system_var(var_name)
+            
+            passed = False
+            if actual_value is not None and expected_value is not None:
+                passed = str(actual_value) == str(expected_value)
+            
+            return {
+                "name": item.get("name"),
+                "type": "sysvar_check",
+                "var_name": var_name,
+                "expected_value": expected_value,
+                "actual_value": actual_value,
+                "passed": passed,
+                "status": "passed" if passed else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"系统变量检查失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "sysvar_check",
+                "var_name": var_name,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _execute_sysvar_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行系统变量设置"""
@@ -492,17 +590,30 @@ class TSMasterAdapter(BaseTestAdapter):
         if not var_name or value is None:
             raise ValueError("系统变量设置需要指定var_name和value参数")
         
-        # 设置系统变量值
-        success = self._write_system_var(var_name, str(value))
-        
-        return {
-            "name": item.get("name"),
-            "type": "sysvar_set",
-            "var_name": var_name,
-            "value": value,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
+        try:
+            self.logger.info(f"设置系统变量: {var_name} = {value}")
+            
+            success = self._write_system_var(var_name, str(value))
+            
+            return {
+                "name": item.get("name"),
+                "type": "sysvar_set",
+                "var_name": var_name,
+                "value": value,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"系统变量设置失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "sysvar_set",
+                "var_name": var_name,
+                "value": value,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _get_signal(self, signal_name: str) -> Optional[float]:
         """获取信号值"""
@@ -945,6 +1056,172 @@ class TSMasterAdapter(BaseTestAdapter):
             else:
                 self.logger.warning(f"字符串不支持的操作符: {operator}")
                 return False
+    
+    def _execute_system_api(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行系统API调用
+        
+        支持调用TSMaster的系统级API
+        """
+        api_name = item.get("api_name")
+        args = item.get("args", [])
+        buffer_size = item.get("buffer_size", 1024)
+        encoding = item.get("encoding", "gbk")
+        
+        if not api_name:
+            raise ValueError("系统API调用需要指定api_name参数")
+        
+        try:
+            self.logger.info(f"执行系统API: {api_name}")
+            
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.call_system_api(api_name, args, buffer_size, encoding)
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "system_api",
+                    "api_name": api_name,
+                    "status": "error",
+                    "error": "系统API调用仅支持RPC模式"
+                }
+            
+            return {
+                "name": item.get("name"),
+                "type": "system_api",
+                "api_name": api_name,
+                "args": args,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"执行系统API失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "system_api",
+                "api_name": api_name,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_run_form(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行启动小程序
+        """
+        form_name = item.get("form_name")
+        encoding = item.get("encoding", "gbk")
+        
+        if not form_name:
+            raise ValueError("启动小程序需要指定form_name参数")
+        
+        try:
+            self.logger.info(f"启动小程序: {form_name}")
+            
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.run_form(form_name, encoding)
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "run_form",
+                    "form_name": form_name,
+                    "status": "error",
+                    "error": "启动小程序仅支持RPC模式"
+                }
+            
+            return {
+                "name": item.get("name"),
+                "type": "run_form",
+                "form_name": form_name,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"启动小程序失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "run_form",
+                "form_name": form_name,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_stop_form(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行停止小程序
+        """
+        form_name = item.get("form_name")
+        encoding = item.get("encoding", "gbk")
+        
+        if not form_name:
+            raise ValueError("停止小程序需要指定form_name参数")
+        
+        try:
+            self.logger.info(f"停止小程序: {form_name}")
+            
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.stop_form(form_name, encoding)
+            else:
+                return {
+                    "name": item.get("name"),
+                    "type": "stop_form",
+                    "form_name": form_name,
+                    "status": "error",
+                    "error": "停止小程序仅支持RPC模式"
+                }
+            
+            return {
+                "name": item.get("name"),
+                "type": "stop_form",
+                "form_name": form_name,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"停止小程序失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "stop_form",
+                "form_name": form_name,
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _execute_select_test_cases(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行选择测试用例
+        """
+        cases = item.get("cases")
+        
+        if not cases:
+            raise ValueError("选择测试用例需要指定cases参数")
+        
+        try:
+            self.logger.info(f"选择测试用例: {cases}")
+            
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.select_test_cases(cases)
+            else:
+                success = self._write_system_var("TestSystem.SelectCases", cases)
+            
+            return {
+                "name": item.get("name"),
+                "type": "select_test_cases",
+                "cases": cases,
+                "success": success,
+                "status": "passed" if success else "failed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"选择测试用例失败: {str(e)}")
+            return {
+                "name": item.get("name"),
+                "type": "select_test_cases",
+                "cases": cases,
+                "status": "error",
+                "error": str(e)
+            }
     
     def register_callback(self, event_name: str, callback: Callable):
         """
