@@ -484,6 +484,166 @@ class TSMasterRPCClient:
             self.logger.error(f"发送CAN报文时发生异常: {str(e)}")
             return False
     
+    def call_system_api(self, api_name: str, args: List[str] = None, 
+                        buffer_size: int = 1024, encoding: str = 'gbk') -> bool:
+        """
+        调用TSMaster系统API
+        
+        支持调用TSMaster的系统级API，如启动/停止小程序等。
+        
+        Args:
+            api_name: API名称，如 "app.run_form", "app.stop_form"
+            args: 参数列表，默认为空列表
+            buffer_size: 缓冲区大小，默认1024
+            encoding: 参数编码方式，默认'gbk'（Windows中文环境）
+            
+        Returns:
+            调用成功返回True，否则返回False
+            
+        Examples:
+            >>> client.call_system_api("app.run_form", ["C 代码编辑器 [Master]"])
+            >>> client.call_system_api("app.stop_form", ["C 代码编辑器 [Master]"])
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法调用系统API")
+            return False
+        
+        if args is None:
+            args = []
+        
+        try:
+            import ctypes
+            
+            arg_count = len(args)
+            
+            if arg_count == 0:
+                ret = rpc_tsmaster_call_system_api(
+                    self.rpchandle,
+                    api_name.encode(),
+                    0,
+                    buffer_size,
+                    None
+                )
+            else:
+                args_array_type = ctypes.c_char_p * arg_count
+                encoded_args = [arg.encode(encoding) for arg in args]
+                args_array = args_array_type(*encoded_args)
+                
+                ret = rpc_tsmaster_call_system_api(
+                    self.rpchandle,
+                    api_name.encode(),
+                    arg_count,
+                    buffer_size,
+                    args_array
+                )
+            
+            if ret == 0:
+                self.logger.debug(f"调用系统API成功: {api_name}, 参数: {args}")
+                return True
+            else:
+                self.logger.warning(f"调用系统API失败: {api_name}, 错误码: {ret}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"调用系统API异常: {api_name}, {str(e)}")
+            return False
+    
+    def run_form(self, form_name: str, encoding: str = 'gbk') -> bool:
+        """
+        启动TSMaster小程序
+        
+        Args:
+            form_name: 小程序名称，如 "C 代码编辑器 [Master]"
+            encoding: 编码方式，默认'gbk'
+            
+        Returns:
+            启动成功返回True，否则返回False
+        """
+        self.logger.info(f"正在启动小程序: {form_name}")
+        return self.call_system_api("app.run_form", [form_name], encoding=encoding)
+    
+    def stop_form(self, form_name: str, encoding: str = 'gbk') -> bool:
+        """
+        停止TSMaster小程序
+        
+        Args:
+            form_name: 小程序名称，如 "C 代码编辑器 [Master]"
+            encoding: 编码方式，默认'gbk'
+            
+        Returns:
+            停止成功返回True，否则返回False
+        """
+        self.logger.info(f"正在停止小程序: {form_name}")
+        return self.call_system_api("app.stop_form", [form_name], encoding=encoding)
+    
+    def select_test_cases(self, cases: str) -> bool:
+        """
+        选择测试用例
+        
+        Args:
+            cases: 测试用例字符串，格式如 "TG1_TC1=1,TG1_TC2=1"
+            
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        self.logger.info(f"选择测试用例: {cases}")
+        return self.write_system_var("TestSystem.SelectCases", cases)
+    
+    def start_test(self) -> bool:
+        """
+        开始测试
+        
+        通过设置系统变量 TestSystem.Controller = 1 启动测试
+        
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        self.logger.info("开始测试")
+        return self.write_system_var("TestSystem.Controller", "1")
+    
+    def stop_test(self) -> bool:
+        """
+        停止测试
+        
+        通过设置系统变量 TestSystem.Controller = 0 停止测试
+        
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        self.logger.info("停止测试")
+        return self.write_system_var("TestSystem.Controller", "0")
+    
+    def execute_test_sequence(self, sequence_name: str) -> Optional[str]:
+        """
+        执行测试序列
+        
+        通过调用系统API执行指定的测试序列
+        
+        Args:
+            sequence_name: 测试序列名称
+            
+        Returns:
+            执行结果，失败返回None
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法执行测试序列")
+            return None
+        
+        try:
+            self.logger.info(f"执行测试序列: {sequence_name}")
+            
+            success = self.call_system_api("test.run_sequence", [sequence_name])
+            
+            if success:
+                return sequence_name
+            else:
+                self.logger.warning(f"执行测试序列失败: {sequence_name}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"执行测试序列异常: {str(e)}")
+            return None
+    
     def get_active_applications(self) -> List[str]:
         """
         获取运行中的TSMaster应用程序列表
