@@ -21,6 +21,7 @@ from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
 from core.adapters import create_adapter_with_wrapper, TestToolType
+from core.case_mapping_manager import get_case_mapping_manager
 
 logger = get_logger("task_executor_production")
 
@@ -494,8 +495,20 @@ class TaskExecutorProduction:
                 self.current_collector.add_log("INFO", "任务被取消")
                 break
 
+            # 通过用例映射查找脚本标识
+            mapping_manager = get_case_mapping_manager()
+            mapping = mapping_manager.get_mapping_by_name(test_item.name)
+
+            if mapping and mapping.enabled:
+                case_id = mapping.case_no
+                logger.debug(f"用例映射找到: {test_item.name} -> {case_id}")
+            else:
+                case_id = test_item.name
+                if mapping is None:
+                    logger.debug(f"未找到用例映射，使用原始名称: {test_item.name}")
+
             progress = int((i / total_items) * 100)
-            logger.info(f"执行测试项 {i}/{total_items}: {test_item.name}")
+            logger.info(f"执行测试项 {i}/{total_items}: {test_item.name} (case_id: {case_id})")
 
             # 更新进度
             self._update_task_status(
@@ -509,7 +522,7 @@ class TaskExecutorProduction:
             if hasattr(self.controller, 'run_test_case_with_config'):
                 # 新方式：通过系统变量控制用例执行
                 result = self.controller.run_test_case_with_config(
-                    test_case_name=test_item.name,
+                    test_case_name=case_id,
                     config={
                         'dtc_info': getattr(test_item, 'dtc_info', None),
                         'params': getattr(test_item, 'params', {}),

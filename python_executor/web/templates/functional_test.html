@@ -486,6 +486,436 @@
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }
+    
+    /* TSMaster 测试步骤编辑器样式 */
+    .tsmaster-steps-editor {
+        margin-top: 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    
+    .tsmaster-editor-header {
+        padding: 16px 20px;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .tsmaster-editor-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    .tsmaster-editor-content {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        min-height: 500px;
+    }
+    
+    .tsmaster-config-panel {
+        padding: 20px;
+        background: #f9fafb;
+        border-right: 1px solid #e5e7eb;
+        overflow-y: auto;
+    }
+    
+    .tsmaster-config-section {
+        margin-bottom: 24px;
+    }
+    
+    .tsmaster-config-section h4 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+    }
+    
+    .config-row {
+        margin-bottom: 12px;
+    }
+    
+    .config-row label {
+        display: block;
+        font-size: 13px;
+        color: #6b7280;
+        margin-bottom: 4px;
+    }
+    
+    .config-row input[type="text"],
+    .config-row input[type="number"] {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+    
+    .config-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #374151;
+    }
+    
+    .config-checkbox input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+    
+    .tsmaster-steps-panel {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .tsmaster-steps-toolbar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .tsmaster-steps-list {
+        flex: 1;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fafafa;
+    }
+    
+    .steps-table-header {
+        display: grid;
+        grid-template-columns: 40px 60px 1fr 120px 150px 140px;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #f3f4f6;
+        font-weight: 600;
+        font-size: 12px;
+        color: #6b7280;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .step-row {
+        display: grid;
+        grid-template-columns: 40px 60px 1fr 120px 150px 140px;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        align-items: center;
+        font-size: 13px;
+    }
+    
+    .step-row:hover {
+        background: #f9fafb;
+    }
+    
+    .step-row.disabled {
+        opacity: 0.5;
+    }
+    
+    .step-col-index {
+        color: #9ca3af;
+        font-weight: 600;
+    }
+    
+    .step-col-enable {
+        text-align: center;
+    }
+    
+    .step-col-name {
+        font-weight: 500;
+        color: #111827;
+    }
+    
+    .step-col-type {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .step-col-params {
+        color: #6b7280;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .step-col-actions {
+        display: flex;
+        gap: 4px;
+    }
+    
+    .btn-icon {
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        transition: all 0.2s;
+    }
+    
+    .btn-icon:hover {
+        background: #e5e7eb;
+        color: #374151;
+    }
+    
+    .btn-icon:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+    
+    .btn-icon.btn-danger:hover {
+        background: #fee2e2;
+        color: #ef4444;
+    }
+    
+    .empty-steps {
+        text-align: center;
+        padding: 60px 20px;
+        color: #9ca3af;
+    }
+    
+    .empty-steps i {
+        font-size: 48px;
+        margin-bottom: 16px;
+    }
+    
+    /* 模态对话框样式 */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    }
+    
+    .modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #9ca3af;
+    }
+    
+    .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        max-height: 60vh;
+    }
+    
+    .modal-footer {
+        padding: 16px 20px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    
+    .form-group {
+        margin-bottom: 16px;
+    }
+    
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    
+    .params-section {
+        background: #f9fafb;
+        padding: 16px;
+        border-radius: 8px;
+        margin-top: 16px;
+    }
+    
+    .params-section h4 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        color: #374151;
+    }
+    
+    .params-hint {
+        color: #9ca3af;
+        font-style: italic;
+    }
+    
+    .required {
+        color: #ef4444;
+    }
+    
+    /* 执行日志样式 */
+    .tsmaster-execution-log {
+        margin-top: 16px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        overflow: hidden;
+        display: none;
+    }
+    
+    .execution-header {
+        padding: 12px 16px;
+        background: #f3f4f6;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .execution-header.success {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    
+    .execution-header.error {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    
+    .execution-header.warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    
+    .execution-duration {
+        margin-left: auto;
+        font-size: 12px;
+        color: #6b7280;
+    }
+    
+    .execution-results {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .result-item {
+        display: grid;
+        grid-template-columns: 30px 30px 1fr 2fr 60px;
+        gap: 8px;
+        padding: 10px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        align-items: center;
+        font-size: 13px;
+    }
+    
+    .result-item:last-child {
+        border-bottom: none;
+    }
+    
+    .result-item.passed {
+        background: #f0fdf4;
+    }
+    
+    .result-item.failed {
+        background: #fef2f2;
+    }
+    
+    .result-index {
+        color: #9ca3af;
+        font-weight: 600;
+    }
+    
+    .result-status {
+        text-align: center;
+    }
+    
+    .result-name {
+        font-weight: 500;
+    }
+    
+    .result-message {
+        color: #6b7280;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .result-duration {
+        text-align: right;
+        color: #9ca3af;
+        font-size: 12px;
+    }
+    
+    .text-success {
+        color: #10b981;
+    }
+    
+    .text-error {
+        color: #ef4444;
+    }
 </style>
 {% endblock %}
 
@@ -550,6 +980,62 @@
     </div>
 </div>
 
+<!-- TSMaster 测试步骤编辑器 -->
+<div class="tsmaster-steps-editor" id="tsmaster-steps-editor">
+    <div class="tsmaster-editor-header">
+        <h3><i class="fas fa-microchip"></i> TSMaster 测试步骤编辑器</h3>
+        <div>
+            <span class="badge" style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px; font-size: 12px;">
+                <i class="fas fa-bolt"></i> RPC 模式
+            </span>
+        </div>
+    </div>
+    <div class="tsmaster-editor-content">
+        <!-- 左侧配置面板 -->
+        <div class="tsmaster-config-panel" id="tsmaster-config-panel">
+            <!-- 配置内容将由 JavaScript 动态生成 -->
+        </div>
+        
+        <!-- 右侧步骤列表面板 -->
+        <div class="tsmaster-steps-panel">
+            <div class="tsmaster-steps-toolbar">
+                <button class="btn btn-primary" onclick="showAddStepDialog()">
+                    <i class="fas fa-plus"></i> 添加步骤
+                </button>
+                <button class="btn btn-success" id="btn-execute-steps" onclick="executeTSMasterSteps()">
+                    <i class="fas fa-play"></i> 执行全部
+                </button>
+                <button class="btn btn-secondary" onclick="saveTSMasterConfig()">
+                    <i class="fas fa-save"></i> 保存配置
+                </button>
+                <button class="btn btn-secondary" onclick="loadTSMasterConfig()">
+                    <i class="fas fa-folder-open"></i> 加载配置
+                </button>
+                <button class="btn btn-warning" onclick="resetToDefaultSteps()">
+                    <i class="fas fa-undo"></i> 重置默认
+                </button>
+                <button class="btn btn-danger" onclick="clearAllSteps()">
+                    <i class="fas fa-trash"></i> 清空
+                </button>
+            </div>
+            
+            <div class="tsmaster-steps-list" id="tsmaster-steps-list">
+                <!-- 步骤列表将由 JavaScript 动态生成 -->
+                <div class="empty-steps">
+                    <i class="fas fa-list-ol"></i>
+                    <p>暂无测试步骤</p>
+                    <span>点击"添加步骤"创建测试步骤</span>
+                </div>
+            </div>
+            
+            <!-- 执行日志 -->
+            <div class="tsmaster-execution-log" id="tsmaster-execution-log">
+                <!-- 执行结果将显示在这里 -->
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 历史记录面板 -->
 <div class="history-panel">
     <div class="history-header">
@@ -580,6 +1066,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/tsmaster_steps.js') }}"></script>
 <script>
     // 全局状态
     let allTestCases = [];
@@ -690,12 +1177,15 @@
     
     // 渲染测试列表
     function renderTestList() {
+        console.log('renderTestList called');
         const container = document.getElementById('test-list');
+        console.log('container:', container);
         
         let cases = allTestCases;
         if (currentCategory !== 'all') {
             cases = allTestCases.filter(c => c.category === currentCategory);
         }
+        console.log('Rendering cases count:', cases.length);
         
         if (cases.length === 0) {
             container.innerHTML = `
@@ -711,12 +1201,14 @@
         cases.forEach(testCase => {
             const result = testResults[testCase.id];
             const status = result ? result.status : 'pending';
+            console.log('TestCase:', testCase.id, 'status:', status);
             const isSelected = selectedTests.has(testCase.id);
             
             html += renderTestItem(testCase, result, isSelected);
         });
         
         container.innerHTML = html;
+        console.log('renderTestList completed');
     }
     
     // 渲染单个测试项
@@ -892,18 +1384,46 @@
             });
             
             const result = await response.json();
+            console.log('execute-batch response:', result);
             
-            if (result.success) {
+            if (result.success && result.data && result.data.results) {
                 result.data.results.forEach(r => {
                     testResults[r.case_id] = r;
                 });
                 showMessage(`批量执行完成: ${result.data.passed}通过, ${result.data.failed}失败, ${result.data.warning}警告`, 'success');
             } else {
-                showMessage('批量执行失败: ' + result.message, 'error');
+                // API 返回失败，更新所有选中测试项为失败状态
+                const errorMsg = result.message || '执行失败';
+                testIds.forEach(id => {
+                    if (testResults[id] && testResults[id].status === 'running') {
+                        const testCase = allTestCases.find(c => c.id === id);
+                        testResults[id] = {
+                            status: 'failed',
+                            message: errorMsg,
+                            case_id: id,
+                            case_name: testCase ? testCase.name : id,
+                            category: testCase ? testCase.category : 'unknown'
+                        };
+                    }
+                });
+                showMessage('批量执行失败: ' + errorMsg, 'error');
             }
         } catch (error) {
             console.error('批量执行失败:', error);
-            showMessage('批量执行失败', 'error');
+            // 发生异常，更新所有选中测试项为失败状态
+            testIds.forEach(id => {
+                if (testResults[id] && testResults[id].status === 'running') {
+                    const testCase = allTestCases.find(c => c.id === id);
+                    testResults[id] = {
+                        status: 'failed',
+                        message: '执行异常: ' + error.message,
+                        case_id: id,
+                        case_name: testCase ? testCase.name : id,
+                        category: testCase ? testCase.category : 'unknown'
+                    };
+                }
+            });
+            showMessage('批量执行失败: ' + error.message, 'error');
         }
         
         renderTestList();
@@ -934,18 +1454,44 @@
             });
             
             const result = await response.json();
+            console.log('execute-category response:', result);
             
-            if (result.success) {
+            if (result.success && result.data && result.data.results) {
                 result.data.results.forEach(r => {
                     testResults[r.case_id] = r;
                 });
                 showMessage(`分类执行完成: ${result.data.passed}通过, ${result.data.failed}失败, ${result.data.warning}警告`, 'success');
             } else {
-                showMessage('分类执行失败: ' + result.message, 'error');
+                // API 返回失败，更新所有测试项为失败状态
+                const errorMsg = result.message || '执行失败';
+                cases.forEach(c => {
+                    if (testResults[c.id] && testResults[c.id].status === 'running') {
+                        testResults[c.id] = {
+                            status: 'failed',
+                            message: errorMsg,
+                            case_id: c.id,
+                            case_name: c.name,
+                            category: c.category
+                        };
+                    }
+                });
+                showMessage('分类执行失败: ' + errorMsg, 'error');
             }
         } catch (error) {
             console.error('分类执行失败:', error);
-            showMessage('分类执行失败', 'error');
+            // 发生异常，更新所有测试项为失败状态
+            cases.forEach(c => {
+                if (testResults[c.id] && testResults[c.id].status === 'running') {
+                    testResults[c.id] = {
+                        status: 'failed',
+                        message: '执行异常: ' + error.message,
+                        case_id: c.id,
+                        case_name: c.name,
+                        category: c.category
+                    };
+                }
+            });
+            showMessage('分类执行失败: ' + error.message, 'error');
         }
         
         renderTestList();
@@ -954,37 +1500,79 @@
     }
     
     // 运行所有测试
+    let pollInterval = null;
+
     async function runAllTests() {
+        console.log('runAllTests called, allTestCases count:', allTestCases.length);
+
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+
         // 标记所有为运行中
         allTestCases.forEach(c => {
             testResults[c.id] = { status: 'running' };
         });
         renderTestList();
-        
+        updateStats();
+        console.log('All tests marked as running');
+
+        // 先POST启动后台执行
         try {
-            const response = await fetch('/api/functional-tests/execute-all', {
+            const response = await fetch('/api/functional-tests/execute-all-stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
-            
             const result = await response.json();
-            
-            if (result.success) {
-                result.data.results.forEach(r => {
-                    testResults[r.case_id] = r;
-                });
-                showMessage(`全部测试完成: ${result.data.passed}通过, ${result.data.failed}失败, ${result.data.warning}警告`, 'success');
-            } else {
-                showMessage('全部测试执行失败: ' + result.message, 'error');
+            console.log('启动执行响应:', result);
+
+            if (!result.success) {
+                showMessage(result.message || '启动测试失败', 'error');
+                return;
             }
         } catch (error) {
-            console.error('全部测试执行失败:', error);
-            showMessage('全部测试执行失败', 'error');
+            console.error('启动测试失败:', error);
+            showMessage('启动测试失败: ' + error.message, 'error');
+            return;
         }
-        
-        renderTestList();
-        updateStats();
-        loadHistory();
+
+        // 然后轮询获取进度
+        pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch('/api/functional-tests/execute-all-progress');
+                if (!response.ok) return;
+
+                const data = await response.json();
+                if (!data.success || !data.data) return;
+
+                const progress = data.data;
+
+                // 更新每个测试结果
+                if (progress.results && Array.isArray(progress.results)) {
+                    progress.results.forEach(r => {
+                        if (r && r.case_id) {
+                            testResults[r.case_id] = r;
+                        }
+                    });
+                }
+
+                renderTestList();
+                updateStats();
+
+                // 检查是否完成
+                if (progress.is_complete) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                    showMessage(`全部测试完成: ${progress.passed}通过, ${progress.failed}失败, ${progress.warning}警告`, 'success');
+                    loadHistory();
+                }
+            } catch (error) {
+                console.error('轮询进度失败:', error);
+            }
+        }, 500);
+
+        console.log('runAllTests completed - polling started');
     }
     
     // 刷新测试列表

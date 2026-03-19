@@ -1,0 +1,2212 @@
+{% extends "base.html" %}
+
+{% block title %}用例映射管理 - 测试执行器{% endblock %}
+{% block page_title %}<i class="fas fa-link"></i> 用例映射管理{% endblock %}
+{% set active_page = 'case-mapping' %}
+
+{% block extra_css %}
+<style>
+    .mapping-container {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 20px;
+        min-height: calc(100vh - 200px);
+    }
+
+    .filter-panel {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    .filter-header {
+        padding: 16px 20px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+    }
+
+    .filter-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .filter-content {
+        padding: 16px;
+    }
+
+    .filter-group {
+        margin-bottom: 16px;
+    }
+
+    .filter-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .filter-group input,
+    .filter-group select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+
+    .filter-group input:focus,
+    .filter-group select:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .category-filter-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .category-filter-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 4px;
+    }
+
+    .category-filter-item:hover {
+        background: #f3f4f6;
+    }
+
+    .category-filter-item.active {
+        background: #e0e7ff;
+        color: #4f46e5;
+    }
+
+    .category-filter-item input[type="checkbox"] {
+        margin-right: 10px;
+    }
+
+    .category-name {
+        flex: 1;
+        font-size: 14px;
+    }
+
+    .category-count {
+        font-size: 12px;
+        color: #9ca3af;
+        background: #f3f4f6;
+        padding: 2px 8px;
+        border-radius: 10px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .mapping-panel {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .mapping-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .mapping-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .mapping-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        padding: 16px 20px;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .stat-item {
+        text-align: center;
+        padding: 12px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+    .stat-value.total { color: #374151; }
+    .stat-value.enabled { color: #10b981; }
+    .stat-value.disabled { color: #ef4444; }
+    .stat-value.category { color: #6366f1; }
+    .stat-value.history { color: #f59e0b; }
+
+    .stat-label {
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .mapping-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+    }
+
+    .mapping-item {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: all 0.2s;
+    }
+
+    .mapping-item:hover {
+        border-color: #d1d5db;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .mapping-item.disabled {
+        opacity: 0.6;
+        background: #f9fafb;
+    }
+
+    .mapping-item-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .mapping-status {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .mapping-status.enabled {
+        background: #10b981;
+    }
+
+    .mapping-status.disabled {
+        background: #ef4444;
+    }
+
+    .mapping-id {
+        font-size: 14px;
+        font-weight: 600;
+        font-family: monospace;
+        color: #4f46e5;
+        background: #e0e7ff;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+
+    .mapping-name {
+        font-size: 15px;
+        font-weight: 500;
+        color: #111827;
+        flex: 1;
+    }
+
+    .mapping-category {
+        font-size: 12px;
+        color: #6b7280;
+        background: #f3f4f6;
+        padding: 4px 10px;
+        border-radius: 12px;
+    }
+
+    .mapping-item-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    .mapping-field {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .mapping-field-label {
+        font-weight: 500;
+        color: #374151;
+        min-width: 70px;
+    }
+
+    .mapping-field-value {
+        color: #111827;
+        word-break: break-all;
+    }
+
+    .mapping-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .mapping-tag {
+        font-size: 11px;
+        padding: 3px 8px;
+        background: #e0e7ff;
+        color: #4f46e5;
+        border-radius: 4px;
+    }
+
+    .mapping-item-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6b7280;
+    }
+
+    .empty-state i {
+        font-size: 48px;
+        margin-bottom: 16px;
+        color: #d1d5db;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-primary {
+        background: #6366f1;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #4f46e5;
+    }
+
+    .btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+    }
+
+    .btn-secondary:hover {
+        background: #e5e7eb;
+    }
+
+    .btn-success {
+        background: #10b981;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background: #059669;
+    }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #dc2626;
+    }
+
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    }
+
+    .modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #9ca3af;
+    }
+
+    .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        max-height: 60vh;
+    }
+
+    .modal-footer {
+        padding: 16px 20px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .form-group textarea {
+        min-height: 80px;
+        resize: vertical;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .required {
+        color: #ef4444;
+    }
+
+    .history-panel {
+        margin-top: 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        padding: 16px 20px;
+    }
+
+    .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .history-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .history-table th,
+    .history-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 13px;
+    }
+
+    .history-table th {
+        font-weight: 600;
+        color: #374151;
+        background: #f9fafb;
+    }
+
+    .history-table tr:hover {
+        background: #f9fafb;
+    }
+
+    .change-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .change-badge.ADD {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .change-badge.MODIFY {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .change-badge.DELETE {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .change-badge.ENABLE {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .change-badge.DISABLE {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255,255,255,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        padding: 16px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .pagination button {
+        padding: 6px 12px;
+        border: 1px solid #d1d5db;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    .pagination button:hover:not(:disabled) {
+        background: #f3f4f6;
+    }
+
+    .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pagination .page-info {
+        font-size: 13px;
+        color: #6b7280;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mapping-container">
+    <div class="filter-panel">
+        <div class="filter-header">
+            <h3><i class="fas fa-filter"></i> 筛选条件</h3>
+        </div>
+        <div class="filter-content">
+            <div class="filter-group">
+                <label>搜索</label>
+                <input type="text" id="search-input" placeholder="搜索 Case No 或名称..." onkeyup="handleSearch()">
+            </div>
+
+            <div class="filter-group">
+                <label>分类</label>
+                <div class="category-filter-list" id="category-filter-list">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>状态</label>
+                <select id="status-filter" onchange="handleFilterChange()">
+                    <option value="">全部</option>
+                    <option value="enabled">已启用</option>
+                    <option value="disabled">已禁用</option>
+                </select>
+            </div>
+
+            <div class="filter-actions">
+                <button class="btn btn-secondary" style="flex:1" onclick="resetFilters()">
+                    <i class="fas fa-undo"></i> 重置
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mapping-panel">
+        <div class="mapping-header">
+            <h3 id="mapping-panel-title">用例映射列表</h3>
+            <div class="mapping-actions">
+                <button class="btn btn-secondary btn-sm" onclick="loadMappings()">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="showImportModal()">
+                    <i class="fas fa-file-import"></i> 导入
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="exportMappings()">
+                    <i class="fas fa-file-export"></i> 导出
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="showSyncModal()">
+                    <i class="fas fa-sync"></i> 从任务同步
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="showAddModal()">
+                    <i class="fas fa-plus"></i> 新增映射
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value total" id="stat-total">0</div>
+                <div class="stat-label">总数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value enabled" id="stat-enabled">0</div>
+                <div class="stat-label">已启用</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value disabled" id="stat-disabled">0</div>
+                <div class="stat-label">已禁用</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value category" id="stat-category">0</div>
+                <div class="stat-label">分类数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value history" id="stat-history">0</div>
+                <div class="stat-label">变更记录</div>
+            </div>
+        </div>
+
+        <div class="mapping-list" id="mapping-list">
+            <div class="empty-state">
+                <i class="fas fa-link"></i>
+                <p>正在加载用例映射...</p>
+            </div>
+        </div>
+
+        <div class="pagination" id="pagination">
+        </div>
+    </div>
+</div>
+
+<div class="history-panel">
+    <div class="history-header">
+        <h3><i class="fas fa-history"></i> 变更历史</h3>
+        <button class="btn btn-secondary btn-sm" onclick="loadHistory()">
+            <i class="fas fa-sync-alt"></i> 刷新
+        </button>
+    </div>
+    <table class="history-table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>Case编号</th>
+                <th>变更类型</th>
+                <th>变更人</th>
+                <th>变更原因</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="history-list">
+            <tr>
+                <td colspan="6" style="text-align: center; color: #9ca3af;">暂无变更记录</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allMappings = [];
+    let categories = [];
+    let currentFilters = {
+        search: '',
+        categories: [],
+        status: ''
+    };
+    let currentPage = 1;
+    let pageSize = 20;
+    let statistics = {};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadMappings();
+        loadCategories();
+        loadStatistics();
+        loadHistory();
+    });
+
+    async function loadMappings() {
+        try {
+            const params = new URLSearchParams();
+            if (currentFilters.search) params.append('search', currentFilters.search);
+            if (currentFilters.status) params.append('enabled', currentFilters.status === 'enabled');
+
+            const response = await fetch(`/api/case-mappings?${params.toString()}&page_size=1000`);
+            const result = await response.json();
+
+            if (result.success) {
+                allMappings = result.data.mappings;
+
+                if (currentFilters.categories.length > 0) {
+                    allMappings = allMappings.filter(m => currentFilters.categories.includes(m.category));
+                }
+
+                renderMappingList();
+                updateStatistics();
+            }
+        } catch (error) {
+            console.error('加载用例映射失败:', error);
+            document.getElementById('mapping-list').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>加载用例映射失败</p>
+                </div>
+            `;
+        }
+    }
+
+    async function loadCategories() {
+        try {
+            const response = await fetch('/api/case-mappings/categories');
+            const result = await response.json();
+
+            if (result.success) {
+                categories = result.data;
+                renderCategoryFilters();
+            }
+        } catch (error) {
+            console.error('加载分类失败:', error);
+        }
+    }
+
+    async function loadStatistics() {
+        try {
+            const response = await fetch('/api/case-mappings/statistics');
+            const result = await response.json();
+
+            if (result.success) {
+                statistics = result.data;
+                updateStatistics();
+            }
+        } catch (error) {
+            console.error('加载统计失败:', error);
+        }
+    }
+
+    async function loadHistory() {
+        try {
+            const response = await fetch('/api/case-mappings/history?limit=50');
+            const result = await response.json();
+
+            if (result.success) {
+                renderHistory(result.data.history);
+            }
+        } catch (error) {
+            console.error('加载变更历史失败:', error);
+        }
+    }
+
+    function renderCategoryFilters() {
+        const container = document.getElementById('category-filter-list');
+
+        let html = '';
+        categories.forEach(cat => {
+            const isChecked = currentFilters.categories.includes(cat.category);
+            html += `
+                <div class="category-filter-item ${isChecked ? 'active' : ''}" onclick="toggleCategoryFilter('${cat.category}')">
+                    <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation()">
+                    <span class="category-name">${cat.category_name || cat.category}</span>
+                    <span class="category-count">${cat.total_count}</span>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html || '<div style="color:#9ca3af;font-size:13px;padding:8px;">暂无分类</div>';
+    }
+
+    function toggleCategoryFilter(category) {
+        const index = currentFilters.categories.indexOf(category);
+        if (index === -1) {
+            currentFilters.categories.push(category);
+        } else {
+            currentFilters.categories.splice(index, 1);
+        }
+        renderCategoryFilters();
+        loadMappings();
+    }
+
+    function handleSearch() {
+        currentFilters.search = document.getElementById('search-input').value;
+        loadMappings();
+    }
+
+    function handleFilterChange() {
+        currentFilters.status = document.getElementById('status-filter').value;
+        loadMappings();
+    }
+
+    function resetFilters() {
+        currentFilters = { search: '', categories: [], status: '' };
+        document.getElementById('search-input').value = '';
+        document.getElementById('status-filter').value = '';
+        renderCategoryFilters();
+        loadMappings();
+    }
+
+    function updateStatistics() {
+        const total = allMappings.length;
+        const enabled = allMappings.filter(m => m.enabled).length;
+        const disabled = total - enabled;
+
+        document.getElementById('stat-total').textContent = statistics.total || total;
+        document.getElementById('stat-enabled').textContent = statistics.enabled || enabled;
+        document.getElementById('stat-disabled').textContent = statistics.disabled || disabled;
+        document.getElementById('stat-category').textContent = categories.length;
+        document.getElementById('stat-history').textContent = statistics.history_count || 0;
+    }
+
+    function renderMappingList() {
+        const container = document.getElementById('mapping-list');
+
+        const totalPages = Math.ceil(allMappings.length / pageSize);
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const pageMappings = allMappings.slice(start, end);
+
+        if (pageMappings.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-link"></i>
+                    <p>未找到符合条件的用例映射</p>
+                </div>
+            `;
+            document.getElementById('pagination').innerHTML = '';
+            return;
+        }
+
+        let html = '';
+        pageMappings.forEach(mapping => {
+            html += renderMappingItem(mapping);
+        });
+
+        container.innerHTML = html;
+
+        renderPagination(totalPages);
+    }
+
+    function renderMappingItem(mapping) {
+        const statusClass = mapping.enabled ? 'enabled' : 'disabled';
+        const itemClass = mapping.enabled ? '' : 'disabled';
+        const tags = mapping.tags || [];
+
+        return `
+            <div class="mapping-item ${itemClass}" id="mapping-${mapping.case_no}">
+                <div class="mapping-item-header">
+                    <div class="mapping-status ${statusClass}"></div>
+                    <span class="mapping-id">${mapping.case_no}</span>
+                    <span class="mapping-name">${mapping.case_name}</span>
+                    <span class="mapping-category">${mapping.module || mapping.category}</span>
+                </div>
+                <div class="mapping-item-body">
+                    <div class="mapping-field">
+                        <span class="mapping-field-label">脚本路径:</span>
+                        <span class="mapping-field-value">${mapping.script_path || '-'}</span>
+                    </div>
+                    <div class="mapping-field">
+                        <span class="mapping-field-label">优先级:</span>
+                        <span class="mapping-field-value">${mapping.priority}</span>
+                    </div>
+                    <div class="mapping-field">
+                        <span class="mapping-field-label">版本:</span>
+                        <span class="mapping-field-value">${mapping.version || '1.0'}</span>
+                    </div>
+                    <div class="mapping-field">
+                        <span class="mapping-field-label">更新时间:</span>
+                        <span class="mapping-field-value">${mapping.updated_at || '-'}</span>
+                    </div>
+                </div>
+                ${tags.length > 0 ? `
+                    <div class="mapping-tags">
+                        ${tags.map(tag => `<span class="mapping-tag">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
+                <div class="mapping-item-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="showEditModal('${mapping.case_no}')">
+                        <i class="fas fa-edit"></i> 编辑
+                    </button>
+                    ${mapping.enabled ?
+                        `<button class="btn btn-warning btn-sm" onclick="disableMapping('${mapping.case_no}')">
+                            <i class="fas fa-ban"></i> 禁用
+                        </button>` :
+                        `<button class="btn btn-success btn-sm" onclick="enableMapping('${mapping.case_no}')">
+                            <i class="fas fa-check"></i> 启用
+                        </button>`
+                    }
+                    <button class="btn btn-danger btn-sm" onclick="deleteMapping('${mapping.case_no}')">
+                        <i class="fas fa-trash"></i> 删除
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPagination(totalPages) {
+        const container = document.getElementById('pagination');
+
+        if (totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = `
+            <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+            <span class="page-info">第 ${currentPage} / ${totalPages} 页</span>
+            <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    function goToPage(page) {
+        const totalPages = Math.ceil(allMappings.length / pageSize);
+        if (page >= 1 && page <= totalPages) {
+            currentPage = page;
+            renderMappingList();
+        }
+    }
+
+    function renderHistory(history) {
+        const container = document.getElementById('history-list');
+
+        if (!history || history.length === 0) {
+            container.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9ca3af;">暂无变更记录</td></tr>';
+            return;
+        }
+
+        let html = '';
+        history.forEach(record => {
+            const time = new Date(record.changed_at).toLocaleString('zh-CN');
+            html += `
+                <tr>
+                    <td>${time}</td>
+                    <td><code>${record.case_no}</code></td>
+                    <td><span class="change-badge ${record.change_type}">${record.change_type}</span></td>
+                    <td>${record.changed_by}</td>
+                    <td>${record.change_reason || '-'}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="viewChangeDetail('${record.case_no}')">
+                            <i class="fas fa-eye"></i> 详情
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    let currentModalMode = 'add';
+    let editingMapping = null;
+
+    function showAddModal() {
+        currentModalMode = 'add';
+        editingMapping = null;
+        document.getElementById('modal-title').textContent = '新增用例映射';
+        document.getElementById('mapping-form').reset();
+        document.getElementById('modal-overlay').style.display = 'flex';
+    }
+
+    function showEditModal(caseNo) {
+        currentModalMode = 'edit';
+        editingMapping = allMappings.find(m => m.case_no === caseNo);
+
+        if (!editingMapping) {
+            alert('用例映射不存在');
+            return;
+        }
+
+        document.getElementById('modal-title').textContent = '编辑用例映射';
+        document.getElementById('case_no').value = editingMapping.case_no;
+        document.getElementById('case_no').disabled = true;
+        document.getElementById('case_name').value = editingMapping.case_name;
+        document.getElementById('category').value = editingMapping.category;
+        document.getElementById('module').value = editingMapping.module || '';
+        document.getElementById('script_path').value = editingMapping.script_path || '';
+        document.getElementById('priority').value = editingMapping.priority || 0;
+        document.getElementById('version').value = editingMapping.version || '1.0';
+        document.getElementById('description').value = editingMapping.description || '';
+        document.getElementById('enabled').checked = editingMapping.enabled;
+        document.getElementById('tags').value = (editingMapping.tags || []).join(', ');
+
+        document.getElementById('modal-overlay').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('modal-overlay').style.display = 'none';
+        document.getElementById('case_no').disabled = false;
+    }
+
+    async function saveMapping() {
+        const caseNo = document.getElementById('case_no').value.trim();
+        const caseName = document.getElementById('case_name').value.trim();
+        const category = document.getElementById('category').value;
+        const module = document.getElementById('module').value.trim();
+        const scriptPath = document.getElementById('script_path').value.trim();
+        const priority = parseInt(document.getElementById('priority').value) || 0;
+        const version = document.getElementById('version').value.trim() || '1.0';
+        const description = document.getElementById('description').value.trim();
+        const enabled = document.getElementById('enabled').checked;
+        const tagsStr = document.getElementById('tags').value.trim();
+        const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+
+        if (!caseNo) {
+            alert('Case编号不能为空');
+            return;
+        }
+        if (!caseName) {
+            alert('用例名称不能为空');
+            return;
+        }
+        if (!category) {
+            alert('分类不能为空');
+            return;
+        }
+
+        const data = {
+            case_no: caseNo,
+            case_name: caseName,
+            category: category,
+            module: module,
+            script_path: scriptPath,
+            priority: priority,
+            version: version,
+            description: description,
+            enabled: enabled,
+            tags: tags,
+            changed_by: 'web_user',
+            change_reason: currentModalMode === 'add' ? '新增用例映射' : '编辑用例映射'
+        };
+
+        try {
+            let url, method;
+            if (currentModalMode === 'add') {
+                url = '/api/case-mappings';
+                method = 'POST';
+            } else {
+                url = `/api/case-mappings/${caseNo}`;
+                method = 'PUT';
+            }
+
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(currentModalMode === 'add' ? '创建成功' : '更新成功');
+                closeModal();
+                loadMappings();
+                loadHistory();
+            } else {
+                alert(result.message || '操作失败');
+            }
+        } catch (error) {
+            console.error('保存映射失败:', error);
+            alert('保存失败: ' + error.message);
+        }
+    }
+
+    async function enableMapping(caseNo) {
+        if (!confirm(`确定要启用用例 ${caseNo} 吗？`)) return;
+
+        try {
+            const response = await fetch(`/api/case-mappings/${caseNo}/enable`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ changed_by: 'web_user', reason: '启用用例' })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('启用成功');
+                loadMappings();
+                loadHistory();
+            } else {
+                alert(result.message || '启用失败');
+            }
+        } catch (error) {
+            alert('启用失败: ' + error.message);
+        }
+    }
+
+    async function disableMapping(caseNo) {
+        if (!confirm(`确定要禁用用例 ${caseNo} 吗？`)) return;
+
+        try {
+            const response = await fetch(`/api/case-mappings/${caseNo}/disable`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ changed_by: 'web_user', reason: '禁用用例' })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('禁用成功');
+                loadMappings();
+                loadHistory();
+            } else {
+                alert(result.message || '禁用失败');
+            }
+        } catch (error) {
+            alert('禁用失败: ' + error.message);
+        }
+    }
+
+    async function deleteMapping(caseNo) {
+        if (!confirm(`确定要删除用例映射 ${caseNo} 吗？此操作不可恢复！`)) return;
+
+        try {
+            const response = await fetch(`/api/case-mappings/${caseNo}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ changed_by: 'web_user', reason: '删除用例映射' })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('删除成功');
+                loadMappings();
+                loadHistory();
+            } else {
+                alert(result.message || '删除失败');
+            }
+        } catch (error) {
+            alert('删除失败: ' + error.message);
+        }
+    }
+
+    async function exportMappings() {
+        try {
+            const response = await fetch('/api/case-mappings/export');
+            const result = await response.json();
+
+            if (result.success) {
+                const dataStr = JSON.stringify(result.data, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `case_mappings_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                alert('导出成功');
+            } else {
+                alert(result.message || '导出失败');
+            }
+        } catch (error) {
+            alert('导出失败: ' + error.message);
+        }
+    }
+
+    function showImportModal() {
+        document.getElementById('excel-import-overlay').style.display = 'flex';
+        resetExcelImportState();
+    }
+
+    function resetExcelImportState() {
+        currentExcelFileId = null;
+        currentColumnMapping = {};
+        currentPreviewData = null;
+        document.getElementById('excel-upload-area').style.display = 'block';
+        document.getElementById('excel-mapping-area').style.display = 'none';
+        document.getElementById('excel-preview-area').style.display = 'none';
+        document.getElementById('excel-result-area').style.display = 'none';
+        document.getElementById('btn-preview').style.display = 'inline-flex';
+        document.getElementById('btn-import').style.display = 'none';
+        document.getElementById('btn-back-mapping').style.display = 'none';
+    }
+
+    function closeExcelImportModal() {
+        document.getElementById('excel-import-overlay').style.display = 'none';
+        resetExcelImportState();
+    }
+
+    let currentExcelFileId = null;
+    let currentColumnMapping = {};
+    let currentPreviewData = null;
+    let currentSheetIndex = 0;
+    let currentSheetNames = [];
+
+    async function handleExcelFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+            alert('只支持 .xlsx 和 .xls 格式');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/case-mappings/import/sheets', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentExcelFileId = result.data.file_id;
+                currentSheetNames = result.data.sheets.map(s => s.name);
+                showSheetSelector(result.data);
+            } else {
+                alert(result.message || '上传失败');
+            }
+        } catch (error) {
+            alert('上传失败: ' + error.message);
+        }
+    }
+
+    async function handleExcelDrop(event) {
+        event.preventDefault();
+        const file = event.dataTransfer.files[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+            alert('只支持 .xlsx 和 .xls 格式');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/case-mappings/import/sheets', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentExcelFileId = result.data.file_id;
+                currentSheetNames = result.data.sheets.map(s => s.name);
+                showSheetSelector(result.data);
+            } else {
+                alert(result.message || '上传失败');
+            }
+        } catch (error) {
+            alert('上传失败: ' + error.message);
+        }
+    }
+
+    function showSheetSelector(sheetsData) {
+        document.getElementById('excel-upload-area').style.display = 'none';
+        document.getElementById('excel-mapping-area').style.display = 'block';
+        document.getElementById('excel-preview-area').style.display = 'none';
+        document.getElementById('excel-result-area').style.display = 'none';
+
+        document.getElementById('btn-preview').style.display = 'inline-flex';
+        document.getElementById('btn-import').style.display = 'none';
+        document.getElementById('btn-back-mapping').style.display = 'none';
+
+        document.getElementById('excel-filename').textContent = sheetsData.filename;
+
+        const sheets = sheetsData.sheets;
+        const sheetSelector = document.getElementById('sheet-selector');
+        const sheetSelect = document.getElementById('sheet-select');
+
+        if (sheets.length > 1) {
+            sheetSelector.style.display = 'flex';
+            sheetSelect.innerHTML = '';
+            sheets.forEach((sheet, idx) => {
+                const option = document.createElement('option');
+                option.value = idx;
+                option.text = `${sheet.name} (${sheet.row_count}行)`;
+                sheetSelect.appendChild(option);
+            });
+        } else {
+            sheetSelector.style.display = 'none';
+            sheetSelect.innerHTML = '';
+        }
+
+        loadSheetData(0);
+    }
+
+    async function loadSheetData(sheetIndex) {
+        const formData = new FormData();
+        formData.append('file_id', currentExcelFileId);
+        formData.append('sheet', sheetIndex);
+
+        try {
+            const response = await fetch('/api/case-mappings/import/upload?sheet=' + sheetIndex, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                console.error('loadSheetData failed');
+                return;
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentSheetIndex = sheetIndex;
+                updateMappingInterface(result.data);
+            }
+        } catch (error) {
+            console.error('加载工作表数据失败:', error);
+        }
+    }
+
+    async function onSheetChange() {
+        const sheetSelect = document.getElementById('sheet-select');
+        const newSheetIndex = parseInt(sheetSelect.value);
+
+        if (newSheetIndex === currentSheetIndex) return;
+
+        const formData = new FormData();
+        formData.append('sheet', newSheetIndex);
+
+        try {
+            const response = await fetch('/api/case-mappings/import/upload?sheet=' + newSheetIndex, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentSheetIndex = newSheetIndex;
+                updateMappingInterface(result.data);
+            } else {
+                alert(result.message || '切换工作表失败');
+            }
+        } catch (error) {
+            alert('切换工作表失败: ' + error.message);
+        }
+    }
+
+    async function showMappingInterface(uploadData) {
+        document.getElementById('excel-upload-area').style.display = 'none';
+        document.getElementById('excel-mapping-area').style.display = 'block';
+        document.getElementById('excel-preview-area').style.display = 'none';
+        document.getElementById('excel-result-area').style.display = 'none';
+
+        document.getElementById('btn-preview').style.display = 'inline-flex';
+        document.getElementById('btn-import').style.display = 'none';
+        document.getElementById('btn-back-mapping').style.display = 'none';
+
+        document.getElementById('excel-filename').textContent = uploadData.filename;
+        document.getElementById('excel-row-count').textContent = `共 ${uploadData.row_count} 行数据`;
+
+        const fieldsResponse = await fetch('/api/case-mappings/import/fields');
+        const fieldsResult = await fieldsResponse.json();
+
+        if (!fieldsResult.success) {
+            alert('获取字段信息失败');
+            return;
+        }
+
+        const systemFields = fieldsResult.data.system_fields;
+        const mappingTable = document.getElementById('mapping-table-body');
+        mappingTable.innerHTML = '';
+
+        currentColumnMapping = {};
+
+        uploadData.headers.forEach(header => {
+            const tr = document.createElement('tr');
+
+            const headerTd = document.createElement('td');
+            headerTd.textContent = header;
+            headerTd.style.fontWeight = '500';
+            tr.appendChild(headerTd);
+
+            const arrowTd = document.createElement('td');
+            arrowTd.textContent = '→';
+            arrowTd.style.textAlign = 'center';
+            arrowTd.style.color = '#6366f1';
+            tr.appendChild(arrowTd);
+
+            const mappingTd = document.createElement('td');
+
+            const select = document.createElement('select');
+            select.className = 'mapping-select';
+            select.style.width = '100%';
+            select.style.padding = '8px';
+            select.style.border = '1px solid #d1d5db';
+            select.style.borderRadius = '6px';
+
+            const optionIgnore = document.createElement('option');
+            optionIgnore.value = '';
+            optionIgnore.text = '-- 忽略 --';
+            select.appendChild(optionIgnore);
+
+            systemFields.forEach(field => {
+                const option = document.createElement('option');
+                option.value = field.name;
+                option.text = `${field.display} ${field.required ? '(必填)' : ''}`;
+                if (field.required && !currentColumnMapping[header]) {
+                    if (field.name === 'case_no' && header.includes('编号')) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    } else if (field.name === 'case_name' && (header.includes('名称') || header.includes('名'))) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    } else if (field.name === 'category' && header.includes('分类')) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    }
+                }
+                select.appendChild(option);
+            });
+
+            select.addEventListener('change', function() {
+                if (this.value) {
+                    currentColumnMapping[header] = this.value;
+                } else {
+                    delete currentColumnMapping[header];
+                }
+            });
+
+            mappingTd.appendChild(select);
+            tr.appendChild(mappingTd);
+
+            mappingTable.appendChild(tr);
+        });
+
+        const previewTable = document.getElementById('excel-preview-table');
+        const previewHead = previewTable.querySelector('thead');
+        const previewBody = previewTable.querySelector('tbody');
+        previewHead.innerHTML = '<tr></tr>';
+        previewBody.innerHTML = '';
+
+        const mappedHeaders = Object.values(currentColumnMapping);
+        mappedHeaders.forEach(fieldName => {
+            const field = systemFields.find(f => f.name === fieldName);
+            const th = document.createElement('th');
+            th.textContent = field ? field.display : fieldName;
+            previewHead.querySelector('tr').appendChild(th);
+        });
+
+        uploadData.preview.forEach(row => {
+            const tr = document.createElement('tr');
+            Object.keys(currentColumnMapping).forEach(header => {
+                const td = document.createElement('td');
+                td.textContent = row[header] || '';
+                tr.appendChild(td);
+            });
+            previewBody.appendChild(tr);
+        });
+
+        const batchCategoryOption = document.getElementById('batch-category-option');
+        const categoryMapped = Object.values(currentColumnMapping).includes('category');
+        batchCategoryOption.style.display = 'block';
+        document.getElementById('use-default-category').checked = !categoryMapped;
+        document.getElementById('default-category-select').disabled = categoryMapped;
+    }
+
+    async function updateMappingInterface(uploadData) {
+        document.getElementById('excel-row-count').textContent = `共 ${uploadData.row_count} 行数据`;
+
+        const fieldsResponse = await fetch('/api/case-mappings/import/fields');
+        const fieldsResult = await fieldsResponse.json();
+
+        if (!fieldsResult.success) {
+            alert('获取字段信息失败');
+            return;
+        }
+
+        const systemFields = fieldsResult.data.system_fields;
+        const mappingTable = document.getElementById('mapping-table-body');
+        mappingTable.innerHTML = '';
+
+        currentColumnMapping = {};
+
+        uploadData.headers.forEach(header => {
+            const tr = document.createElement('tr');
+
+            const headerTd = document.createElement('td');
+            headerTd.textContent = header;
+            headerTd.style.fontWeight = '500';
+            tr.appendChild(headerTd);
+
+            const arrowTd = document.createElement('td');
+            arrowTd.textContent = '→';
+            arrowTd.style.textAlign = 'center';
+            arrowTd.style.color = '#6366f1';
+            tr.appendChild(arrowTd);
+
+            const mappingTd = document.createElement('td');
+
+            const select = document.createElement('select');
+            select.className = 'mapping-select';
+            select.style.width = '100%';
+            select.style.padding = '8px';
+            select.style.border = '1px solid #d1d5db';
+            select.style.borderRadius = '6px';
+
+            const optionIgnore = document.createElement('option');
+            optionIgnore.value = '';
+            optionIgnore.text = '-- 忽略 --';
+            select.appendChild(optionIgnore);
+
+            systemFields.forEach(field => {
+                const option = document.createElement('option');
+                option.value = field.name;
+                option.text = `${field.display} ${field.required ? '(必填)' : ''}`;
+                if (field.required && !currentColumnMapping[header]) {
+                    if (field.name === 'case_no' && header.includes('编号')) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    } else if (field.name === 'case_name' && (header.includes('名称') || header.includes('名'))) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    } else if (field.name === 'category' && header.includes('分类')) {
+                        select.value = field.name;
+                        currentColumnMapping[header] = field.name;
+                    }
+                }
+                select.appendChild(option);
+            });
+
+            select.addEventListener('change', function() {
+                if (this.value) {
+                    currentColumnMapping[header] = this.value;
+                } else {
+                    delete currentColumnMapping[header];
+                }
+            });
+
+            mappingTd.appendChild(select);
+            tr.appendChild(mappingTd);
+
+            mappingTable.appendChild(tr);
+        });
+
+        const previewTable = document.getElementById('excel-preview-table');
+        const previewHead = previewTable.querySelector('thead');
+        const previewBody = previewTable.querySelector('tbody');
+        previewHead.innerHTML = '<tr></tr>';
+        previewBody.innerHTML = '';
+
+        const mappedHeaders = Object.values(currentColumnMapping);
+        mappedHeaders.forEach(fieldName => {
+            const field = systemFields.find(f => f.name === fieldName);
+            const th = document.createElement('th');
+            th.textContent = field ? field.display : fieldName;
+            previewHead.querySelector('tr').appendChild(th);
+        });
+
+        uploadData.preview.forEach(row => {
+            const tr = document.createElement('tr');
+            Object.keys(currentColumnMapping).forEach(header => {
+                const td = document.createElement('td');
+                td.textContent = row[header] || '';
+                tr.appendChild(td);
+            });
+            previewBody.appendChild(tr);
+        });
+
+        const batchCategoryOption2 = document.getElementById('batch-category-option');
+        const categoryMapped2 = Object.values(currentColumnMapping).includes('category');
+        batchCategoryOption2.style.display = 'block';
+        document.getElementById('use-default-category').checked = !categoryMapped2;
+        document.getElementById('default-category-select').disabled = categoryMapped2;
+    }
+
+    async function onSheetChange() {
+        const sheetSelect = document.getElementById('sheet-select');
+        const newSheetIndex = parseInt(sheetSelect.value);
+
+        if (newSheetIndex === currentSheetIndex) return;
+
+        const formData = new FormData();
+        formData.append('file_id', currentExcelFileId);
+        formData.append('sheet', newSheetIndex);
+
+        try {
+            const response = await fetch('/api/case-mappings/import/upload?sheet=' + newSheetIndex, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentSheetIndex = newSheetIndex;
+                updateMappingInterface(result.data);
+            } else {
+                alert(result.message || '切换工作表失败');
+            }
+        } catch (error) {
+            alert('切换工作表失败: ' + error.message);
+        }
+    }
+
+    function toggleDefaultCategory() {
+        const checkbox = document.getElementById('use-default-category');
+        const select = document.getElementById('default-category-select');
+        select.disabled = !checkbox.checked;
+    }
+
+    async function previewExcelImport() {
+        if (!currentExcelFileId) {
+            alert('请先上传文件');
+            return;
+        }
+
+        if (!Object.values(currentColumnMapping).includes('case_no')) {
+            alert('请至少映射 case_no 字段');
+            return;
+        }
+
+        let defaultCategory = document.getElementById('default-category-select').value;
+        const useDefaultCategory = document.getElementById('use-default-category').checked;
+
+        const requestData = {
+            file_id: currentExcelFileId,
+            column_mapping: currentColumnMapping,
+            default_category: useDefaultCategory ? defaultCategory : null,
+            sheet_index: currentSheetIndex
+        };
+
+        try {
+            const response = await fetch('/api/case-mappings/import/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentPreviewData = result.data;
+                showPreviewResult(result.data);
+            } else {
+                alert(result.message || '预览失败');
+            }
+        } catch (error) {
+            alert('预览失败: ' + error.message);
+        }
+    }
+
+    function showPreviewResult(previewData) {
+        document.getElementById('excel-upload-area').style.display = 'none';
+        document.getElementById('excel-mapping-area').style.display = 'none';
+        document.getElementById('excel-preview-area').style.display = 'block';
+        document.getElementById('excel-result-area').style.display = 'none';
+
+        document.getElementById('btn-preview').style.display = 'none';
+        document.getElementById('btn-import').style.display = 'inline-flex';
+        document.getElementById('btn-back-mapping').style.display = 'inline-flex';
+
+        document.getElementById('preview-total').textContent = previewData.total;
+        document.getElementById('preview-valid').textContent = previewData.valid;
+        document.getElementById('preview-invalid').textContent = previewData.invalid;
+
+        const errorsDiv = document.getElementById('preview-errors');
+        if (previewData.errors && previewData.errors.length > 0) {
+            let errorsHtml = '<div style="max-height: 150px; overflow-y: auto;">';
+            previewData.errors.forEach(err => {
+                errorsHtml += `<div style="padding: 4px 0; border-bottom: 1px solid #eee;">第${err.row}行: ${err.errors.join(', ')}</div>`;
+            });
+            errorsHtml += '</div>';
+            errorsDiv.innerHTML = errorsHtml;
+        } else {
+            errorsDiv.innerHTML = '<div style="color: #10b981;">所有数据验证通过</div>';
+        }
+
+        const previewTable = document.getElementById('preview-result-table');
+        const thead = previewTable.querySelector('thead');
+        const tbody = previewTable.querySelector('tbody');
+
+        thead.innerHTML = '<tr><th>Case编号</th><th>用例名称</th><th>分类</th><th>模块</th><th>优先级</th><th>启用</th></tr>';
+
+        if (!previewData.mappings || previewData.mappings.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">没有数据</td></tr>';
+            return;
+        }
+
+        let html = '';
+        previewData.mappings.slice(0, 10).forEach(m => {
+            html += `<tr>
+                <td style="font-family: monospace;">${m.case_no || ''}</td>
+                <td>${m.case_name || ''}</td>
+                <td>${m.category || ''}</td>
+                <td>${m.module || ''}</td>
+                <td>${m.priority || 0}</td>
+                <td>${m.enabled ? '是' : '否'}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+
+        if (previewData.mappings.length > 10) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="6" style="text-align: center; color: #6b7280;">... 还有 ${previewData.mappings.length - 10} 行</td>`;
+            tbody.appendChild(tr);
+        }
+    }
+
+    function backToMapping() {
+        document.getElementById('excel-preview-area').style.display = 'none';
+        document.getElementById('excel-mapping-area').style.display = 'block';
+        document.getElementById('btn-preview').style.display = 'inline-flex';
+        document.getElementById('btn-import').style.display = 'none';
+        document.getElementById('btn-back-mapping').style.display = 'none';
+    }
+
+    async function executeExcelImport() {
+        if (!currentExcelFileId || !currentPreviewData) {
+            alert('请先预览数据');
+            return;
+        }
+
+        const overwrite = document.getElementById('import-overwrite').checked;
+        const changeReason = document.getElementById('import-reason').value || '从Excel批量导入';
+        const useDefaultCategory = document.getElementById('use-default-category').checked;
+        const defaultCategory = useDefaultCategory ? document.getElementById('default-category-select').value : null;
+
+        try {
+            const response = await fetch('/api/case-mappings/import/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file_id: currentExcelFileId,
+                    column_mapping: currentColumnMapping,
+                    default_category: defaultCategory,
+                    sheet_index: currentSheetIndex,
+                    overwrite: overwrite,
+                    changed_by: 'web_user',
+                    change_reason: changeReason
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showImportResult(result.data);
+            } else {
+                alert(result.message || '导入失败');
+            }
+        } catch (error) {
+            alert('导入失败: ' + error.message);
+        }
+    }
+
+    function showImportResult(result) {
+        document.getElementById('excel-preview-area').style.display = 'none';
+        document.getElementById('excel-result-area').style.display = 'block';
+
+        document.getElementById('result-success').textContent = result.success;
+        document.getElementById('result-skipped').textContent = result.skipped;
+        document.getElementById('result-failed').textContent = result.failed;
+
+        if (result.failed === 0) {
+            document.getElementById('result-message').textContent = '导入完成，所有数据处理成功！';
+            document.getElementById('result-message').style.color = '#10b981';
+        } else {
+            document.getElementById('result-message').textContent = `导入完成，但有 ${result.failed} 条数据处理失败`;
+            document.getElementById('result-message').style.color = '#f59e0b';
+        }
+    }
+
+    function finishExcelImport() {
+        closeExcelImportModal();
+        loadMappings();
+        loadHistory();
+    }
+
+    async function downloadImportTemplate() {
+        try {
+            window.location.href = '/api/case-mappings/import/template';
+        } catch (error) {
+            alert('下载模板失败: ' + error.message);
+        }
+    }
+
+    function viewChangeDetail(caseNo) {
+        alert(`查看 ${caseNo} 的变更详情功能开发中...`);
+    }
+
+    let syncModalData = [];
+
+    function showSyncModal() {
+        syncModalData = [];
+        document.getElementById('sync-textarea').value = '';
+        document.getElementById('sync-result').style.display = 'none';
+        document.getElementById('sync-textarea-area').style.display = 'block';
+        document.getElementById('sync-modal-overlay').style.display = 'flex';
+    }
+
+    function closeSyncModal() {
+        document.getElementById('sync-modal-overlay').style.display = 'none';
+    }
+
+    async function submitSync() {
+        const textarea = document.getElementById('sync-textarea');
+        let inputText = textarea.value.trim();
+
+        if (!inputText) {
+            alert('请输入用例数据');
+            return;
+        }
+
+        let cases;
+        try {
+            cases = JSON.parse(inputText);
+        } catch (e) {
+            alert('JSON 格式错误: ' + e.message);
+            return;
+        }
+
+        if (!Array.isArray(cases)) {
+            cases = [cases];
+        }
+
+        try {
+            const response = await fetch('/api/case-mappings/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cases: cases,
+                    changed_by: 'web_user',
+                    change_reason: '从任务同步'
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                document.getElementById('sync-textarea-area').style.display = 'none';
+                document.getElementById('sync-result').style.display = 'block';
+                document.getElementById('sync-result').innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <i class="fas fa-check-circle" style="font-size: 48px; color: #10b981; margin-bottom: 16px;"></i>
+                        <h3 style="margin: 0 0 16px 0;">${result.message}</h3>
+                        <button class="btn btn-primary" onclick="closeSyncModal(); loadMappings(); loadHistory();">
+                            <i class="fas fa-check"></i> 完成
+                        </button>
+                    </div>
+                `;
+            } else {
+                alert(result.message || '同步失败');
+            }
+        } catch (error) {
+            alert('同步失败: ' + error.message);
+        }
+    }
+</script>
+
+<div id="modal-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title">新增用例映射</h3>
+            <button class="btn-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="mapping-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Case编号 <span class="required">*</span></label>
+                        <input type="text" id="case_no" placeholder="如: CANOE-001">
+                    </div>
+                    <div class="form-group">
+                        <label>分类 <span class="required">*</span></label>
+                        <select id="category">
+                            <option value="">请选择</option>
+                            <option value="system">系统环境测试</option>
+                            <option value="canoe">CANoe测试</option>
+                            <option value="tsmaster">TSMaster测试</option>
+                            <option value="ttman">TTman测试</option>
+                            <option value="config">配置测试</option>
+                            <option value="task">任务执行测试</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>用例名称 <span class="required">*</span></label>
+                    <input type="text" id="case_name" placeholder="用例名称">
+                </div>
+
+                <div class="form-group">
+                    <label>模块名称</label>
+                    <input type="text" id="module" placeholder="模块名称，如: CANoe测试">
+                </div>
+
+                <div class="form-group">
+                    <label>脚本路径</label>
+                    <input type="text" id="script_path" placeholder="脚本文件路径">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <input type="number" id="priority" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>版本</label>
+                        <input type="text" id="version" value="1.0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="description" placeholder="用例描述"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>标签 (逗号分隔)</label>
+                    <input type="text" id="tags" placeholder="如: 环境检查, CANoe">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enabled" checked>
+                        启用此用例
+                    </label>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveMapping()">保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="excel-import-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-excel"></i> Excel 批量导入用例映射</h3>
+            <button class="btn-close" onclick="closeExcelImportModal()">&times;</button>
+        </div>
+
+        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div id="excel-upload-area">
+                <div style="text-align: center; padding: 40px 20px; border: 2px dashed #d1d5db; border-radius: 12px; margin-bottom: 20px;"
+                     ondrop="handleExcelDrop(event)" ondragover="event.preventDefault()" ondragleave="event.target.style.background=''"
+                     ondragenter="event.target.style.background='#f3f4f6'">
+                    <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #d1d5db; margin-bottom: 16px;"></i>
+                    <p style="font-size: 16px; color: #374151; margin-bottom: 8px;">拖拽 Excel 文件到此处</p>
+                    <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">或</p>
+                    <label class="btn btn-primary" style="cursor: pointer;">
+                        <i class="fas fa-folder-open"></i> 选择文件
+                        <input type="file" accept=".xlsx,.xls" style="display: none;" onchange="handleExcelFileSelect(event)">
+                    </label>
+                    <p style="font-size: 12px; color: #9ca3af; margin-top: 16px;">支持 .xlsx 和 .xls 格式</p>
+                </div>
+                <div style="text-align: center; margin-top: 16px;">
+                    <button class="btn btn-secondary" onclick="downloadImportTemplate()">
+                        <i class="fas fa-download"></i> 下载导入模板
+                    </button>
+                </div>
+            </div>
+
+            <div id="excel-mapping-area" style="display: none;">
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #f3f4f6; border-radius: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <span style="font-weight: 600;" id="excel-filename">filename.xlsx</span>
+                            <span style="color: #6b7280;" id="excel-row-count">共 0 行数据</span>
+                            <div id="sheet-selector" style="display: none; align-items: center; gap: 8px;">
+                                <label style="font-size: 13px; color: #6b7280;">工作表:</label>
+                                <select id="sheet-select" onchange="onSheetChange()" style="padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="resetExcelImportState()">
+                            <i class="fas fa-times"></i> 重新上传
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">字段映射</h4>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f9fafb;">
+                                <th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px;">Excel 列名</th>
+                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #e5e7eb; font-size: 13px; width: 40px;"></th>
+                                <th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px;">系统字段</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mapping-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="batch-category-option" style="margin-top: 12px; padding: 12px; background: #fef3c7; border-radius: 6px; display: none;">
+                    <label style="font-size: 13px; color: #92400e; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="use-default-category" onchange="toggleDefaultCategory()">
+                        批量设置分类:
+                    </label>
+                    <select id="default-category-select" style="margin-left: 24px; margin-top: 8px; padding: 6px 8px; border: 1px solid #d97706; border-radius: 4px; font-size: 13px;">
+                        <option value="canoe">canoe - CANoe测试</option>
+                        <option value="tsmaster">tsmaster - TSMaster测试</option>
+                        <option value="ttman">ttman - TTman测试</option>
+                    </select>
+                    <div style="font-size: 12px; color: #92400e; margin-top: 4px; margin-left: 24px;">当Excel中分类列为空或被忽略时使用此分类</div>
+                </div>
+
+                <div>
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">数据预览</h4>
+                    <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table id="excel-preview-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="background: #f9fafb;">
+                                <tr></tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="excel-preview-area" style="display: none;">
+                <div style="margin-bottom: 16px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">导入预览</h4>
+                    <div style="display: flex; gap: 24px; padding: 16px; background: #f3f4f6; border-radius: 8px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: 700; color: #374151;" id="preview-total">0</div>
+                            <div style="font-size: 12px; color: #6b7280;">总数</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: 700; color: #10b981;" id="preview-valid">0</div>
+                            <div style="font-size: 12px; color: #6b7280;">有效</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: 700; color: #ef4444;" id="preview-invalid">0</div>
+                            <div style="font-size: 12px; color: #6b7280;">无效</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280;">错误信息</h5>
+                    <div id="preview-errors" style="padding: 12px; background: #fef2f2; border-radius: 6px; font-size: 13px;"></div>
+                </div>
+
+                <div>
+                    <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280;">预览数据（前10条）</h5>
+                    <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table id="preview-result-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="background: #f9fafb;">
+                                <tr>
+                                    <th>Case编号</th>
+                                    <th>用例名称</th>
+                                    <th>分类</th>
+                                    <th>模块</th>
+                                    <th>优先级</th>
+                                    <th>启用</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px; padding: 16px; background: #f9fafb; border-radius: 8px;">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="font-size: 13px; font-weight: 500;">导入选项</label>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="import-overwrite" checked>
+                            覆盖已存在的映射（相同 case_no）
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">变更原因</label>
+                        <input type="text" id="import-reason" placeholder="从Excel批量导入" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                    </div>
+                </div>
+            </div>
+
+            <div id="excel-result-area" style="display: none; text-align: center; padding: 40px 20px;">
+                <i class="fas fa-check-circle" style="font-size: 64px; color: #10b981; margin-bottom: 16px;"></i>
+                <h3 style="margin: 0 0 24px 0; font-size: 18px; color: #374151;" id="result-message">导入完成！</h3>
+                <div style="display: flex; justify-content: center; gap: 32px; margin-bottom: 24px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 32px; font-weight: 700; color: #10b981;" id="result-success">0</div>
+                        <div style="font-size: 13px; color: #6b7280;">成功</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 32px; font-weight: 700; color: #f59e0b;" id="result-skipped">0</div>
+                        <div style="font-size: 13px; color: #6b7280;">跳过</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 32px; font-weight: 700; color: #ef4444;" id="result-failed">0</div>
+                        <div style="font-size: 13px; color: #6b7280;">失败</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="finishExcelImport()">
+                    <i class="fas fa-check"></i> 完成
+                </button>
+            </div>
+        </div>
+
+        <div class="modal-footer" id="excel-import-footer">
+            <button class="btn btn-secondary" onclick="closeExcelImportModal()">取消</button>
+            <button class="btn btn-secondary" id="btn-back-mapping" style="display: none;" onclick="backToMapping()">返回修改</button>
+            <button class="btn btn-primary" id="btn-preview" onclick="previewExcelImport()">预览</button>
+            <button class="btn btn-primary" id="btn-import" style="display: none;" onclick="executeExcelImport()">开始导入</button>
+        </div>
+    </div>
+</div>
+
+<div id="sync-modal-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-sync"></i> 从任务同步用例映射</h3>
+            <button class="btn-close" onclick="closeSyncModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="sync-textarea-area">
+                <p style="margin-bottom: 16px; color: #6b7280; font-size: 13px;">
+                    请粘贴任务接口返回的用例数据（JSON数组格式）。每个用例对象需要包含 <code>case_name</code> 和 <code>case_no</code> 字段。
+                </p>
+                <p style="margin-bottom: 16px; color: #6b7280; font-size: 13px;">
+                    示例格式：
+                </p>
+                <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-bottom: 16px;">
+[
+  {
+    "case_name": "CANoe发送报文测试",
+    "case_no": "TG1_TC01",
+    "category": "canoe",
+    "module": "CANoe功能测试"
+  },
+  {
+    "case_name": "TSMaster信号读取",
+    "case_no": "TS_SIG_001",
+    "category": "tsmaster"
+  }
+]</pre>
+                <div class="form-group">
+                    <label>用例数据 (JSON)</label>
+                    <textarea id="sync-textarea" rows="10" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace; font-size: 13px;" placeholder='[{"case_name": "用例名称", "case_no": "脚本标识", "category": "canoe"}, ...]'></textarea>
+                </div>
+            </div>
+            <div id="sync-result" style="display: none;">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeSyncModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitSync()">
+                <i class="fas fa-sync"></i> 同步
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

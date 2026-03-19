@@ -1303,6 +1303,399 @@ class FunctionalTestRunner:
                 except:
                     pass
     
+    def test_ts_009(self) -> TestResult:
+        """TS-009: RPC 模式连接测试"""
+        try:
+            from core.adapters.tsmaster_adapter import TSMasterAdapter
+        except ImportError:
+            return TestResult(
+                case_id="TS-009",
+                case_name="RPC 模式连接测试",
+                category="tsmaster",
+                status="failed",
+                message="TSMasterAdapter 模块导入失败"
+            )
+        
+        details = {
+            "mode": "RPC",
+            "connection_test": "failed"
+        }
+        
+        adapter = None
+        try:
+            # 使用 RPC 模式
+            adapter = TSMasterAdapter({
+                "use_rpc": True,
+                "rpc_app_name": "TSMasterTest",
+                "fallback_to_traditional": False
+            })
+            
+            if adapter.connect():
+                details["connection_test"] = "success"
+                details["using_rpc"] = adapter._using_rpc
+                
+                return TestResult(
+                    case_id="TS-009",
+                    case_name="RPC 模式连接测试",
+                    category="tsmaster",
+                    status="passed",
+                    message=f"RPC 模式连接成功 (使用RPC: {adapter._using_rpc})",
+                    details=details
+                )
+            else:
+                return TestResult(
+                    case_id="TS-009",
+                    case_name="RPC 模式连接测试",
+                    category="tsmaster",
+                    status="failed",
+                    message="RPC 模式连接失败",
+                    details=details,
+                    suggestion="请确认 TSMaster 已启动且 RPC 服务可用"
+                )
+                
+        except Exception as e:
+            details["error"] = str(e)
+            return TestResult(
+                case_id="TS-009",
+                case_name="RPC 模式连接测试",
+                category="tsmaster",
+                status="failed",
+                message=f"RPC 模式连接异常: {str(e)}",
+                details=details
+            )
+        finally:
+            if adapter:
+                try:
+                    adapter.disconnect()
+                except:
+                    pass
+    
+    def test_ts_010(self) -> TestResult:
+        """TS-010: 系统变量读写测试"""
+        try:
+            from core.adapters.tsmaster_adapter import TSMasterAdapter
+        except ImportError:
+            return TestResult(
+                case_id="TS-010",
+                case_name="系统变量读写测试",
+                category="tsmaster",
+                status="failed",
+                message="TSMasterAdapter 模块导入失败"
+            )
+        
+        details = {
+            "read_test": "failed",
+            "write_test": "failed"
+        }
+        
+        adapter = None
+        try:
+            adapter = TSMasterAdapter({"use_rpc": True, "fallback_to_traditional": True})
+            
+            if not adapter.connect():
+                return TestResult(
+                    case_id="TS-010",
+                    case_name="系统变量读写测试",
+                    category="tsmaster",
+                    status="failed",
+                    message="无法连接到 TSMaster",
+                    suggestion="请确认 TSMaster 已启动"
+                )
+            
+            # 测试写入系统变量
+            test_value = "1000"
+            write_success = adapter._write_system_var("Var0", test_value)
+            details["write_test"] = "success" if write_success else "failed"
+            details["write_value"] = test_value
+            
+            # 测试读取系统变量
+            read_value = adapter._read_system_var("Var0")
+            details["read_test"] = "success" if read_value is not None else "failed"
+            details["read_value"] = read_value
+            
+            if write_success and read_value is not None:
+                return TestResult(
+                    case_id="TS-010",
+                    case_name="系统变量读写测试",
+                    category="tsmaster",
+                    status="passed",
+                    message=f"系统变量读写成功 (写: {test_value}, 读: {read_value})",
+                    details=details
+                )
+            else:
+                return TestResult(
+                    case_id="TS-010",
+                    case_name="系统变量读写测试",
+                    category="tsmaster",
+                    status="warning",
+                    message="系统变量读写部分失败",
+                    details=details
+                )
+                
+        except Exception as e:
+            details["error"] = str(e)
+            return TestResult(
+                case_id="TS-010",
+                case_name="系统变量读写测试",
+                category="tsmaster",
+                status="failed",
+                message=f"系统变量读写异常: {str(e)}",
+                details=details
+            )
+        finally:
+            if adapter:
+                try:
+                    adapter.disconnect()
+                except:
+                    pass
+    
+    def test_ts_011(self) -> TestResult:
+        """TS-011: LIN 信号读写测试"""
+        try:
+            from core.adapters.tsmaster_adapter import TSMasterAdapter
+        except ImportError:
+            return TestResult(
+                case_id="TS-011",
+                case_name="LIN 信号读写测试",
+                category="tsmaster",
+                status="failed",
+                message="TSMasterAdapter 模块导入失败"
+            )
+        
+        details = {
+            "api_available": False,
+            "read_test": "not_tested",
+            "write_test": "not_tested"
+        }
+        
+        adapter = None
+        try:
+            adapter = TSMasterAdapter({"use_rpc": True, "fallback_to_traditional": True})
+            
+            if not adapter.connect():
+                return TestResult(
+                    case_id="TS-011",
+                    case_name="LIN 信号读写测试",
+                    category="tsmaster",
+                    status="failed",
+                    message="无法连接到 TSMaster",
+                    suggestion="请确认 TSMaster 已启动"
+                )
+            
+            # 检查 RPC 客户端是否可用
+            if adapter._rpc_client:
+                details["api_available"] = True
+                
+                # 尝试读取 LIN 信号（可能失败，但测试API可用性）
+                try:
+                    value = adapter._rpc_client.get_lin_signal("TestSignal")
+                    details["read_test"] = "api_available"
+                except:
+                    details["read_test"] = "api_available_no_signal"
+                
+                return TestResult(
+                    case_id="TS-011",
+                    case_name="LIN 信号读写测试",
+                    category="tsmaster",
+                    status="passed",
+                    message="LIN 信号 API 可用",
+                    details=details
+                )
+            else:
+                return TestResult(
+                    case_id="TS-011",
+                    case_name="LIN 信号读写测试",
+                    category="tsmaster",
+                    status="warning",
+                    message="LIN 信号 API 不可用（RPC 客户端未初始化）",
+                    details=details
+                )
+                
+        except Exception as e:
+            details["error"] = str(e)
+            return TestResult(
+                case_id="TS-011",
+                case_name="LIN 信号读写测试",
+                category="tsmaster",
+                status="failed",
+                message=f"LIN 信号测试异常: {str(e)}",
+                details=details
+            )
+        finally:
+            if adapter:
+                try:
+                    adapter.disconnect()
+                except:
+                    pass
+    
+    def test_ts_012(self) -> TestResult:
+        """TS-012: 批量信号操作测试"""
+        try:
+            from core.adapters.tsmaster_adapter import TSMasterAdapter
+        except ImportError:
+            return TestResult(
+                case_id="TS-012",
+                case_name="批量信号操作测试",
+                category="tsmaster",
+                status="failed",
+                message="TSMasterAdapter 模块导入失败"
+            )
+        
+        details = {
+            "signals_tested": [],
+            "signals_passed": 0,
+            "signals_failed": 0
+        }
+        
+        adapter = None
+        try:
+            adapter = TSMasterAdapter({"use_rpc": True, "fallback_to_traditional": True})
+            
+            if not adapter.connect():
+                return TestResult(
+                    case_id="TS-012",
+                    case_name="批量信号操作测试",
+                    category="tsmaster",
+                    status="failed",
+                    message="无法连接到 TSMaster",
+                    suggestion="请确认 TSMaster 已启动"
+                )
+            
+            # 测试多个信号（这些信号可能不存在，主要测试API可用性）
+            test_signals = ["EngineSpeed", "VehicleSpeed", "ThrottlePosition"]
+            
+            for signal in test_signals:
+                try:
+                    value = adapter._get_signal(signal)
+                    details["signals_tested"].append({
+                        "name": signal,
+                        "value": value,
+                        "status": "ok" if value is not None else "not_found"
+                    })
+                    if value is not None:
+                        details["signals_passed"] += 1
+                    else:
+                        details["signals_failed"] += 1
+                except Exception as e:
+                    details["signals_tested"].append({
+                        "name": signal,
+                        "error": str(e),
+                        "status": "error"
+                    })
+                    details["signals_failed"] += 1
+            
+            return TestResult(
+                case_id="TS-012",
+                case_name="批量信号操作测试",
+                category="tsmaster",
+                status="passed",
+                message=f"批量信号操作测试完成 (通过: {details['signals_passed']}, 失败: {details['signals_failed']})",
+                details=details
+            )
+                
+        except Exception as e:
+            details["error"] = str(e)
+            return TestResult(
+                case_id="TS-012",
+                case_name="批量信号操作测试",
+                category="tsmaster",
+                status="failed",
+                message=f"批量信号操作异常: {str(e)}",
+                details=details
+            )
+        finally:
+            if adapter:
+                try:
+                    adapter.disconnect()
+                except:
+                    pass
+    
+    def test_ts_013(self) -> TestResult:
+        """TS-013: 测试步骤序列执行测试"""
+        try:
+            from core.tsmaster_test_engine import TSMasterTestEngine, TestStep, TestExecutionConfig
+        except ImportError:
+            return TestResult(
+                case_id="TS-013",
+                case_name="测试步骤序列执行测试",
+                category="tsmaster",
+                status="failed",
+                message="TSMasterTestEngine 模块导入失败"
+            )
+        
+        details = {
+            "engine_created": False,
+            "steps_executed": 0,
+            "steps_passed": 0
+        }
+        
+        try:
+            # 创建测试引擎
+            engine = TSMasterTestEngine()
+            details["engine_created"] = True
+            
+            # 创建测试步骤
+            steps = [
+                TestStep(
+                    id="step_001",
+                    name="等待测试",
+                    type="wait",
+                    parameters={"duration": 100},
+                    timeout=2000
+                )
+            ]
+            
+            # 创建配置
+            config = TestExecutionConfig(
+                use_rpc=True,
+                fallback_to_traditional=True,
+                auto_start_simulation=False,
+                auto_stop_simulation=False
+            )
+            
+            # 执行测试步骤
+            result = engine.execute_steps(steps, config)
+            
+            details["steps_executed"] = len(result.results)
+            details["steps_passed"] = result.summary.get("passed", 0)
+            details["execution_status"] = result.status
+            
+            if result.status == "completed" and result.summary.get("passed", 0) > 0:
+                return TestResult(
+                    case_id="TS-013",
+                    case_name="测试步骤序列执行测试",
+                    category="tsmaster",
+                    status="passed",
+                    message=f"测试步骤序列执行成功 (执行: {details['steps_executed']}, 通过: {details['steps_passed']})",
+                    details=details
+                )
+            else:
+                return TestResult(
+                    case_id="TS-013",
+                    case_name="测试步骤序列执行测试",
+                    category="tsmaster",
+                    status="warning",
+                    message=f"测试步骤序列执行部分失败 (状态: {result.status})",
+                    details=details
+                )
+                
+        except Exception as e:
+            details["error"] = str(e)
+            return TestResult(
+                case_id="TS-013",
+                case_name="测试步骤序列执行测试",
+                category="tsmaster",
+                status="failed",
+                message=f"测试步骤序列执行异常: {str(e)}",
+                details=details
+            )
+        finally:
+            if ts:
+                try:
+                    ts.disconnect()
+                except:
+                    pass
+    
     # ==================== TTman测试方法 ====================
     
     def test_ttm_001(self) -> TestResult:

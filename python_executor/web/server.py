@@ -19,6 +19,7 @@ from api.config_api import config_bp
 from api.docs_api import docs_bp
 from api.env_api import env_bp
 from api.functional_test_api import functional_test_bp
+from api.case_mapping_api import case_mapping_bp
 
 
 def create_app() -> Flask:
@@ -65,6 +66,7 @@ def create_app() -> Flask:
     app.register_blueprint(docs_bp)
     app.register_blueprint(env_bp)
     app.register_blueprint(functional_test_bp)
+    app.register_blueprint(case_mapping_bp)
     
     # 注册路由
     register_routes(app)
@@ -126,6 +128,11 @@ def register_routes(app: Flask):
     def functional_test_page():
         """功能测试页面"""
         return render_template('functional_test.html')
+
+    @app.route('/case-mapping')
+    def case_mapping_page():
+        """用例映射管理页面"""
+        return render_template('case_mapping.html')
     
     # ========== API 路由 ==========
     

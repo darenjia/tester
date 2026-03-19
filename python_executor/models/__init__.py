@@ -19,6 +19,13 @@ from .result import (
     TDM2Response
 )
 
+from .case_mapping import (
+    ChangeType,
+    CaseMapping,
+    CaseChangeRecord,
+    CaseMappingGroup
+)
+
 __all__ = [
     # Task模型
     'TaskStatus',
@@ -34,5 +41,10 @@ __all__ = [
     'Message',
     'CaseResult',
     'ExecutionResult',
-    'TDM2Response'
+    'TDM2Response',
+    # CaseMapping模型
+    'ChangeType',
+    'CaseMapping',
+    'CaseChangeRecord',
+    'CaseMappingGroup'
 ]
