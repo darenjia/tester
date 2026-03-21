@@ -2,6 +2,7 @@
 用例映射管理器 - 统一管理接口用例名称与脚本Case编号的映射关系
 """
 import os
+import sys
 import json
 import threading
 from typing import Dict, Any, List, Optional
@@ -35,7 +36,10 @@ class CaseMappingManager:
         self._initialized = True
 
         if storage_path is None:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             storage_path = os.path.join(base_dir, 'data', 'case_mappings.json')
 
         self.storage_path = storage_path
@@ -328,7 +332,7 @@ class CaseMappingManager:
         old_value = mapping.to_dict()
 
         allowed_fields = ['case_name', 'category', 'module', 'script_path',
-                        'enabled', 'priority', 'tags', 'version', 'description']
+                        'ini_config', 'enabled', 'priority', 'tags', 'version', 'description']
         for key, value in updates.items():
             if key in allowed_fields and hasattr(mapping, key):
                 setattr(mapping, key, value)

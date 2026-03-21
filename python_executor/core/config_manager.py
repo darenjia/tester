@@ -634,3 +634,83 @@ class TestConfigManager:
         """清空配置缓存"""
         if self._cache_manager:
             self._cache_manager.clear_all_cache()
+
+    def prepare_config_for_case(self, case_no: str, script_path: str, ini_config: str) -> Dict[str, str]:
+        """
+        为单个用例准备配置文件
+
+        Args:
+            case_no: 用例编号
+            script_path: cfg工程文件路径
+            ini_config: SelectInfo.ini配置内容（原始INI格式）
+
+        Returns:
+            包含cfg_path和ini_path的字典
+        """
+        import json
+
+        if not script_path:
+            raise ValueError(f"用例 {case_no} 未配置script_path")
+
+        if not os.path.exists(script_path):
+            raise FileNotFoundError(f"用例 {case_no} 的cfg文件不存在: {script_path}")
+
+        cfg_name = os.path.splitext(os.path.basename(script_path))[0]
+
+        if self._use_cache and self._cache_manager and self._cache_manager.enabled:
+            try:
+                cache_info = self._cache_manager.get_or_create_cache(cfg_name, script_path)
+                cfg_path = cache_info['cfg_path']
+                logger.debug(f"使用缓存cfg: {cfg_name} -> {cfg_path}")
+            except Exception as e:
+                logger.warning(f"使用缓存失败: {e}，将直接使用源文件")
+                cfg_path = script_path
+        else:
+            cfg_path = script_path
+
+        ini_files = self._generate_ini_from_case_config(case_no, ini_config)
+
+        self._current_cfg_path = cfg_path
+        self._current_ini_path = ini_files['para_info']
+
+        return {
+            'cfg_path': cfg_path,
+            'ini_path': ini_files['para_info'],
+            'select_info_path': ini_files.get('select_info', ''),
+            'para_info_path': ini_files['para_info']
+        }
+
+    def _generate_ini_from_case_config(self, case_no: str, ini_config: str) -> Dict[str, str]:
+        """
+        从用例映射的ini_config生成SelectInfo.ini文件
+
+        Args:
+            case_no: 用例编号
+            ini_config: SelectInfo.ini配置内容（原始INI格式）
+
+        Returns:
+            包含ini文件路径的字典
+        """
+        output_dir = os.path.join(self.base_config_dir, 'generated', case_no)
+        os.makedirs(output_dir, exist_ok=True)
+
+        select_info_path = os.path.join(output_dir, "SelectInfo.ini")
+        para_info_path = os.path.join(output_dir, "ParaInfo.ini")
+
+        if ini_config:
+            with open(select_info_path, 'w', encoding='utf-8') as f:
+                f.write(ini_config)
+            with open(para_info_path, 'w', encoding='utf-8') as f:
+                f.write(ini_config)
+        else:
+            with open(select_info_path, 'w', encoding='utf-8') as f:
+                f.write(f"[CFG_PARA]\n{case_no}=1\n")
+            with open(para_info_path, 'w', encoding='utf-8') as f:
+                f.write(f"[CFG_PARA]\n; 未配置参数\n")
+
+        logger.debug(f"为用例 {case_no} 生成SelectInfo.ini: {select_info_path}")
+
+        return {
+            'select_info': select_info_path,
+            'para_info': para_info_path
+        }

@@ -1,5 +1,6 @@
 """
 Excel 解析工具 - 用于从 Excel 文件中解析用例映射数据
+使用 openpyxl（纯 Python）替代 pandas 以简化 PyInstaller 打包
 """
 import os
 import tempfile
@@ -14,7 +15,7 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 try:
-    import pandas as pd
+    from openpyxl import load_workbook
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
@@ -65,7 +66,14 @@ class CaseMappingExcelParser:
     @classmethod
     def is_available(cls) -> bool:
         """检查依赖是否满足"""
-        return PANDAS_AVAILABLE
+        return OPENPYXL_AVAILABLE
+
+    @classmethod
+    def _get_cell_value(cls, cell) -> str:
+        """获取单元格值并转换为字符串"""
+        if cell.value is None:
+            return ''
+        return str(cell.value)
 
     @classmethod
     def parse_file(cls, file_path: str, sheet_index: int = 0) -> Dict[str, Any]:
@@ -84,21 +92,28 @@ class CaseMappingExcelParser:
                 'current_sheet': int      # 当前工作表索引
             }
         """
-        if not PANDAS_AVAILABLE:
-            raise ImportError("pandas not installed, run: pip install pandas openpyxl")
+        if not OPENPYXL_AVAILABLE:
+            raise ImportError("openpyxl not installed, run: pip install openpyxl")
 
         try:
-            excel_file = pd.ExcelFile(file_path)
-            sheet_names = excel_file.sheet_names
+            wb = load_workbook(file_path, data_only=True)
+            sheet_names = wb.sheetnames
 
             if sheet_index >= len(sheet_names):
                 sheet_index = 0
 
-            df = pd.read_excel(file_path, sheet_name=sheet_index, dtype=str, keep_default_na=False)
-            df = df.fillna('')
+            ws = wb[sheet_names[sheet_index]]
 
-            headers = df.columns.tolist()
-            data = df.values.tolist()
+            headers = []
+            data = []
+
+            for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if row_idx == 1:
+                    headers = [str(cell) if cell is not None else '' for cell in row]
+                else:
+                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    if any(cell for cell in row_data):
+                        data.append(row_data)
 
             return {
                 'headers': headers,
@@ -121,19 +136,23 @@ class CaseMappingExcelParser:
         Returns:
             [{'index': 0, 'name': 'Sheet1', 'row_count': 100}, ...]
         """
-        if not PANDAS_AVAILABLE:
-            raise ImportError("pandas not installed")
+        if not OPENPYXL_AVAILABLE:
+            raise ImportError("openpyxl not installed")
 
         try:
-            excel_file = pd.ExcelFile(file_path)
+            wb = load_workbook(file_path, data_only=True)
             sheets_info = []
 
-            for idx, sheet_name in enumerate(excel_file.sheet_names):
-                df = pd.read_excel(file_path, sheet_name=idx, dtype=str, keep_default_na=False)
+            for idx, sheet_name in enumerate(wb.sheetnames):
+                ws = wb[sheet_name]
+                row_count = 0
+                for row in ws.iter_rows(values_only=True):
+                    if any(cell for cell in row):
+                        row_count += 1
                 sheets_info.append({
                     'index': idx,
                     'name': sheet_name,
-                    'row_count': len(df)
+                    'row_count': row_count
                 })
 
             return sheets_info
@@ -175,13 +194,15 @@ class CaseMappingExcelParser:
 
     @classmethod
     def apply_mapping(cls, file_path: str, column_mapping: Dict[str, str],
-                     default_category: str = None, sheet_index: int = 0) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+                     default_category: str = None, batch_script_path: str = None,
+                     sheet_index: int = 0) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """根据列映射转换数据
 
         Args:
             file_path: Excel 文件路径
             column_mapping: {Excel列名: 系统字段名}
             default_category: 默认分类（当未映射category时使用）
+            batch_script_path: 批量设置的脚本路径前缀
             sheet_index: 工作表索引
 
         Returns:
@@ -199,6 +220,7 @@ class CaseMappingExcelParser:
         for row_idx, row in enumerate(data, start=2):
             row_dict = {}
             row_dict['_row'] = row_idx
+            row_dict['_batch_script_path'] = batch_script_path
 
             first_cell_value = str(row[0]).strip() if len(row) > 0 else ''
             if any(keyword in first_cell_value for keyword in hint_keywords):
@@ -282,7 +304,18 @@ class CaseMappingExcelParser:
 
             item['module'] = mapping.get('module', '').strip()
 
-            item['script_path'] = mapping.get('script_path', '').strip()
+            batch_script_path = mapping.get('_batch_script_path')
+            script_path = mapping.get('script_path', '').strip()
+            if batch_script_path:
+                if script_path:
+                    if script_path.startswith('/') or script_path.startswith('\\') or script_path[1:2] == ':':
+                        item['script_path'] = script_path
+                    else:
+                        item['script_path'] = batch_script_path.rstrip('/\\') + '/' + script_path
+                else:
+                    item['script_path'] = batch_script_path
+            else:
+                item['script_path'] = script_path
 
             priority_str = mapping.get('priority', '').strip()
             item['priority'] = int(priority_str) if priority_str else 0
@@ -440,26 +473,6 @@ class CaseMappingExcelParser:
         wb.save(output_path)
         logger.info(f"创建导入模板: {output_path}")
 
-        return output_path
-
-    @classmethod
-    def _create_template_with_pandas(cls, output_path: str) -> str:
-        """使用 pandas 创建模板（简单版本，不依赖 openpyxl 格式）"""
-        import pandas as pd
-
-        headers = [f[1] for f in cls.SYSTEM_FIELDS]
-
-        example_data = [
-            ['CANOE-001', 'CANoe安装路径检查', 'canoe', 'CANoe测试', 'core/functional_test_runner.py', 1, '1.0', '环境检查,CANoe', '检查CANoe安装路径是否存在', True],
-            ['CANOE-002', 'CANoe可执行文件检查', 'canoe', 'CANoe测试', 'core/functional_test_runner.py', 1, '1.0', '环境检查,CANoe', '检查CANoe64.exe是否存在', True],
-            ['SYS-001', 'Python环境检查', 'system', '系统环境测试', 'core/functional_test_runner.py', 1, '1.0', '环境检查,Python', '检查Python版本和必要模块', True],
-            ['TS-001', 'TSMaster安装路径检查', 'tsmaster', 'TSMaster测试', 'core/functional_test_runner.py', 1, '1.0', '环境检查,TSMaster', '检查TSMaster安装路径', True],
-        ]
-
-        df = pd.DataFrame(example_data, columns=headers)
-        df.to_excel(output_path, sheet_name='用例映射导入模板', index=False)
-
-        logger.info(f"创建导入模板(使用pandas): {output_path}")
         return output_path
 
     @classmethod

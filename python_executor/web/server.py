@@ -26,11 +26,10 @@ def create_app() -> Flask:
     """创建 Flask 应用"""
     # 确定模板和静态文件路径
     if getattr(sys, 'frozen', False):
-        # 打包后的exe运行 - PyInstaller 使用 _MEIPASS 作为临时目录
         if hasattr(sys, '_MEIPASS'):
             base_dir = sys._MEIPASS
         else:
-            base_dir = os.path.dirname(os.sys.executable)
+            base_dir = os.path.dirname(sys.executable)
         template_dir = os.path.join(base_dir, 'web', 'templates')
         static_dir = os.path.join(base_dir, 'web', 'static')
     else:
@@ -258,7 +257,7 @@ def register_routes(app: Flask):
             
             # 确定导出路径
             if getattr(sys, 'frozen', False):
-                base_dir = os.path.dirname(os.sys.executable)
+                base_dir = os.path.dirname(sys.executable)
             else:
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             

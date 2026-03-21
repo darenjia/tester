@@ -200,28 +200,32 @@ class TaskExecutorProduction:
     @TASK_CIRCUIT_BREAKER
     def _execute_task_production(self, task: Task):
         """生产环境任务执行"""
+        logger.info(f"[_execute_task_production] 开始执行任务: task_id={task.task_id}, task_type={getattr(task, 'task_type', 'N/A')}, tool_type={getattr(task, 'tool_type', 'N/A')}")
+
         with self._lock:
             if self.current_task is not None:
                 logger.warning("已有任务正在执行")
                 return
-            
+
             self.current_task = task
             self._stop_event.clear()
-        
+
         # 初始化性能指标
         self._current_metrics = TaskMetrics(task.task_id)
         self._task_queue.mark_processing(task.task_id, task)
-        
+
         try:
             logger.info(f"开始执行任务: {task.task_id}")
             self._current_metrics.record_step('start', 0)
-            
+
             # 初始化结果收集器
             self.current_collector = ResultCollector(task.task_id)
-            
+
             # 更新状态为运行中
             self._update_task_status(task.task_id, TaskStatus.RUNNING)
-            
+
+            logger.info(f"[_execute_task_production] 任务初始化完成，开始配置准备阶段")
+
             # ========== 配置准备（新增）==========
             cfg_path = None
             if task.config_name or task.base_config_dir:
@@ -229,6 +233,7 @@ class TaskExecutorProduction:
                 self.current_collector.add_log("INFO", "正在准备测试配置...")
 
                 base_dir = task.base_config_dir or settings.config_base_dir
+                logger.info(f"[_execute_task_production] base_dir={base_dir}, config_name={task.config_name}")
                 self.config_manager = TestConfigManager(base_config_dir=base_dir)
 
                 # 确定配置名称
@@ -466,27 +471,79 @@ class TaskExecutorProduction:
             
             # 短暂延时
             time.sleep(0.5)
-        
+
         return results
-    
+
+    def _find_cfg_in_directory(self, directory: str, case_id: str = None) -> Optional[str]:
+        """
+        在目录中查找.cfg文件
+
+        Args:
+            directory: 目录路径
+            case_id: 用例ID（可选，用于匹配文件名）
+
+        Returns:
+            .cfg文件路径，未找到返回None
+        """
+        if not os.path.isdir(directory):
+            return None
+
+        # 获取目录下所有.cfg文件
+        cfg_files = [f for f in os.listdir(directory) if f.endswith('.cfg')]
+
+        if not cfg_files:
+            logger.warning(f"目录中未找到.cfg文件: {directory}")
+            return None
+
+        # 如果提供了case_id，尝试匹配
+        if case_id:
+            # 尝试精确匹配 case_id.cfg
+            for cfg_file in cfg_files:
+                if cfg_file.replace('.cfg', '') == case_id:
+                    return os.path.join(directory, cfg_file)
+
+            # 尝试模糊匹配（case_id作为前缀或后缀）
+            for cfg_file in cfg_files:
+                cfg_name = cfg_file.replace('.cfg', '')
+                if case_id in cfg_name or cfg_name in case_id:
+                    return os.path.join(directory, cfg_file)
+
+        # 如果只有一个.cfg文件，直接返回
+        if len(cfg_files) == 1:
+            return os.path.join(directory, cfg_files[0])
+
+        # 多于一个.cfg文件但没有匹配，返回第一个
+        logger.warning(f"目录中有多个.cfg文件且未匹配到特定的case_id，返回第一个: {cfg_files[0]}")
+        return os.path.join(directory, cfg_files[0])
+
     def _execute_test_items_with_config(self, task: Task) -> list:
         """
         使用配置执行测试项 - 新的配置驱动执行方式
 
         执行流程：
         1. 遍历任务中的测试用例
-        2. 对每个用例，通过CANoe系统变量设置用例名称和参数
-        3. 触发测试执行
-        4. 等待并获取结果
+        2. 对每个用例，根据用例映射获取cfg和ini配置
+        3. 重新加载cfg配置（如有变化）
+        4. 根据用例配置更新ini文件
+        5. 触发测试执行
+        6. 等待并获取结果
         """
         results = []
         total_items = len(task.test_items)
 
-        logger.info(f"开始执行{total_items}个测试项（配置驱动方式）")
+        logger.info(f"[_execute_test_items_with_config] 开始执行 {total_items} 个测试项（配置驱动方式）")
         self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
 
         # 获取命名空间
         namespace = task.canoe_namespace or settings.canoe_namespace
+
+        # 初始化配置管理器（用于生成ini）
+        base_dir = task.base_config_dir or settings.config_base_dir
+        logger.info(f"[_execute_test_items_with_config] base_dir={base_dir}, namespace={namespace}")
+        test_config_manager = TestConfigManager(base_config_dir=base_dir)
+
+        # 记录当前加载的cfg路径，用于判断是否需要重新加载
+        current_cfg_path = None
 
         for i, test_item in enumerate(task.test_items, 1):
             # 检查是否被取消
@@ -495,20 +552,42 @@ class TaskExecutorProduction:
                 self.current_collector.add_log("INFO", "任务被取消")
                 break
 
-            # 通过用例映射查找脚本标识
+            # 通过用例映射查找脚本标识和配置
             mapping_manager = get_case_mapping_manager()
-            mapping = mapping_manager.get_mapping_by_name(test_item.name)
+            case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None)
+            logger.info(f"[_execute_test_items_with_config] 第{i}项: test_item.name={test_item.name}, case_no={case_no}")
+            logger.info(f"[_execute_test_items_with_config] 从映射管理器获取映射: case_no={case_no}")
+
+            if case_no:
+                mapping = mapping_manager.get_mapping(case_no)
+                logger.info(f"[_execute_test_items_with_config] 获取到的映射: {mapping}")
+                if mapping:
+                    logger.info(f"[_execute_test_items_with_config] 映射详情: case_no={mapping.case_no}, enabled={mapping.enabled}, script_path={mapping.script_path}")
+            else:
+                mapping = None
+                logger.info(f"[_execute_test_items_with_config] case_no为空，跳过映射查找")
 
             if mapping and mapping.enabled:
                 case_id = mapping.case_no
-                logger.debug(f"用例映射找到: {test_item.name} -> {case_id}")
+                script_path = mapping.script_path
+                ini_config = mapping.ini_config
+                logger.info(f"[_execute_test_items_with_config] 用例映射找到: name={test_item.name}, case_id={case_id}, script_path={script_path}, ini_config={ini_config[:100] if ini_config else None}...")
+
+                # 如果script_path是目录，在目录中查找.cfg文件
+                if script_path and os.path.isdir(script_path):
+                    script_path = self._find_cfg_in_directory(script_path, case_id)
+                    logger.info(f"[_execute_test_items_with_config] 在目录中找到cfg文件: {script_path}")
             else:
                 case_id = test_item.name
+                script_path = None
+                ini_config = None
                 if mapping is None:
-                    logger.debug(f"未找到用例映射，使用原始名称: {test_item.name}")
+                    logger.info(f"[_execute_test_items_with_config] 未找到用例映射，使用原始名称: {test_item.name}")
+                else:
+                    logger.info(f"[_execute_test_items_with_config] 用例未启用: {case_no}")
 
             progress = int((i / total_items) * 100)
-            logger.info(f"执行测试项 {i}/{total_items}: {test_item.name} (case_id: {case_id})")
+            logger.info(f"[_execute_test_items_with_config] 执行测试项 {i}/{total_items}: {test_item.name} (case_id: {case_id}, script_path: {script_path})")
 
             # 更新进度
             self._update_task_status(
@@ -518,9 +597,43 @@ class TaskExecutorProduction:
                 progress
             )
 
-            # 使用新的用例执行方式
+            # 如果用例有独立的script_path且与当前加载的不同，需要重新加载配置
+            if script_path and script_path != current_cfg_path:
+                logger.info(f"切换配置: {current_cfg_path} -> {script_path}")
+                self.current_collector.add_log("INFO", f"切换配置: {script_path}")
+
+                # 停止测量
+                self._stop_measurement(task)
+
+                # 断开连接
+                if self.controller:
+                    try:
+                        self.controller.disconnect()
+                    except Exception as e:
+                        logger.warning(f"断开连接失败: {e}")
+
+                # 重新连接
+                self._connect_tool_with_retry(task)
+
+                # 加载新配置
+                self._load_configuration_by_path(script_path)
+
+                # 重新启动测量
+                self._start_measurement(task)
+
+                current_cfg_path = script_path
+
+            # 如果用例有ini配置，生成ini文件
+            if ini_config and test_config_manager:
+                try:
+                    ini_info = test_config_manager._generate_ini_from_case_config(case_no, ini_config)
+                    logger.debug(f"为用例 {case_no} 生成ini: {ini_info}")
+                    self.current_collector.add_log("INFO", f"用例 {case_no} ini配置已更新")
+                except Exception as e:
+                    logger.warning(f"生成ini配置失败: {e}")
+
+            # 执行用例
             if hasattr(self.controller, 'run_test_case_with_config'):
-                # 新方式：通过系统变量控制用例执行
                 result = self.controller.run_test_case_with_config(
                     test_case_name=case_id,
                     config={
@@ -529,10 +642,9 @@ class TaskExecutorProduction:
                         'repeat': getattr(test_item, 'repeat', 1)
                     },
                     namespace=namespace,
-                    timeout=task.timeout // max(len(task.test_items), 1)  # 每个用例的超时时间
+                    timeout=task.timeout // max(len(task.test_items), 1)
                 )
 
-                # 转换结果为TestResult格式
                 if result.get('success'):
                     test_result = TestResult(
                         name=test_item.name,
@@ -548,14 +660,12 @@ class TaskExecutorProduction:
                         details=result
                     )
             else:
-                # 回退到原有执行方式
                 test_result = self._execute_single_item(test_item)
 
             results.append(test_result)
             self.current_collector.add_test_result(test_result)
             self._report_progress(task.task_id, test_item, test_result)
 
-            # 短暂延时
             time.sleep(0.5)
 
         return results
@@ -669,14 +779,23 @@ class TaskExecutorProduction:
         except Exception as e:
             logger.warning(f"清理控制器资源失败: {e}")
     
-    def cancel_task(self) -> bool:
-        """取消当前任务"""
+    def cancel_task(self, task_id: str = None) -> bool:
+        """取消指定任务"""
         if self.current_task is None:
             logger.warning("没有正在执行的任务")
             return False
-        
+
+        # 如果指定了task_id，检查是否匹配
+        if task_id and self.current_task.task_id != task_id:
+            logger.warning(f"任务ID不匹配: 当前执行的是 {self.current_task.task_id}，要取消的是 {task_id}")
+            return False
+
         logger.info(f"正在取消任务: {self.current_task.task_id}")
         self._stop_event.set()
+
+        # 更新任务状态为已取消
+        self._update_task_status(self.current_task.task_id, TaskStatus.CANCELLED, "任务被用户取消")
+
         return True
     
     def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):

@@ -3,6 +3,7 @@
 管理测试配置文件的本地缓存，提高配置加载效率
 """
 import os
+import sys
 import json
 import hashlib
 import shutil
@@ -32,9 +33,8 @@ class ConfigCacheManager:
             cache_dir: 缓存目录路径，默认使用 workspace/cache/configs
         """
         if cache_dir is None:
-            # 获取程序所在目录
-            if getattr(os.sys, 'frozen', False):
-                base_dir = os.path.dirname(os.sys.executable)
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
             else:
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             cache_dir = os.path.join(base_dir, "workspace", "cache", "configs")

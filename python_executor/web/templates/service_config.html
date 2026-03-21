@@ -505,18 +505,18 @@
             });
             
             const result = await response.json();
-            
+
             if (result.success) {
-                alert('服务将在2秒后重启，请稍候...');
+                showMessage('服务将在2秒后重启，请稍候...', 'success');
                 setTimeout(() => {
                     location.reload();
                 }, 3000);
             } else {
-                alert('重启失败: ' + result.message);
+                showMessage('重启失败: ' + result.message, 'error');
             }
         } catch (error) {
             console.error('重启服务失败:', error);
-            alert('重启失败: ' + error.message);
+            showMessage('重启失败: ' + error.message, 'error');
         }
     }
     

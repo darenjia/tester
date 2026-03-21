@@ -206,6 +206,13 @@
         margin-bottom: 12px;
     }
 
+    .mapping-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #6366f1;
+    }
+
     .mapping-status {
         width: 8px;
         height: 8px;
@@ -293,6 +300,18 @@
         border-top: 1px solid #e5e7eb;
     }
 
+    .status-running {
+        color: #f59e0b;
+    }
+
+    .status-completed {
+        color: #10b981;
+    }
+
+    .status-failed {
+        color: #ef4444;
+    }
+
     .empty-state {
         text-align: center;
         padding: 60px 20px;
@@ -303,6 +322,20 @@
         font-size: 48px;
         margin-bottom: 16px;
         color: #d1d5db;
+    }
+
+    .progress-bar {
+        height: 20px;
+        background: #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #818cf8);
+        transition: width 0.3s ease;
+        border-radius: 10px;
     }
 
     .btn {
@@ -352,6 +385,15 @@
 
     .btn-danger:hover {
         background: #dc2626;
+    }
+
+    .btn-warning {
+        background: #f59e0b;
+        color: white;
+    }
+
+    .btn-warning:hover {
+        background: #d97706;
     }
 
     .btn-sm {
@@ -632,8 +674,17 @@
 
     <div class="mapping-panel">
         <div class="mapping-header">
-            <h3 id="mapping-panel-title">用例映射列表</h3>
+            <h3 id="mapping-panel-title">
+                <label class="checkbox-label" style="margin-right: 16px;">
+                    <input type="checkbox" id="select-all-mappings" onchange="toggleSelectAll()">
+                    全选
+                </label>
+                用例映射列表
+            </h3>
             <div class="mapping-actions">
+                <button class="btn btn-danger btn-sm" id="btn-batch-delete" style="display: none;" onclick="batchDeleteMappings()">
+                    <i class="fas fa-trash"></i> 批量删除 (<span id="selected-count">0</span>)
+                </button>
                 <button class="btn btn-secondary btn-sm" onclick="loadMappings()">
                     <i class="fas fa-sync-alt"></i> 刷新
                 </button>
@@ -750,6 +801,8 @@
                     allMappings = allMappings.filter(m => currentFilters.categories.includes(m.category));
                 }
 
+                currentPage = 1;
+                resetSelectionState();
                 renderMappingList();
                 updateStatistics();
             }
@@ -901,6 +954,7 @@
         return `
             <div class="mapping-item ${itemClass}" id="mapping-${mapping.case_no}">
                 <div class="mapping-item-header">
+                    <input type="checkbox" class="mapping-checkbox" value="${mapping.case_no}" onchange="updateBatchDeleteButton()">
                     <div class="mapping-status ${statusClass}"></div>
                     <span class="mapping-id">${mapping.case_no}</span>
                     <span class="mapping-name">${mapping.case_name}</span>
@@ -930,6 +984,9 @@
                     </div>
                 ` : ''}
                 <div class="mapping-item-actions">
+                    <button class="btn btn-success btn-sm" onclick="testMapping('${mapping.case_no}')">
+                        <i class="fas fa-play"></i> 测试
+                    </button>
                     <button class="btn btn-secondary btn-sm" onclick="showEditModal('${mapping.case_no}')">
                         <i class="fas fa-edit"></i> 编辑
                     </button>
@@ -1020,7 +1077,7 @@
         editingMapping = allMappings.find(m => m.case_no === caseNo);
 
         if (!editingMapping) {
-            alert('用例映射不存在');
+            showMessage('用例映射不存在', 'error');
             return;
         }
 
@@ -1031,6 +1088,7 @@
         document.getElementById('category').value = editingMapping.category;
         document.getElementById('module').value = editingMapping.module || '';
         document.getElementById('script_path').value = editingMapping.script_path || '';
+        document.getElementById('ini_config').value = editingMapping.ini_config || '';
         document.getElementById('priority').value = editingMapping.priority || 0;
         document.getElementById('version').value = editingMapping.version || '1.0';
         document.getElementById('description').value = editingMapping.description || '';
@@ -1051,6 +1109,7 @@
         const category = document.getElementById('category').value;
         const module = document.getElementById('module').value.trim();
         const scriptPath = document.getElementById('script_path').value.trim();
+        const iniConfig = document.getElementById('ini_config').value.trim();
         const priority = parseInt(document.getElementById('priority').value) || 0;
         const version = document.getElementById('version').value.trim() || '1.0';
         const description = document.getElementById('description').value.trim();
@@ -1059,15 +1118,15 @@
         const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
 
         if (!caseNo) {
-            alert('Case编号不能为空');
+            showMessage('Case编号不能为空', 'warning');
             return;
         }
         if (!caseName) {
-            alert('用例名称不能为空');
+            showMessage('用例名称不能为空', 'warning');
             return;
         }
         if (!category) {
-            alert('分类不能为空');
+            showMessage('分类不能为空', 'warning');
             return;
         }
 
@@ -1077,6 +1136,7 @@
             category: category,
             module: module,
             script_path: scriptPath,
+            ini_config: iniConfig,
             priority: priority,
             version: version,
             description: description,
@@ -1105,16 +1165,16 @@
             const result = await response.json();
 
             if (result.success) {
-                alert(currentModalMode === 'add' ? '创建成功' : '更新成功');
+                showMessage(currentModalMode === 'add' ? '创建成功' : '更新成功', 'success');
                 closeModal();
                 loadMappings();
                 loadHistory();
             } else {
-                alert(result.message || '操作失败');
+                showMessage(result.message || '操作失败', 'error');
             }
         } catch (error) {
             console.error('保存映射失败:', error);
-            alert('保存失败: ' + error.message);
+            showMessage('保存失败: ' + error.message, 'error');
         }
     }
 
@@ -1131,14 +1191,14 @@
             const result = await response.json();
 
             if (result.success) {
-                alert('启用成功');
+                showMessage('启用成功', 'success');
                 loadMappings();
                 loadHistory();
             } else {
-                alert(result.message || '启用失败');
+                showMessage(result.message || '启用失败', 'error');
             }
         } catch (error) {
-            alert('启用失败: ' + error.message);
+            showMessage('启用失败: ' + error.message, 'error');
         }
     }
 
@@ -1155,14 +1215,79 @@
             const result = await response.json();
 
             if (result.success) {
-                alert('禁用成功');
+                showMessage('禁用成功', 'success');
                 loadMappings();
                 loadHistory();
             } else {
-                alert(result.message || '禁用失败');
+                showMessage(result.message || '禁用失败', 'error');
             }
         } catch (error) {
-            alert('禁用失败: ' + error.message);
+            showMessage('禁用失败: ' + error.message, 'error');
+        }
+    }
+
+    function resetSelectionState() {
+        const selectAllCheckbox = document.getElementById('select-all-mappings');
+        if (selectAllCheckbox) selectAllCheckbox.checked = false;
+        const batchBtn = document.getElementById('btn-batch-delete');
+        if (batchBtn) batchBtn.style.display = 'none';
+        const countSpan = document.getElementById('selected-count');
+        if (countSpan) countSpan.textContent = '0';
+    }
+
+    function toggleSelectAll() {
+        const selectAllCheckbox = document.getElementById('select-all-mappings');
+        const checkboxes = document.querySelectorAll('.mapping-checkbox');
+        checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+        updateBatchDeleteButton();
+    }
+
+    function updateBatchDeleteButton() {
+        const checkboxes = document.querySelectorAll('.mapping-checkbox:checked');
+        const count = checkboxes.length;
+        const btn = document.getElementById('btn-batch-delete');
+        const countSpan = document.getElementById('selected-count');
+        countSpan.textContent = count;
+        btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+
+    function getSelectedCaseNos() {
+        const checkboxes = document.querySelectorAll('.mapping-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    async function batchDeleteMappings() {
+        const selectedCases = getSelectedCaseNos();
+        if (selectedCases.length === 0) {
+            showMessage('请选择要删除的用例映射', 'warning');
+            return;
+        }
+
+        if (!confirm(`确定要删除选中的 ${selectedCases.length} 个用例映射吗？此操作不可恢复！`)) return;
+
+        try {
+            const response = await fetch('/api/case-mappings/batch/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    case_nos: selectedCases,
+                    changed_by: 'web_user',
+                    reason: '批量删除用例映射'
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage(`删除成功: ${result.data.success}个，失败: ${result.data.failed}个`, 'success');
+                document.getElementById('select-all-mappings').checked = false;
+                loadMappings();
+                loadHistory();
+            } else {
+                showMessage(result.message || '删除失败', 'error');
+            }
+        } catch (error) {
+            showMessage('删除失败: ' + error.message, 'error');
         }
     }
 
@@ -1179,14 +1304,14 @@
             const result = await response.json();
 
             if (result.success) {
-                alert('删除成功');
+                showMessage('删除成功', 'success');
                 loadMappings();
                 loadHistory();
             } else {
-                alert(result.message || '删除失败');
+                showMessage(result.message || '删除失败', 'error');
             }
         } catch (error) {
-            alert('删除失败: ' + error.message);
+            showMessage('删除失败: ' + error.message, 'error');
         }
     }
 
@@ -1204,12 +1329,12 @@
                 a.download = `case_mappings_${new Date().toISOString().slice(0,10)}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
-                alert('导出成功');
+                showMessage('导出成功', 'success');
             } else {
-                alert(result.message || '导出失败');
+                showMessage(result.message || '导出失败', 'error');
             }
         } catch (error) {
-            alert('导出失败: ' + error.message);
+            showMessage('导出失败: ' + error.message, 'error');
         }
     }
 
@@ -1247,7 +1372,7 @@
         if (!file) return;
 
         if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-            alert('只支持 .xlsx 和 .xls 格式');
+            showMessage('只支持 .xlsx 和 .xls 格式', 'warning');
             return;
         }
 
@@ -1267,10 +1392,10 @@
                 currentSheetNames = result.data.sheets.map(s => s.name);
                 showSheetSelector(result.data);
             } else {
-                alert(result.message || '上传失败');
+                showMessage(result.message || '上传失败', 'error');
             }
         } catch (error) {
-            alert('上传失败: ' + error.message);
+            showMessage('上传失败: ' + error.message, 'error');
         }
     }
 
@@ -1280,7 +1405,7 @@
         if (!file) return;
 
         if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-            alert('只支持 .xlsx 和 .xls 格式');
+            showMessage('只支持 .xlsx 和 .xls 格式', 'warning');
             return;
         }
 
@@ -1300,10 +1425,10 @@
                 currentSheetNames = result.data.sheets.map(s => s.name);
                 showSheetSelector(result.data);
             } else {
-                alert(result.message || '上传失败');
+                showMessage(result.message || '上传失败', 'error');
             }
         } catch (error) {
-            alert('上传失败: ' + error.message);
+            showMessage('上传失败: ' + error.message, 'error');
         }
     }
 
@@ -1388,10 +1513,10 @@
                 currentSheetIndex = newSheetIndex;
                 updateMappingInterface(result.data);
             } else {
-                alert(result.message || '切换工作表失败');
+                showMessage(result.message || '切换工作表失败', 'error');
             }
         } catch (error) {
-            alert('切换工作表失败: ' + error.message);
+            showMessage('切换工作表失败: ' + error.message, 'error');
         }
     }
 
@@ -1412,7 +1537,7 @@
         const fieldsResult = await fieldsResponse.json();
 
         if (!fieldsResult.success) {
-            alert('获取字段信息失败');
+            showMessage('获取字段信息失败', 'error');
             return;
         }
 
@@ -1521,7 +1646,7 @@
         const fieldsResult = await fieldsResponse.json();
 
         if (!fieldsResult.success) {
-            alert('获取字段信息失败');
+            showMessage('获取字段信息失败', 'error');
             return;
         }
 
@@ -1645,11 +1770,17 @@
                 currentSheetIndex = newSheetIndex;
                 updateMappingInterface(result.data);
             } else {
-                alert(result.message || '切换工作表失败');
+                showMessage(result.message || '切换工作表失败', 'error');
             }
         } catch (error) {
-            alert('切换工作表失败: ' + error.message);
+            showMessage('切换工作表失败: ' + error.message, 'error');
         }
+    }
+
+    function toggleBatchScriptPath() {
+        const checkbox = document.getElementById('use-batch-script-path');
+        const input = document.getElementById('batch-script-path-input');
+        input.disabled = !checkbox.checked;
     }
 
     function toggleDefaultCategory() {
@@ -1660,22 +1791,25 @@
 
     async function previewExcelImport() {
         if (!currentExcelFileId) {
-            alert('请先上传文件');
+            showMessage('请先上传文件', 'warning');
             return;
         }
 
         if (!Object.values(currentColumnMapping).includes('case_no')) {
-            alert('请至少映射 case_no 字段');
+            showMessage('请至少映射 case_no 字段', 'warning');
             return;
         }
 
         let defaultCategory = document.getElementById('default-category-select').value;
         const useDefaultCategory = document.getElementById('use-default-category').checked;
+        const useBatchScriptPath = document.getElementById('use-batch-script-path').checked;
+        const batchScriptPath = document.getElementById('batch-script-path-input').value.trim();
 
         const requestData = {
             file_id: currentExcelFileId,
             column_mapping: currentColumnMapping,
             default_category: useDefaultCategory ? defaultCategory : null,
+            batch_script_path: useBatchScriptPath ? batchScriptPath : null,
             sheet_index: currentSheetIndex
         };
 
@@ -1692,10 +1826,10 @@
                 currentPreviewData = result.data;
                 showPreviewResult(result.data);
             } else {
-                alert(result.message || '预览失败');
+                showMessage(result.message || '预览失败', 'error');
             }
         } catch (error) {
-            alert('预览失败: ' + error.message);
+            showMessage('预览失败: ' + error.message, 'error');
         }
     }
 
@@ -1729,31 +1863,58 @@
         const thead = previewTable.querySelector('thead');
         const tbody = previewTable.querySelector('tbody');
 
-        thead.innerHTML = '<tr><th>Case编号</th><th>用例名称</th><th>分类</th><th>模块</th><th>优先级</th><th>启用</th></tr>';
+        thead.innerHTML = '<tr><th><input type="checkbox" id="preview-select-all" onchange="togglePreviewSelectAll()"></th><th>Case编号</th><th>用例名称</th><th>分类</th><th>模块</th><th>脚本路径</th><th>优先级</th><th>启用</th></tr>';
 
         if (!previewData.mappings || previewData.mappings.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">没有数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6b7280;">没有数据</td></tr>';
             return;
         }
 
         let html = '';
-        previewData.mappings.slice(0, 10).forEach(m => {
+        previewData.mappings.forEach((m, idx) => {
             html += `<tr>
+                <td><input type="checkbox" class="preview-row-checkbox" data-index="${idx}" checked></td>
                 <td style="font-family: monospace;">${m.case_no || ''}</td>
                 <td>${m.case_name || ''}</td>
                 <td>${m.category || ''}</td>
                 <td>${m.module || ''}</td>
+                <td>${m.script_path || ''}</td>
                 <td>${m.priority || 0}</td>
                 <td>${m.enabled ? '是' : '否'}</td>
             </tr>`;
         });
         tbody.innerHTML = html;
 
-        if (previewData.mappings.length > 10) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td colspan="6" style="text-align: center; color: #6b7280;">... 还有 ${previewData.mappings.length - 10} 行</td>`;
-            tbody.appendChild(tr);
+        updatePreviewSelectionCount();
+    }
+
+    function togglePreviewSelectAll() {
+        const selectAll = document.getElementById('preview-select-all').checked;
+        document.querySelectorAll('.preview-row-checkbox').forEach(cb => cb.checked = selectAll);
+        updatePreviewSelectionCount();
+    }
+
+    function updatePreviewSelectionCount() {
+        const checked = document.querySelectorAll('.preview-row-checkbox:checked').length;
+        const total = document.querySelectorAll('.preview-row-checkbox').length;
+        let countDiv = document.getElementById('preview-selected-count');
+        if (!countDiv) {
+            countDiv = document.createElement('div');
+            countDiv.id = 'preview-selected-count';
+            countDiv.style.marginTop = '12px';
+            countDiv.style.padding = '8px 12px';
+            countDiv.style.background = '#f3f4f6';
+            countDiv.style.borderRadius = '6px';
+            countDiv.style.fontSize = '13px';
+            const container = document.querySelector('#excel-preview-area h4').parentElement;
+            container.appendChild(countDiv);
         }
+        countDiv.innerHTML = `<strong>已选择: ${checked} / ${total}</strong> <button class="btn btn-secondary btn-sm" style="margin-left: 8px;" onclick="togglePreviewSelectAll()">反选</button>`;
+    }
+
+    function getSelectedPreviewIndices() {
+        const checkboxes = document.querySelectorAll('.preview-row-checkbox:checked');
+        return Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
     }
 
     function backToMapping() {
@@ -1766,7 +1927,13 @@
 
     async function executeExcelImport() {
         if (!currentExcelFileId || !currentPreviewData) {
-            alert('请先预览数据');
+            showMessage('请先预览数据', 'warning');
+            return;
+        }
+
+        const selectedIndices = getSelectedPreviewIndices();
+        if (selectedIndices.length === 0) {
+            showMessage('请选择要导入的数据行', 'warning');
             return;
         }
 
@@ -1774,6 +1941,8 @@
         const changeReason = document.getElementById('import-reason').value || '从Excel批量导入';
         const useDefaultCategory = document.getElementById('use-default-category').checked;
         const defaultCategory = useDefaultCategory ? document.getElementById('default-category-select').value : null;
+        const useBatchScriptPath = document.getElementById('use-batch-script-path').checked;
+        const batchScriptPath = useBatchScriptPath ? document.getElementById('batch-script-path-input').value.trim() : null;
 
         try {
             const response = await fetch('/api/case-mappings/import/execute', {
@@ -1783,6 +1952,8 @@
                     file_id: currentExcelFileId,
                     column_mapping: currentColumnMapping,
                     default_category: defaultCategory,
+                    batch_script_path: batchScriptPath,
+                    selected_indices: selectedIndices,
                     sheet_index: currentSheetIndex,
                     overwrite: overwrite,
                     changed_by: 'web_user',
@@ -1795,10 +1966,10 @@
             if (result.success) {
                 showImportResult(result.data);
             } else {
-                alert(result.message || '导入失败');
+                showMessage(result.message || '导入失败', 'error');
             }
         } catch (error) {
-            alert('导入失败: ' + error.message);
+            showMessage('导入失败: ' + error.message, 'error');
         }
     }
 
@@ -1829,12 +2000,60 @@
         try {
             window.location.href = '/api/case-mappings/import/template';
         } catch (error) {
-            alert('下载模板失败: ' + error.message);
+            showMessage('下载模板失败: ' + error.message, 'error');
         }
     }
 
+    function chooseFolder(inputId) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+
+        input.webkitdirectory = true;
+        input.accept = '.cfg,.xml,.xlsx,.xls,.json,.ini,.exe,';
+        input.onchange = function(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                let folderPath = '';
+                if (files[0].webkitRelativePath) {
+                    const fullPath = files[0].webkitRelativePath;
+                    const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                    if (lastSep > 0) {
+                        folderPath = fullPath.substring(0, lastSep);
+                    }
+                }
+
+                if (!folderPath) {
+                    try {
+                        if (files[0].path) {
+                            const fullPath = files[0].path;
+                            const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+                            if (lastSep > 0) {
+                                folderPath = fullPath.substring(0, lastSep);
+                            }
+                        }
+                    } catch (err) {
+                    }
+                }
+
+                if (!folderPath && files[0].name) {
+                    folderPath = files[0].name;
+                }
+
+                const targetInput = document.getElementById(inputId);
+                if (targetInput && folderPath) {
+                    targetInput.value = folderPath;
+                }
+            }
+            document.body.removeChild(input);
+        };
+
+        input.click();
+    }
+
     function viewChangeDetail(caseNo) {
-        alert(`查看 ${caseNo} 的变更详情功能开发中...`);
+        showMessage(`查看 ${caseNo} 的变更详情功能开发中...`, 'warning');
     }
 
     let syncModalData = [];
@@ -1851,12 +2070,135 @@
         document.getElementById('sync-modal-overlay').style.display = 'none';
     }
 
+    let currentTestId = null;
+    let testPollInterval = null;
+
+    async function testMapping(caseNo) {
+        try {
+            const response = await fetch(`/api/case-mappings/${caseNo}/test`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                currentTestId = result.data.test_id;
+                showTestProgressModal(caseNo, result.data.test_id);
+                startTestPolling(caseNo, result.data.test_id);
+            } else {
+                showMessage(result.message || '启动测试失败', 'error');
+            }
+        } catch (error) {
+            console.error('启动测试失败:', error);
+            showMessage('启动测试失败: ' + error.message, 'error');
+        }
+    }
+
+    function showTestProgressModal(caseNo, testId) {
+        document.getElementById('test-case-no').textContent = caseNo;
+        document.getElementById('test-progress-fill').style.width = '0%';
+        document.getElementById('test-progress-text').textContent = '0%';
+        document.getElementById('test-log-content').innerHTML = '<div class="log-entry" style="margin-bottom: 8px;"><span style="color: #9ca3af;">[等待]</span> 准备执行...</div>';
+        document.getElementById('test-result-area').style.display = 'none';
+        document.getElementById('test-status-badge').innerHTML = '<span class="status-running"><i class="fas fa-spinner fa-spin"></i> 执行中</span>';
+        document.getElementById('test-close-btn').textContent = '关闭';
+        document.getElementById('test-progress-modal').style.display = 'flex';
+    }
+
+    function closeTestProgressModal() {
+        document.getElementById('test-progress-modal').style.display = 'none';
+        stopTestPolling();
+        currentTestId = null;
+    }
+
+    function startTestPolling(caseNo, testId) {
+        stopTestPolling();
+        testPollInterval = setInterval(() => {
+            pollTestStatus(caseNo, testId);
+        }, 2000);
+    }
+
+    function stopTestPolling() {
+        if (testPollInterval) {
+            clearInterval(testPollInterval);
+            testPollInterval = null;
+        }
+    }
+
+    async function pollTestStatus(caseNo, testId) {
+        try {
+            const response = await fetch(`/api/case-mappings/${caseNo}/test/status?test_id=${testId}`);
+            const result = await response.json();
+
+            if (result.success) {
+                updateTestProgress(result.data);
+            }
+        } catch (error) {
+            console.error('获取测试状态失败:', error);
+        }
+    }
+
+    function updateTestProgress(data) {
+        const progress = data.progress || 0;
+        document.getElementById('test-progress-fill').style.width = progress + '%';
+        document.getElementById('test-progress-text').textContent = progress + '%';
+
+        if (data.logs && data.logs.length > 0) {
+            const logContent = document.getElementById('test-log-content');
+            logContent.innerHTML = data.logs.map(log =>
+                `<div class="log-entry" style="margin-bottom: 8px;">${log}</div>`
+            ).join('');
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        if (data.status === 'completed') {
+            stopTestPolling();
+            document.getElementById('test-status-badge').innerHTML = '<span class="status-completed"><i class="fas fa-check-circle"></i> 已完成</span>';
+            document.getElementById('test-progress-fill').style.width = '100%';
+            document.getElementById('test-progress-text').textContent = '100%';
+            showTestResult(data);
+        } else if (data.status === 'failed') {
+            stopTestPolling();
+            document.getElementById('test-status-badge').innerHTML = '<span class="status-failed"><i class="fas fa-times-circle"></i> 失败</span>';
+            showTestResult(data);
+        }
+    }
+
+    function showTestResult(data) {
+        const resultArea = document.getElementById('test-result-area');
+        const resultTitle = document.getElementById('test-result-title');
+        const resultDetails = document.getElementById('test-result-details');
+
+        resultArea.style.display = 'block';
+
+        if (data.result) {
+            const verdict = data.result.verdict || data.result.result || 'UNKNOWN';
+            const passed = verdict === 'PASS' || verdict === '0';
+
+            if (passed) {
+                resultTitle.innerHTML = '<span style="color: #10b981; font-size: 24px;"><i class="fas fa-check-circle"></i> 测试通过</span>';
+            } else {
+                resultTitle.innerHTML = '<span style="color: #ef4444; font-size: 24px;"><i class="fas fa-times-circle"></i> 测试失败</span>';
+            }
+
+            resultDetails.innerHTML = `
+                <p><strong>结果:</strong> ${verdict}</p>
+                <p><strong>详情:</strong> ${JSON.stringify(data.result, null, 2)}</p>
+            `;
+        } else {
+            resultTitle.innerHTML = '<span style="color: #6b7280;">测试结束</span>';
+            resultDetails.innerHTML = '<p>无详细结果信息</p>';
+        }
+
+        document.getElementById('test-close-btn').textContent = '关闭';
+    }
+
     async function submitSync() {
         const textarea = document.getElementById('sync-textarea');
         let inputText = textarea.value.trim();
 
         if (!inputText) {
-            alert('请输入用例数据');
+            showMessage('请输入用例数据', 'warning');
             return;
         }
 
@@ -1864,7 +2206,7 @@
         try {
             cases = JSON.parse(inputText);
         } catch (e) {
-            alert('JSON 格式错误: ' + e.message);
+            showMessage('JSON 格式错误: ' + e.message, 'error');
             return;
         }
 
@@ -1898,10 +2240,10 @@
                     </div>
                 `;
             } else {
-                alert(result.message || '同步失败');
+                showMessage(result.message || '同步失败', 'error');
             }
         } catch (error) {
-            alert('同步失败: ' + error.message);
+            showMessage('同步失败: ' + error.message, 'error');
         }
     }
 </script>
@@ -1945,7 +2287,20 @@
 
                 <div class="form-group">
                     <label>脚本路径</label>
-                    <input type="text" id="script_path" placeholder="脚本文件路径">
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="script_path" placeholder="cfg工程文件路径" style="flex: 1;">
+                        <button type="button" class="btn btn-secondary" onclick="chooseFolder('script_path')">
+                            <i class="fas fa-folder-open"></i> 浏览
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>SelectInfo配置</label>
+                    <textarea id="ini_config" placeholder='[CFG_PARA]
+TG1_TC04_SC01=1
+TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
+                    <small style="color: #6b7280; font-size: 12px;">填写SelectInfo.ini的原始内容</small>
                 </div>
 
                 <div class="form-row">
@@ -2058,6 +2413,15 @@
                     <div style="font-size: 12px; color: #92400e; margin-top: 4px; margin-left: 24px;">当Excel中分类列为空或被忽略时使用此分类</div>
                 </div>
 
+                <div id="batch-script-path-option" style="margin-top: 12px; padding: 12px; background: #eff6ff; border-radius: 6px;">
+                    <label style="font-size: 13px; color: #1e40af; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="use-batch-script-path" onchange="toggleBatchScriptPath()">
+                        批量设置脚本路径:
+                    </label>
+                    <input type="text" id="batch-script-path-input" placeholder="例如: C:\Projects\CANoe\cfg\" style="margin-left: 24px; margin-top: 8px; width: calc(100% - 24px); padding: 6px 8px; border: 1px solid #3b82f6; border-radius: 4px; font-size: 13px;">
+                    <div style="font-size: 12px; color: #1e40af; margin-top: 4px; margin-left: 24px;">将作为所有导入用例的脚本路径基础前缀，可与Excel中的相对路径组合</div>
+                </div>
+
                 <div>
                     <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">数据预览</h4>
                     <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
@@ -2161,6 +2525,40 @@
             <button class="btn btn-secondary" id="btn-back-mapping" style="display: none;" onclick="backToMapping()">返回修改</button>
             <button class="btn btn-primary" id="btn-preview" onclick="previewExcelImport()">预览</button>
             <button class="btn btn-primary" id="btn-import" style="display: none;" onclick="executeExcelImport()">开始导入</button>
+        </div>
+    </div>
+</div>
+
+<div id="test-progress-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-vials"></i> 测试进度 - <span id="test-case-no"></span></h3>
+            <button class="btn-close" onclick="closeTestProgressModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="test-progress-info">
+                <div class="test-status-badge" id="test-status-badge">
+                    <span class="status-running"><i class="fas fa-spinner fa-spin"></i> 执行中</span>
+                </div>
+            </div>
+            <div class="progress-bar-container" style="margin: 20px 0;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="test-progress-fill" style="width: 0%;"></div>
+                </div>
+                <div class="progress-text" id="test-progress-text" style="text-align: center; margin-top: 8px;">0%</div>
+            </div>
+            <div class="test-log-container" style="background: #1f2937; color: #f9fafb; padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                <div id="test-log-content">
+                    <div class="log-entry" style="margin-bottom: 8px;"><span style="color: #9ca3af;">[等待]</span> 准备执行...</div>
+                </div>
+            </div>
+            <div id="test-result-area" style="display: none; margin-top: 20px; text-align: center;">
+                <h4 id="test-result-title" style="margin-bottom: 16px;"></h4>
+                <div id="test-result-details" style="text-align: left; background: #f3f4f6; padding: 16px; border-radius: 8px;"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="test-close-btn" onclick="closeTestProgressModal()">关闭</button>
         </div>
     </div>
 </div>

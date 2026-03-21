@@ -604,7 +604,7 @@
         const paramsText = document.getElementById('task-params').value;
         
         if (!name) {
-            alert('请输入任务名称');
+            showMessage('请输入任务名称', 'warning');
             return;
         }
         
@@ -613,7 +613,7 @@
             try {
                 params = JSON.parse(paramsText);
             } catch (e) {
-                alert('任务参数格式错误，请输入有效的JSON');
+                showMessage('任务参数格式错误，请输入有效的JSON', 'error');
                 return;
             }
         }
@@ -639,15 +639,14 @@
                 loadTasks();
                 loadStats();
                 
-                // 清空表单
                 document.getElementById('task-name').value = '';
                 document.getElementById('task-params').value = '';
             } else {
-                alert(result.message);
+                showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('创建任务失败:', error);
-            alert('创建任务失败');
+            showMessage('创建任务失败', 'error');
         }
     }
     
@@ -673,11 +672,11 @@
                 loadTasks();
                 loadStats();
             } else {
-                alert(result.message);
+                showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('取消任务失败:', error);
-            alert('取消任务失败');
+            showMessage('取消任务失败', 'error');
         }
     }
     
@@ -691,14 +690,14 @@
                 loadTasks();
                 loadStats();
             } else {
-                alert(result.message);
+                showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('重试任务失败:', error);
-            alert('重试任务失败');
+            showMessage('重试任务失败', 'error');
         }
     }
-    
+
     // 删除任务
     async function deleteTask(taskId) {
         if (!confirm('确定要删除这个任务吗？此操作不可恢复。')) return;
@@ -711,11 +710,11 @@
                 loadTasks();
                 loadStats();
             } else {
-                alert(result.message);
+                showMessage(result.message, 'error');
             }
         } catch (error) {
             console.error('删除任务失败:', error);
-            alert('删除任务失败');
+            showMessage('删除任务失败', 'error');
         }
     }
     

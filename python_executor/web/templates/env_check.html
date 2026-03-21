@@ -539,17 +539,16 @@
             // 启动检测
             const response = await fetch('/api/env/check', { method: 'POST' });
             const result = await response.json();
-            
+
             if (result.success) {
-                // 开始轮询进度
                 checkInterval = setInterval(checkProgress, 1000);
             } else {
-                alert('启动检测失败: ' + result.message);
+                showMessage('启动检测失败: ' + result.message, 'error');
                 resetButton();
             }
         } catch (error) {
             console.error('启动检测失败:', error);
-            alert('启动检测失败');
+            showMessage('启动检测失败', 'error');
             resetButton();
         }
     }

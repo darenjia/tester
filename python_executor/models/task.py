@@ -216,6 +216,16 @@ class Task:
         """CANoe命名空间 - 兼容下划线命名"""
         return self.canoeNamespace
 
+    @property
+    def task_id(self) -> str:
+        """任务ID - 兼容executor"""
+        return self.taskNo
+
+    @property
+    def task_type(self) -> str:
+        """任务类型 - 兼容executor"""
+        return getattr(self, '_task_type', 'test_module')
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Task':
         """从字典创建任务 - 支持TDM2.0字段名"""

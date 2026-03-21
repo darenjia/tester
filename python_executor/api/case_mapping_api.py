@@ -3,12 +3,17 @@
 提供用例映射相关的RESTful接口
 """
 import os
+import time
 from flask import Blueprint, request, jsonify, send_file
 from typing import Dict, Any
 
 from core.case_mapping_manager import get_case_mapping_manager
 from models.case_mapping import CaseMapping
 from utils.excel_parser import CaseMappingExcelParser
+from utils.logger import get_logger
+from api.task_executor import _test_execution_store
+
+logger = get_logger("case_mapping_api")
 
 
 case_mapping_bp = Blueprint('case_mapping', __name__, url_prefix='/api/case-mappings')
@@ -162,6 +167,7 @@ def create_case_mapping():
             category=category,
             module=data.get('module', ''),
             script_path=data.get('script_path', ''),
+            ini_config=data.get('ini_config', ''),
             enabled=data.get('enabled', True),
             priority=data.get('priority', 0),
             tags=data.get('tags', []),
@@ -410,6 +416,53 @@ def batch_disable_cases():
         return jsonify({"success": False, "message": f"批量禁用失败: {str(e)}"}), 500
 
 
+@case_mapping_bp.route('/batch/delete', methods=['POST'])
+def batch_delete_cases():
+    """
+    批量删除用例映射
+
+    请求体:
+    {
+        "case_nos": ["CANOE-001", "CANOE-002"],
+        "changed_by": "admin",
+        "reason": "批量删除原因"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求体不能为空"}), 400
+
+        case_nos = data.get('case_nos', [])
+        if not case_nos:
+            return jsonify({"success": False, "message": "Case编号列表不能为空"}), 400
+
+        manager = get_manager()
+        changed_by = data.get('changed_by', 'system')
+        reason = data.get('reason', '批量删除')
+
+        success_count = 0
+        failed_count = 0
+
+        for case_no in case_nos:
+            try:
+                if manager.delete_case(case_no, changed_by, reason):
+                    success_count += 1
+                else:
+                    failed_count += 1
+            except Exception:
+                failed_count += 1
+
+        return jsonify({
+            "success": True,
+            "message": f"批量删除完成: 成功 {success_count}, 失败 {failed_count}",
+            "data": {"success": success_count, "failed": failed_count}
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"批量删除失败: {str(e)}"}), 500
+
+
 @case_mapping_bp.route('/history', methods=['GET'])
 def get_change_history():
     """
@@ -590,7 +643,7 @@ def upload_excel():
             return jsonify({"success": False, "message": "未上传文件或缺少file_id"}), 400
 
         if not CaseMappingExcelParser.is_available():
-            return jsonify({"success": False, "message": "Excel解析功能不可用，请安装: pip install pandas openpyxl"}), 500
+            return jsonify({"success": False, "message": "Excel解析功能不可用，请安装: pip install pandas openpyxl"}), 503
 
         if file:
             file_id = CaseMappingExcelParser.save_upload_file(file, file.filename)
@@ -652,6 +705,8 @@ def get_excel_sheets():
             file_id = request.form.get('file_id')
 
         if file_id and os.path.exists(file_id):
+            if not CaseMappingExcelParser.is_available():
+                return jsonify({"success": False, "message": "Excel解析功能不可用"}), 503
             sheets_info = CaseMappingExcelParser.get_sheets_info(file_id)
             filename = os.path.basename(file_id)
             if filename.startswith('case_mapping_import_'):
@@ -673,7 +728,7 @@ def get_excel_sheets():
             return jsonify({"success": False, "message": "只支持 .xlsx 和 .xls 格式"}), 400
 
         if not CaseMappingExcelParser.is_available():
-            return jsonify({"success": False, "message": "Excel解析功能不可用"}), 500
+            return jsonify({"success": False, "message": "Excel解析功能不可用"}), 503
 
         file_id = CaseMappingExcelParser.save_upload_file(file, file.filename)
         _temp_files[file_id] = file_id
@@ -707,6 +762,7 @@ def preview_import():
             ...
         },
         "default_category": "canoe",
+        "batch_script_path": "/path/to/scripts/",
         "sheet_index": 0
     }
 
@@ -730,6 +786,7 @@ def preview_import():
         file_id = data.get('file_id')
         column_mapping = data.get('column_mapping', {})
         default_category = data.get('default_category')
+        batch_script_path = data.get('batch_script_path')
         sheet_index = data.get('sheet_index', 0)
 
         if not file_id:
@@ -738,8 +795,12 @@ def preview_import():
         if not os.path.exists(file_id):
             return jsonify({"success": False, "message": "文件不存在或已过期"}), 400
 
+        if not CaseMappingExcelParser.is_available():
+            return jsonify({"success": False, "message": "Excel解析功能不可用"}), 503
+
         valid_mappings, invalid_mappings = CaseMappingExcelParser.apply_mapping(
-            file_id, column_mapping, default_category=default_category, sheet_index=sheet_index
+            file_id, column_mapping, default_category=default_category,
+            batch_script_path=batch_script_path, sheet_index=sheet_index
         )
         converted_valid = CaseMappingExcelParser.convert_mappings_for_import(valid_mappings)
 
@@ -770,6 +831,8 @@ def execute_import():
         "file_id": "temp文件路径",
         "column_mapping": {...},
         "default_category": "canoe",
+        "batch_script_path": "/path/to/scripts/",
+        "selected_indices": [0, 1, 2, ...],
         "sheet_index": 0,
         "overwrite": true,
         "changed_by": "web_user",
@@ -791,6 +854,8 @@ def execute_import():
         file_id = data.get('file_id')
         column_mapping = data.get('column_mapping', {})
         default_category = data.get('default_category')
+        batch_script_path = data.get('batch_script_path')
+        selected_indices = data.get('selected_indices')
         sheet_index = data.get('sheet_index', 0)
         overwrite = data.get('overwrite', True)
         changed_by = data.get('changed_by', 'web_user')
@@ -802,10 +867,17 @@ def execute_import():
         if not os.path.exists(file_id):
             return jsonify({"success": False, "message": "文件不存在或已过期"}), 400
 
+        if not CaseMappingExcelParser.is_available():
+            return jsonify({"success": False, "message": "Excel解析功能不可用"}), 503
+
         valid_mappings, invalid_mappings = CaseMappingExcelParser.apply_mapping(
-            file_id, column_mapping, default_category=default_category, sheet_index=sheet_index
+            file_id, column_mapping, default_category=default_category,
+            batch_script_path=batch_script_path, sheet_index=sheet_index
         )
         converted_valid = CaseMappingExcelParser.convert_mappings_for_import(valid_mappings)
+
+        if selected_indices is not None:
+            converted_valid = [converted_valid[i] for i in selected_indices if i < len(converted_valid)]
 
         manager = get_manager()
         stats = manager.import_mappings({"mappings": converted_valid}, overwrite)
@@ -982,3 +1054,146 @@ def sync_mappings():
 
     except Exception as e:
         return jsonify({"success": False, "message": f"同步失败: {str(e)}"}), 500
+
+
+@case_mapping_bp.route('/<case_no>/test', methods=['POST'])
+def start_case_test(case_no: str):
+    """
+    执行单个用例测试
+
+    路径参数:
+    - case_no: Case编号
+
+    返回:
+    {
+        "success": true,
+        "data": {
+            "test_id": "test_xxx",
+            "case_no": "CANOE-001",
+            "status": "running"
+        }
+    }
+    """
+    try:
+        manager = get_manager()
+        mapping = manager.get_mapping(case_no)
+
+        if not mapping:
+            return jsonify({"success": False, "message": f"用例映射不存在: {case_no}"}), 404
+
+        if not mapping.enabled:
+            return jsonify({"success": False, "message": f"用例未启用: {case_no}"}), 400
+
+        if not mapping.script_path:
+            return jsonify({"success": False, "message": f"用例未配置脚本路径: {case_no}"}), 400
+
+        logger.info(f"[start_case_test] 用例映射信息: case_no={mapping.case_no}, script_path={mapping.script_path}, ini_config={mapping.ini_config}")
+
+        import uuid
+        test_id = f"test_{uuid.uuid4().hex[:8]}"
+        logger.info(f"[start_case_test] 开始测试: case_no={case_no}, test_id={test_id}")
+
+        _test_execution_store[test_id] = {
+            'test_id': test_id,
+            'case_no': case_no,
+            'status': 'running',
+            'progress': 0,
+            'logs': [],
+            'result': None,
+            'start_time': time.time()
+        }
+        logger.info(f"[start_case_test] 测试状态已创建: test_id={test_id}")
+
+        from api.task_executor import execute_task_async, _get_executor
+        from models.task import Task
+
+        task_data = {
+            'taskNo': test_id,
+            'projectNo': 'TEST',
+            'taskName': f'单用例测试-{case_no}',
+            'toolType': 'CANoe',
+            'configPath': mapping.script_path,
+            'caseList': [
+                {
+                    'name': case_no,
+                    'caseNo': case_no,
+                    'caseType': 'test_module'
+                }
+            ],
+            'baseConfigDir': None,
+            'timeout': 300
+        }
+        logger.info(f"[start_case_test] 任务数据: {task_data}")
+
+        # 检查执行器状态
+        try:
+            executor = _get_executor()
+            executor_status = executor.get_current_status()
+            logger.info(f"[start_case_test] 执行器状态: {executor_status}")
+        except Exception as ex:
+            logger.error(f"[start_case_test] 获取执行器状态失败: {ex}")
+
+        execute_task_async(test_id, task_data)
+        logger.info(f"[start_case_test] execute_task_async 已调用: test_id={test_id}")
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "test_id": test_id,
+                "case_no": case_no,
+                "status": "running"
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"启动测试失败: {str(e)}"}), 500
+
+
+@case_mapping_bp.route('/<case_no>/test/status', methods=['GET'])
+def get_case_test_status(case_no: str):
+    """
+    获取用例测试状态
+
+    路径参数:
+    - case_no: Case编号
+
+    查询参数:
+    - test_id: 测试ID (可选，如果不传则返回该用例最后一个测试)
+
+    返回:
+    {
+        "success": true,
+        "data": {
+            "test_id": "test_xxx",
+            "case_no": "CANOE-001",
+            "status": "running",
+            "progress": 50,
+            "logs": ["日志1", "日志2"],
+            "result": null
+        }
+    }
+    """
+    try:
+        test_id = request.args.get('test_id')
+
+        if test_id:
+            if test_id not in _test_execution_store:
+                return jsonify({"success": False, "message": f"测试不存在: {test_id}"}), 404
+            test_info = _test_execution_store[test_id]
+        else:
+            test_info = None
+            for tid, info in _test_execution_store.items():
+                if info['case_no'] == case_no:
+                    if test_info is None or info['start_time'] > test_info['start_time']:
+                        test_info = info
+
+            if test_info is None:
+                return jsonify({"success": False, "message": f"未找到用例 {case_no} 的测试记录"}), 404
+
+        return jsonify({
+            "success": True,
+            "data": test_info
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"获取状态失败: {str(e)}"}), 500
