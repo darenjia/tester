@@ -1087,6 +1087,15 @@ def start_case_test(case_no: str):
         if not mapping.script_path:
             return jsonify({"success": False, "message": f"用例未配置脚本路径: {case_no}"}), 400
 
+        # 验证配置文件路径有效性
+        if not mapping.script_path or not str(mapping.script_path).strip():
+            return jsonify({"success": False, "message": f"用例配置路径无效: {case_no}"}), 400
+
+        # 验证配置文件存在
+        if not os.path.exists(mapping.script_path):
+            logger.warning(f"[start_case_test] 配置文件不存在: {mapping.script_path}")
+            return jsonify({"success": False, "message": f"配置文件不存在: {mapping.script_path}"}), 400
+
         logger.info(f"[start_case_test] 用例映射信息: case_no={mapping.case_no}, script_path={mapping.script_path}, ini_config={mapping.ini_config}")
 
         import uuid
@@ -1107,12 +1116,16 @@ def start_case_test(case_no: str):
         from api.task_executor import execute_task_async, _get_executor
         from models.task import Task
 
+        config_name = os.path.basename(mapping.script_path).replace('.cfg', '')
+        base_config_dir = os.path.dirname(mapping.script_path)
+
         task_data = {
             'taskNo': test_id,
             'projectNo': 'TEST',
             'taskName': f'单用例测试-{case_no}',
             'toolType': 'CANoe',
             'configPath': mapping.script_path,
+            'configName': config_name,
             'caseList': [
                 {
                     'name': case_no,
@@ -1120,7 +1133,7 @@ def start_case_test(case_no: str):
                     'caseType': 'test_module'
                 }
             ],
-            'baseConfigDir': None,
+            'baseConfigDir': base_config_dir,
             'timeout': 300
         }
         logger.info(f"[start_case_test] 任务数据: {task_data}")

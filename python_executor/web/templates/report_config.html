@@ -58,7 +58,7 @@
             <!-- 上报选项 -->
             <div class="form-section">
                 <h3 class="form-section-title">上报选项</h3>
-                
+
                 <div class="form-group">
                     <label class="form-label">
                         <input type="checkbox" id="upload_report" name="report_server.upload_report" style="margin-right: 8px;">
@@ -68,19 +68,37 @@
                         开启后，会同时上传生成的测试报告文件
                     </small>
                 </div>
-                
+
+                <div class="form-group">
+                    <label class="form-label">报告文件路径</label>
+                    <input type="text" class="form-input" id="report_file_path" name="report_server.report_file_path"
+                           placeholder="C:\TestReports\report.pdf">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        测试报告文件的路径，将上传到服务器
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">文件上传地址</label>
+                    <input type="text" class="form-input" id="upload_url" name="report_server.upload_url"
+                           value="http://10.124.11.142:8204/upload" placeholder="http://10.124.11.142:8204/upload">
+                    <small style="color: var(--text-secondary); font-size: 12px;">
+                        报告文件上传的目标地址
+                    </small>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">超时时间（秒）</label>
-                    <input type="number" class="form-input" id="timeout" name="report_server.timeout" 
+                    <input type="number" class="form-input" id="timeout" name="report_server.timeout"
                            min="5" max="300" placeholder="30">
                     <small style="color: var(--text-secondary); font-size: 12px;">
                         上报请求的超时时间
                     </small>
                 </div>
-                
+
                 <div class="form-group">
                     <label class="form-label">重试次数</label>
-                    <input type="number" class="form-input" id="retry_count" name="report_server.retry_count" 
+                    <input type="number" class="form-input" id="retry_count" name="report_server.retry_count"
                            min="0" max="10" placeholder="3">
                     <small style="color: var(--text-secondary); font-size: 12px;">
                         上报失败时的重试次数
@@ -140,17 +158,19 @@
     // 填充表单
     function fillForm(config) {
         const reportConfig = config.report_server || {};
-        
+
         // 上报服务开关
         document.getElementById('enabled').checked = reportConfig.enabled || false;
-        
+
         // 服务器配置
         document.getElementById('host').value = reportConfig.host || '';
         document.getElementById('port').value = reportConfig.port || '';
         document.getElementById('path').value = reportConfig.path || '';
-        
+
         // 上报选项
         document.getElementById('upload_report').checked = reportConfig.upload_report || false;
+        document.getElementById('report_file_path').value = reportConfig.report_file_path || '';
+        document.getElementById('upload_url').value = reportConfig.upload_url || 'http://10.124.11.142:8204/upload';
         document.getElementById('timeout').value = reportConfig.timeout || '';
         document.getElementById('retry_count').value = reportConfig.retry_count || '';
     }
@@ -164,11 +184,13 @@
                 port: parseInt(document.getElementById('port').value) || 8080,
                 path: document.getElementById('path').value.trim() || '/api/report',
                 upload_report: document.getElementById('upload_report').checked,
+                report_file_path: document.getElementById('report_file_path').value.trim(),
+                upload_url: document.getElementById('upload_url')?.value?.trim() || 'http://10.124.11.142:8204/upload',
                 timeout: parseInt(document.getElementById('timeout').value) || 30,
                 retry_count: parseInt(document.getElementById('retry_count').value) || 3
             }
         };
-        
+
         return config;
     }
     

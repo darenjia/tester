@@ -28,6 +28,7 @@ class ReportClient:
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="report_")
         self._enabled = False
         self._api_url = None
+        self._result_api_url = None
         self._file_upload_url = None
         self._timeout = 30
         self._max_retries = 3
@@ -36,25 +37,51 @@ class ReportClient:
 
         self._load_config()
 
+        logger.info(f"ReportClient初始化完成: enabled={self._enabled}, api_url={self._api_url}, file_upload_url={self._file_upload_url}")
+
     def _load_config(self):
         """从配置管理器加载配置"""
         if self.config_manager is None:
             try:
-                from config.config_manager import config_manager
-                self.config_manager = config_manager
+                # 优先使用 settings 模块（读取 config.json）
+                from config.settings import settings
+                self.config_manager = settings
             except ImportError:
-                logger.warning("无法导入配置管理器，使用默认配置")
-                return
+                try:
+                    # 备用：使用 config_manager 模块
+                    from config.config_manager import config_manager
+                    self.config_manager = config_manager
+                except ImportError:
+                    logger.warning("无法导入配置管理器，使用默认配置")
+                    return
 
-        self._enabled = self.config_manager.get('report.enabled', False)
-        self._api_url = self.config_manager.get('report.api_url', '')
-        self._file_upload_url = self.config_manager.get('report.file_upload_url', '')
-        self._timeout = self.config_manager.get('report.timeout', 30)
-        self._max_retries = self.config_manager.get('report.max_retries', 3)
+        self._enabled = self.config_manager.get('report_server.enabled', True)
+        if not self._enabled:
+            self._enabled = self.config_manager.get('report.enabled', True)
+
+        # 构建完整的 API URL
+        report_server_path = self.config_manager.get('report_server.path', '')
+        report_server_host = self.config_manager.get('report_server.host', '')
+        report_server_port = self.config_manager.get('report_server.port', '')
+
+        if report_server_host and report_server_path:
+            self._api_url = f"http://{report_server_host}:{report_server_port}{report_server_path}"
+        else:
+            self._api_url = self.config_manager.get('report.api_url', '')
+
+        if not self._api_url:
+            self._api_url = self.config_manager.get('report.api_url', '')
+
+        self._result_api_url = self.config_manager.get('report.result_api_url', 'http://10.124.11.142:8315/api/python/report')
+        self._file_upload_url = self.config_manager.get('report_server.upload_url', 'http://10.124.11.142:8204/upload')
+        if not self._file_upload_url:
+            self._file_upload_url = self.config_manager.get('report.file_upload_url', 'http://10.124.11.142:8204/upload')
+        self._timeout = self.config_manager.get('report_server.timeout', 30)
+        self._max_retries = self.config_manager.get('report_server.retry_count', 3)
         self._retry_delay = self.config_manager.get('report.retry_delay', 2.0)
         self._headers = self.config_manager.get('report.headers', {})
 
-        logger.info(f"上报客户端配置加载完成: enabled={self._enabled}, api_url={self._api_url}")
+        logger.info(f"上报客户端配置加载: enabled={self._enabled}, api_url={self._api_url}, result_api_url={self._result_api_url}")
 
     @property
     def enabled(self) -> bool:
@@ -67,13 +94,15 @@ class ReportClient:
         """重新加载配置"""
         self._load_config()
 
-    def report_task_result(self, task_result: TaskResult, task_info: Dict[str, Any] = None) -> bool:
+    def report_task_result(self, task_result: TaskResult, task_info: Dict[str, Any] = None,
+                          report_file_path: str = None) -> bool:
         """
         上报任务执行结果
 
         Args:
             task_result: 任务结果对象
             task_info: 额外的任务信息（如projectNo, deviceId等）
+            report_file_path: 报告文件路径（可选）
 
         Returns:
             是否上报成功
@@ -83,10 +112,21 @@ class ReportClient:
             return False
 
         try:
-            # 构建上报数据
+            report_url = None
+            if report_file_path:
+                report_url = self.upload_report_file(report_file_path)
+                if report_url:
+                    logger.info(f"报告文件上传成功: {report_file_path} -> {report_url}")
+                else:
+                    logger.warning(f"报告文件上传失败: {report_file_path}")
+
+            if report_url and task_result.results:
+                for result in task_result.results:
+                    if hasattr(result, 'reAddress') and not result.reAddress:
+                        result.reAddress = report_url
+
             report_data = self._build_report_data(task_result, task_info)
 
-            # 异步执行上报
             self._executor.submit(self._do_report, report_data)
 
             return True
@@ -95,7 +135,7 @@ class ReportClient:
             return False
 
     def _build_report_data(self, task_result: TaskResult, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
-        """构建上报数据"""
+        """构建上报数据 - TDM2.0格式"""
         data = {
             "taskNo": task_result.taskNo,
             "status": task_result.status,
@@ -105,7 +145,8 @@ class ReportClient:
             "summary": task_result.summary or {},
             "results": [r.to_dict() for r in task_result.results] if task_result.results else [],
             "errorMessage": task_result.errorMessage,
-            "timestamp": int(time.time() * 1000)
+            "timestamp": int(time.time() * 1000),
+            "platform": "NETWORK"
         }
 
         # 计算执行时长
@@ -123,7 +164,7 @@ class ReportClient:
         try:
             response = self._make_request(
                 method="POST",
-                url=self._api_url,
+                url=self._result_api_url,
                 json=report_data
             )
 
@@ -171,13 +212,13 @@ class ReportClient:
                     files=files
                 )
 
-            if response and 'url' in response:
-                file_url = response['url']
-                logger.info(f"文件上传成功: {file_name} -> {file_url}")
-                return file_url
-            else:
-                logger.error(f"文件上传失败: {file_name}")
-                return None
+            if response and response.get('code') == 200 and 'data' in response:
+                file_url = response['data'].get('url')
+                if file_url:
+                    logger.info(f"文件上传成功: {file_name} -> {file_url}")
+                    return file_url
+            logger.error(f"文件上传失败: {file_name}, response: {response}")
+            return None
 
         except Exception as e:
             logger.error(f"文件上传异常: {e}")

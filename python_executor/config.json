@@ -5,6 +5,16 @@
     "reconnect_interval": 5,
     "max_reconnect_attempts": 10
   },
+  "http": {
+    "port": 8180,
+    "host": "0.0.0.0",
+    "debug": false
+  },
+  "websocket": {
+    "enabled": false,
+    "port": 8080,
+    "host": "0.0.0.0"
+  },
   "device": {
     "device_id": "DEVICE_001",
     "device_name": "测试执行设备-01",
@@ -26,5 +36,34 @@
     "default_timeout": 3600,
     "auto_start": true,
     "keep_alive": true
+  },
+  "report": {
+    "enabled": true,
+    "api_url": "http://10.124.11.142:8204/upload",
+    "upload_url": "http://10.124.11.142:8204/upload",
+    "result_api_url": "http://10.124.11.142:8315/api/python/report",
+    "file_upload_url": "http://10.124.11.142:8204/upload",
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 2.0,
+    "headers": {}
+  },
+  "report_server": {
+    "enabled": true,
+    "host": "10.124.11.142",
+    "port": 8315,
+    "path": "/api/python/report",
+    "upload_report": true,
+    "report_file_path": "",
+    "upload_url": "http://10.124.11.142:8204/upload",
+    "timeout": 30,
+    "retry_count": 3
+  },
+  "config_cache": {
+    "enabled": true,
+    "cache_dir": "workspace/cache/configs",
+    "max_cache_count": 50,
+    "cache_ttl_hours": 168,
+    "auto_cleanup": true
   }
 }

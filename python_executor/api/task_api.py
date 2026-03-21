@@ -37,11 +37,8 @@ def create_task():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
             
         # 必填字段
-        name = data.get('name')
+        name = data.get('name') or data.get('projectNo', '未命名任务')
         task_type = data.get('type', 'default')
-        
-        if not name:
-            return jsonify({"success": False, "message": "任务名称不能为空"}), 400
             
         # 创建任务
         task = Task(

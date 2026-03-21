@@ -128,12 +128,17 @@ class InputValidator:
         """验证测试项"""
         if not isinstance(item, dict):
             raise ValidationError("测试项必须是字典类型")
-        
-        # 验证名称
+
         name = item.get('name')
+        case_no = item.get('case_no') or item.get('caseNo')
+
+        if not name and case_no:
+            name = case_no
+            item['name'] = name
+
         if not name:
-            raise ValidationError("测试项名称不能为空")
-        
+            raise ValidationError("测试项名称不能为空（name和case_no都为空）")
+
         if len(str(name)) > 256:
             raise ValidationError("测试项名称长度不能超过256字符")
         
@@ -212,12 +217,11 @@ class InputValidator:
         else:
             raise ValidationError("工具类型不能为空")
         
-        # 验证配置文件路径
+        # 验证配置文件路径（可选，当使用configName+baseConfigDir或直接传testItems时）
         config_path = task_data.get('configPath')
-        if config_path:
+        if config_path and str(config_path).strip():
             validated_data['configPath'] = InputValidator.validate_config_path(str(config_path))
-        else:
-            raise ValidationError("配置文件路径不能为空")
+        # configPath为空时允许通过，使用configName或直接传testItems的场景
         
         # 验证测试项
         test_items = task_data.get('testItems', [])

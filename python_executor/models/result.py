@@ -105,7 +105,7 @@ class Message:
 class CaseResult:
     """
     用例执行结果模型 - TDM2.0字段标准
-    
+
     对应TDM2.0结果上报接口中的caseList项
     """
     caseNo: str                          # 用例编号 (必填)
@@ -113,7 +113,8 @@ class CaseResult:
     remark: Optional[str] = None         # 备注 (可选)
     created: Optional[str] = None        # 测试执行时间 (可选)
     reportPath: Optional[str] = None     # 报告地址 (可选)
-    
+    reAddress: Optional[str] = None      # 测试报告地址 (可选)
+
     # 扩展字段(内部使用，不上报TDM2.0)
     actualResult: Optional[str] = None   # 实际结果
     executionTime: Optional[float] = None  # 执行耗时(秒)
@@ -152,14 +153,16 @@ class CaseResult:
             "caseNo": self.caseNo,
             "result": self.result
         }
-        
+
         if self.remark is not None:
             result["remark"] = self.remark
         if self.created is not None:
             result["created"] = self.created
         if self.reportPath is not None:
             result["reportPath"] = self.reportPath
-            
+        if self.reAddress is not None:
+            result["reAddress"] = self.reAddress
+
         return result
 
 

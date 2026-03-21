@@ -51,20 +51,24 @@ class ConfigManager:
             "keep_alive": True
         },
         "report": {
-            "enabled": False,
+            "enabled": True,
             "api_url": "",
-            "file_upload_url": "",
+            "upload_url": "http://10.124.11.142:8204/upload",
+            "result_api_url": "http://10.124.11.142:8315/api/python/report",
+            "file_upload_url": "http://10.124.11.142:8204/upload",
             "timeout": 30,
             "max_retries": 3,
             "retry_delay": 2.0,
             "headers": {}
         },
         "report_server": {
-            "enabled": False,
-            "host": "",
-            "port": 8080,
-            "path": "/api/report",
-            "upload_report": False,
+            "enabled": True,
+            "host": "10.124.11.142",
+            "port": 8315,
+            "path": "/api/python/report",
+            "upload_report": True,
+            "report_file_path": "",
+            "upload_url": "http://10.124.11.142:8204/upload",
             "timeout": 30,
             "retry_count": 3
         },

@@ -12,10 +12,10 @@ docs_bp = Blueprint('docs', __name__, url_prefix='/api')
 
 # API文档定义
 API_ENDPOINTS = {
-    # 任务管理接口
-    "/api/tasks": {
+    # TDM2.0任务管理接口
+    "/api/tdm2/tasks": {
         "GET": {
-            "summary": "获取任务列表",
+            "summary": "获取任务列表 (TDM2.0)",
             "description": "获取所有任务的列表，支持分页和状态筛选",
             "params": {
                 "status": {"type": "string", "required": False, "description": "任务状态筛选 (pending/running/completed/failed/cancelled/timeout)"},
@@ -26,73 +26,74 @@ API_ENDPOINTS = {
             },
             "response_example": {
                 "success": True,
+                "status": "success",
                 "data": {
                     "tasks": [
                         {
-                            "id": "task-uuid",
-                            "name": "任务名称",
+                            "projectNo": "PROJ_001",
+                            "taskNo": "TASK_001",
+                            "taskName": "测试任务",
                             "status": "pending",
                             "priority": 1,
-                            "task_type": "default",
-                            "created_at": "2026-03-08T12:00:00"
+                            "createdAt": "2026-03-21T12:00:00"
                         }
                     ],
                     "pagination": {
                         "total": 100,
                         "page": 1,
-                        "per_page": 20,
-                        "total_pages": 5
+                        "pageSize": 20,
+                        "totalPages": 5
                     }
                 }
             }
         },
         "POST": {
-            "summary": "创建新任务",
-            "description": "创建一个新的执行任务",
+            "summary": "创建新任务 (TDM2.0)",
+            "description": "接收TDM2.0平台推送的任务，使用TDM2.0标准字段格式",
             "params": {
-                "name": {"type": "string", "required": True, "description": "任务名称"},
-                "type": {"type": "string", "required": False, "default": "default", "description": "任务类型"},
-                "priority": {"type": "integer", "required": False, "default": 1, "description": "优先级 (0-3)"},
-                "params": {"type": "object", "required": False, "default": {}, "description": "任务参数"},
-                "timeout": {"type": "integer", "required": False, "default": 3600, "description": "超时时间(秒)"},
-                "delay": {"type": "integer", "required": False, "default": 0, "description": "延迟执行时间(秒)"},
-                "metadata": {"type": "object", "required": False, "default": {}, "description": "额外元数据"}
+                "projectNo": {"type": "string", "required": True, "description": "项目编号"},
+                "taskNo": {"type": "string", "required": True, "description": "任务编号"},
+                "taskName": {"type": "string", "required": True, "description": "任务名称"},
+                "caseList": {"type": "array", "required": True, "description": "用例集合"}
             },
             "response_example": {
                 "success": True,
-                "message": "任务已创建并提交到队列",
+                "status": "success",
                 "data": {
-                    "id": "task-uuid",
-                    "name": "任务名称",
-                    "status": "pending"
+                    "projectNo": "PROJ_001",
+                    "taskNo": "TASK_001",
+                    "taskName": "测试任务",
+                    "status": "pending",
+                    "message": "任务已创建并开始执行",
+                    "createdAt": "2026-03-21T12:00:00"
                 }
             }
         }
     },
-    "/api/tasks/{id}": {
+    "/api/tdm2/tasks/{taskNo}": {
         "GET": {
-            "summary": "获取任务详情",
+            "summary": "获取任务详情 (TDM2.0)",
             "description": "获取指定任务的详细信息",
             "params": {
-                "id": {"type": "string", "required": True, "in": "path", "description": "任务ID"}
+                "taskNo": {"type": "string", "required": True, "in": "path", "description": "任务编号"}
             },
             "response_example": {
                 "success": True,
                 "data": {
-                    "id": "task-uuid",
-                    "name": "任务名称",
+                    "projectNo": "PROJ_001",
+                    "taskNo": "TASK_001",
+                    "taskName": "测试任务",
                     "status": "completed",
-                    "result": {"output": "任务执行结果"},
-                    "duration": 120.5,
-                    "log_stats": {"total": 50, "INFO": 45, "ERROR": 5}
+                    "progress": 100,
+                    "createdAt": "2026-03-21T10:00:00"
                 }
             }
         },
         "DELETE": {
-            "summary": "删除任务",
-            "description": "删除已完成的任务",
+            "summary": "删除任务 (TDM2.0)",
+            "description": "删除指定的任务",
             "params": {
-                "id": {"type": "string", "required": True, "in": "path", "description": "任务ID"}
+                "taskNo": {"type": "string", "required": True, "in": "path", "description": "任务编号"}
             },
             "response_example": {
                 "success": True,
@@ -100,12 +101,12 @@ API_ENDPOINTS = {
             }
         }
     },
-    "/api/tasks/{id}/cancel": {
+    "/api/tdm2/tasks/{taskNo}/cancel": {
         "POST": {
-            "summary": "取消任务",
+            "summary": "取消任务 (TDM2.0)",
             "description": "取消正在排队或运行中的任务",
             "params": {
-                "id": {"type": "string", "required": True, "in": "path", "description": "任务ID"}
+                "taskNo": {"type": "string", "required": True, "in": "path", "description": "任务编号"}
             },
             "response_example": {
                 "success": True,
@@ -113,51 +114,53 @@ API_ENDPOINTS = {
             }
         }
     },
-    "/api/tasks/{id}/retry": {
+    "/api/tdm2/tasks/{taskNo}/retry": {
         "POST": {
-            "summary": "重试任务",
+            "summary": "重试任务 (TDM2.0)",
             "description": "重试失败或超时的任务",
             "params": {
-                "id": {"type": "string", "required": True, "in": "path", "description": "任务ID"}
+                "taskNo": {"type": "string", "required": True, "in": "path", "description": "任务编号"}
             },
             "response_example": {
                 "success": True,
                 "message": "任务已重试",
-                "data": {"id": "new-task-uuid", "name": "任务名称"}
+                "data": {"taskNo": "TASK_001"}
             }
         }
     },
-    "/api/tasks/{id}/logs": {
+    "/api/tdm2/tasks/{taskNo}/logs": {
         "GET": {
-            "summary": "获取任务日志",
+            "summary": "获取任务日志 (TDM2.0)",
             "description": "获取指定任务的执行日志",
             "params": {
-                "id": {"type": "string", "required": True, "in": "path", "description": "任务ID"},
+                "taskNo": {"type": "string", "required": True, "in": "path", "description": "任务编号"},
                 "level": {"type": "string", "required": False, "description": "日志级别筛选"},
                 "page": {"type": "integer", "required": False, "default": 1, "description": "页码"},
                 "per_page": {"type": "integer", "required": False, "default": 50, "description": "每页数量"}
             },
             "response_example": {
                 "success": True,
+                "status": "success",
                 "data": {
                     "logs": [
                         {
-                            "timestamp": "2026-03-08T12:00:00",
+                            "timestamp": "2026-03-21T12:00:00",
                             "level": "INFO",
                             "message": "任务开始执行"
                         }
                     ],
-                    "pagination": {"total": 100, "page": 1, "per_page": 50}
+                    "pagination": {"total": 100, "page": 1, "pageSize": 50}
                 }
             }
         }
     },
-    "/api/tasks/stats": {
+    "/api/tdm2/tasks/stats": {
         "GET": {
-            "summary": "获取任务统计",
+            "summary": "获取任务统计 (TDM2.0)",
             "description": "获取任务队列和执行器的统计信息",
             "response_example": {
                 "success": True,
+                "status": "success",
                 "data": {
                     "queue": {"total": 100, "pending": 10, "running": 5, "completed": 80, "failed": 5},
                     "executor": {"max_workers": 5, "running_count": 5}

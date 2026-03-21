@@ -100,7 +100,7 @@ class Case:
             moduleLevel3=data.get("moduleLevel3", ""),
             caseName=data.get("caseName", ""),
             priority=data.get("priority", ""),
-            caseType=data.get("caseType", ""),
+            caseType=data.get("caseType") or TestItemType.TEST_MODULE.value,
             preCondition=data.get("preCondition", ""),
             stepDescription=data.get("stepDescription", ""),
             expectedResult=data.get("expectedResult", ""),
@@ -188,7 +188,7 @@ class Task:
     @property
     def config_path(self) -> Optional[str]:
         """配置文件路径 - 兼容下划线命名"""
-        return self.configPath
+        return self.configPath if self.configPath else None
 
     @property
     def device_id(self) -> Optional[str]:

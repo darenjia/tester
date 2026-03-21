@@ -20,6 +20,7 @@ from api.docs_api import docs_bp
 from api.env_api import env_bp
 from api.functional_test_api import functional_test_bp
 from api.case_mapping_api import case_mapping_bp
+from api.routes import api_bp  # TDM2.0 任务接口
 
 
 def create_app() -> Flask:
@@ -66,7 +67,8 @@ def create_app() -> Flask:
     app.register_blueprint(env_bp)
     app.register_blueprint(functional_test_bp)
     app.register_blueprint(case_mapping_bp)
-    
+    app.register_blueprint(api_bp)  # TDM2.0 任务接口
+
     # 注册路由
     register_routes(app)
     
@@ -159,15 +161,21 @@ def register_routes(app: Flask):
         try:
             config = get_config()
             new_config = request.get_json()
-            
+
             if not new_config:
                 return jsonify({
                     'success': False,
                     'message': '无效的配置数据'
                 }), 400
-            
+
             if config.update(new_config):
                 get_logger().info("配置已更新")
+
+                from utils.report_client import get_report_client
+                report_client = get_report_client()
+                report_client.reload_config()
+                get_logger().info(f"ReportClient已刷新: enabled={report_client.enabled}")
+
                 return jsonify({
                     'success': True,
                     'message': '配置保存成功'
@@ -337,8 +345,10 @@ def register_routes(app: Flask):
             # 获取上报状态
             try:
                 report_client = get_report_client()
+                report_client.reload_config()
+                report_enabled = config.get('report_server.enabled', False)
                 report_status = {
-                    'enabled': report_client.enabled,
+                    'enabled': report_enabled,
                     'api_url': report_client._api_url or '',
                     'file_upload_url': report_client._file_upload_url or ''
                 }
