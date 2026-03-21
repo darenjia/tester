@@ -72,9 +72,58 @@ class CANoeVersion:
     minor: int
     patch: int
     full_version: str
-    
+
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
+
+
+def parse_verdict(verdict) -> tuple:
+    """
+    解析CANoe测试判定结果
+
+    统一处理数值型和字符串型Verdict值
+
+    Args:
+        verdict: CANoe返回的Verdict值
+
+    Returns:
+        (verdict_str, verdict_int) 元组
+        - verdict_str: 字符串形式 ("Passed", "Failed", "None", "Inconclusive")
+        - verdict_int: 数值形式 (0, 1, 2, 3)
+
+    Example:
+        >>> parse_verdict(1)
+        ('Passed', 1)
+        >>> parse_verdict("Passed")
+        ('Passed', 1)
+    """
+    # 数值型Verdict (CANoe COM API原生格式)
+    if isinstance(verdict, int):
+        verdict_map = {
+            0: ("None", 0),
+            1: ("Passed", 1),
+            2: ("Failed", 2),
+            3: ("Inconclusive", 3)
+        }
+        return verdict_map.get(verdict, ("Unknown", verdict))
+
+    # 字符串型Verdict (部分版本返回)
+    verdict_str = str(verdict)
+    str_to_int = {
+        "passed": 1,
+        "failed": 2,
+        "none": 0,
+        "inconclusive": 3,
+        "pass": 1,
+        "fail": 2
+    }
+
+    verdict_lower = verdict_str.lower()
+    verdict_int = str_to_int.get(verdict_lower, 0)
+
+    # 规范化字符串
+    int_to_str = {0: "None", 1: "Passed", 2: "Failed", 3: "Inconclusive"}
+    return int_to_str.get(verdict_int, verdict_str), verdict_int
 
 
 @dataclass
@@ -287,11 +336,16 @@ class CANoeCOMWrapper:
             self.logger.warning(f"获取CANoe版本信息失败: {e}")
             self.version = CANoeVersion(0, 0, 0, "unknown")
     
-    def disconnect(self) -> bool:
+    def disconnect(self, cleanup_com: bool = False) -> bool:
         """
         断开CANoe连接
 
         停止测量（如果正在运行）并释放COM对象。
+
+        Args:
+            cleanup_com: 是否清理COM环境（默认False）
+                - False: 保持COM环境，适用于多线程场景
+                - True: 清理COM环境，适用于单线程或程序退出时
 
         Returns:
             断开成功返回True
@@ -316,7 +370,7 @@ class CANoeCOMWrapper:
                 if self._app:
                     try:
                         self._app.CloseConfiguration()
-                    except:
+                    except Exception:
                         pass
 
                 # 释放COM对象引用（不退出CANoe应用程序）
@@ -331,8 +385,12 @@ class CANoeCOMWrapper:
                 self.is_measurement_running = False
                 self.config_path = None
 
-                # 不反初始化COM环境，保持线程兼容性
-                # self._uninit_com()
+                # 根据参数决定是否清理COM环境
+                if cleanup_com:
+                    self._uninit_com()
+                    self.logger.debug("COM环境已清理")
+                else:
+                    self.logger.debug("COM环境保持（多线程兼容模式）")
 
                 self.logger.info("CANoe连接已断开")
                 return True
@@ -399,7 +457,7 @@ class CANoeCOMWrapper:
 
                 # 检查文件是否存在
                 if not os.path.exists(config_path):
-                    selroutf.last_error = f"配置文件不存在: {config_path}"
+                    self.last_error = f"配置文件不存在: {config_path}"
                     raise CANoeConfigurationError(self.last_error)
 
                 # 打开配置
@@ -919,7 +977,80 @@ class CANoeCOMWrapper:
             self.logger.error(f"获取测试模块列表失败: {e}")
             return []
 
-    def execute_test_module(self, module_name: str, timeout: float = 600.0) -> Dict[str, Any]:
+    def get_test_environments(self) -> List[str]:
+        """
+        获取配置中所有测试环境名称
+
+        通过TestSetup.TestEnvironments获取测试环境列表，
+        某些CANoe版本需要通过TestEnvironment访问TestModules。
+
+        Returns:
+            测试环境名称列表
+        """
+        if not self.is_connected:
+            self.logger.warning("CANoe未连接")
+            return []
+
+        try:
+            test_setup = self._app.Configuration.TestSetup
+            test_envs = test_setup.TestEnvironments
+
+            env_names = []
+            for i in range(1, test_envs.Count + 1):
+                env = test_envs.Item(i)
+                env_names.append(env.Name)
+
+            self.logger.info(f"找到 {len(env_names)} 个测试环境: {env_names}")
+            return env_names
+
+        except Exception as e:
+            self.logger.error(f"获取测试环境列表失败: {e}")
+            return []
+
+    def _get_test_module_via_environment(self, env_name: str, module_name: str):
+        """
+        通过TestEnvironment获取测试模块
+
+        某些CANoe版本需要通过ITestEnvironment2接口访问TestModules。
+        此方法使用CastTo转换接口，提高兼容性。
+
+        Args:
+            env_name: 测试环境名称
+            module_name: 测试模块名称
+
+        Returns:
+            测试模块对象，如果失败返回None
+        """
+        try:
+            test_setup = self._app.Configuration.TestSetup
+            test_env = test_setup.TestEnvironments.Item(env_name)
+
+            # 使用CastTo转换为ITestEnvironment2接口
+            # 这一步在某些CANoe版本中是必须的
+            try:
+                test_env = win32com.client.CastTo(test_env, "ITestEnvironment2")
+                self.logger.debug(f"成功转换ITestEnvironment2接口: {env_name}")
+            except Exception as cast_err:
+                self.logger.debug(f"CastTo ITestEnvironment2失败（可忽略）: {cast_err}")
+
+            # 获取TestModules集合
+            test_modules = test_env.TestModules
+
+            # 查找指定的测试模块
+            for i in range(1, test_modules.Count + 1):
+                module = test_modules.Item(i)
+                if module.Name == module_name:
+                    return module
+
+            self.logger.warning(f"在环境 '{env_name}' 中未找到测试模块: {module_name}")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"通过TestEnvironment获取测试模块失败: {e}")
+            return None
+
+    def execute_test_module(self, module_name: str, timeout: float = 600.0,
+                            env_name: Optional[str] = None) -> Dict[str, Any]:
         """
         直接执行测试模块（不使用命名空间/系统变量）
 
@@ -928,11 +1059,13 @@ class CANoeCOMWrapper:
         Args:
             module_name: 测试模块名称
             timeout: 执行超时时间（秒）
+            env_name: 测试环境名称（可选，某些CANoe版本需要）
 
         Returns:
             执行结果字典:
                 - success: 是否成功
                 - verdict: 测试结果 (Passed/Failed/None)
+                - verdict_int: 数值型结果 (1=Pass, 2=Fail, 0=None)
                 - duration: 执行时长
                 - error: 错误信息
         """
@@ -940,6 +1073,7 @@ class CANoeCOMWrapper:
             "module_name": module_name,
             "success": False,
             "verdict": None,
+            "verdict_int": 0,
             "duration": 0,
             "error": None
         }
@@ -953,17 +1087,21 @@ class CANoeCOMWrapper:
         try:
             self.logger.info(f"执行测试模块: {module_name}")
 
-            # 获取 TestSetup
-            test_setup = self._app.TestSetup
-            test_modules = test_setup.TestModules
-
-            # 查找测试模块
+            # 方法1: 如果提供了环境名称，先尝试通过TestEnvironment获取
             test_module = None
-            for i in range(1, test_modules.Count + 1):
-                module = test_modules.Item(i)
-                if module.Name == module_name:
-                    test_module = module
-                    break
+            if env_name:
+                test_module = self._get_test_module_via_environment(env_name, module_name)
+
+            # 方法2: 直接通过TestSetup.TestModules获取（原有方式）
+            if test_module is None:
+                test_setup = self._app.TestSetup
+                test_modules = test_setup.TestModules
+
+                for i in range(1, test_modules.Count + 1):
+                    module = test_modules.Item(i)
+                    if module.Name == module_name:
+                        test_module = module
+                        break
 
             if test_module is None:
                 result["error"] = f"未找到测试模块: {module_name}"
@@ -980,9 +1118,12 @@ class CANoeCOMWrapper:
                     # 检查模块状态
                     # CANoe TestModule 执行完成后会返回结果
                     verdict = test_module.Verdict
-                    if verdict:
-                        result["verdict"] = verdict
-                        result["success"] = (verdict == "Passed")
+                    if verdict is not None and verdict != 0:
+                        # 使用统一的Verdict解析
+                        verdict_str, verdict_int = parse_verdict(verdict)
+                        result["verdict"] = verdict_str
+                        result["verdict_int"] = verdict_int
+                        result["success"] = (verdict_int == 1)  # 1 = Pass
                         break
                 except Exception as check_err:
                     self.logger.debug(f"检查测试状态: {check_err}")

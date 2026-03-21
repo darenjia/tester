@@ -40,6 +40,57 @@ class TestCaseType(Enum):
     IMPLICIT = "implicit"  # 隐性用例
 
 
+class TestVerdict(Enum):
+    """
+    测试判定结果
+
+    对应CANoe COM接口的Verdict值：
+    - 0: NONE - 未执行/执行中
+    - 1: PASS - 通过
+    - 2: FAIL - 失败
+    - 3: INCONCLUSIVE - 不确定
+    """
+    NONE = 0
+    PASS = 1
+    FAIL = 2
+    INCONCLUSIVE = 3
+
+    @classmethod
+    def from_canoe_verdict(cls, verdict) -> "TestVerdict":
+        """
+        从CANoe Verdict值创建枚举实例
+
+        Args:
+            verdict: CANoe返回的Verdict值（数值型或字符串型）
+
+        Returns:
+            TestVerdict枚举实例
+        """
+        if isinstance(verdict, int):
+            return cls(verdict) if verdict in (0, 1, 2, 3) else cls.NONE
+        elif isinstance(verdict, str):
+            verdict_map = {
+                "none": cls.NONE,
+                "passed": cls.PASS,
+                "failed": cls.FAIL,
+                "inconclusive": cls.INCONCLUSIVE,
+                "pass": cls.PASS,
+                "fail": cls.FAIL
+            }
+            return verdict_map.get(verdict.lower(), cls.NONE)
+        return cls.NONE
+
+    @property
+    def is_pass(self) -> bool:
+        """是否通过"""
+        return self == TestVerdict.PASS
+
+    @property
+    def is_fail(self) -> bool:
+        """是否失败"""
+        return self == TestVerdict.FAIL
+
+
 @dataclass
 class TestCaseResult:
     """测试用例结果"""

@@ -166,11 +166,8 @@ class CANoeAdapter(BaseTestAdapter):
             
             # 验证版本（如果指定）
             if self.expected_version:
-                actual_version = self.canoe_version
-                if actual_version and not actual_version.startswith(self.expected_version):
-                    self.logger.warning(
-                        f"CANoe版本不匹配: 期望 {self.expected_version}, 实际 {actual_version}"
-                    )
+                if not self._check_version():
+                    self.logger.warning("CANoe版本检查未通过，但连接继续")
             
             self.status = AdapterStatus.CONNECTED
             self._clear_error()
@@ -183,6 +180,73 @@ class CANoeAdapter(BaseTestAdapter):
         except Exception as e:
             self._set_error(f"CANoe连接异常: {str(e)}")
             return False
+
+    def _check_version(self) -> bool:
+        """
+        检查CANoe版本是否匹配
+
+        使用主版本号匹配而非严格的startswith匹配，
+        例如期望"17.2"时，"17.3.91"也可以接受。
+
+        Returns:
+            版本匹配返回True
+        """
+        actual_version = self.canoe_version
+        if not actual_version:
+            self.logger.warning("无法获取CANoe版本信息")
+            return True  # 无法获取版本时默认通过
+
+        try:
+            # 提取主版本号
+            expected_major = self.expected_version.split('.')[0]
+            actual_major = actual_version.split('.')[0]
+
+            if actual_major != expected_major:
+                self.logger.warning(
+                    f"CANoe主版本不匹配: 期望 {expected_major}.x, 实际 {actual_version}"
+                )
+                return False
+
+            self.logger.debug(f"CANoe版本检查通过: {actual_version}")
+            return True
+
+        except Exception as e:
+            self.logger.warning(f"版本检查失败: {e}")
+            return True  # 解析失败时默认通过
+
+    def _ensure_connected(self) -> bool:
+        """
+        确保连接有效，必要时自动重连
+
+        此方法用于在执行关键操作前检查连接状态，
+        如果处于ERROR状态会尝试自动恢复。
+
+        Returns:
+            连接有效返回True
+        """
+        # 如果处于ERROR状态，尝试自动恢复
+        if self.status == AdapterStatus.ERROR:
+            self.logger.info("检测到ERROR状态，尝试自动恢复...")
+            try:
+                self.disconnect()
+                time.sleep(1.0)
+            except Exception as e:
+                self.logger.warning(f"清理ERROR状态失败: {e}")
+
+        # 检查是否已连接
+        if not self.is_connected:
+            self.logger.info("连接已断开，尝试重新连接...")
+            return self.connect()
+
+        # 验证连接有效性（健康检查）
+        try:
+            # 通过访问版本信息验证COM对象是否有效
+            _ = self._canoe_wrapper.version
+            return True
+        except Exception as e:
+            self.logger.warning(f"连接健康检查失败: {e}，尝试重新连接...")
+            self.status = AdapterStatus.ERROR
+            return self.connect()
     
     def disconnect(self) -> bool:
         """
@@ -219,8 +283,9 @@ class CANoeAdapter(BaseTestAdapter):
         Returns:
             加载成功返回True
         """
-        if not self.is_connected:
-            self._set_error("CANoe未连接，无法加载配置")
+        # 确保连接有效
+        if not self._ensure_connected():
+            self._set_error("CANoe连接无效，无法加载配置")
             return False
 
         try:
@@ -255,8 +320,9 @@ class CANoeAdapter(BaseTestAdapter):
         Returns:
             启动成功返回True
         """
-        if not self.is_connected:
-            self._set_error("CANoe未连接，无法启动测量")
+        # 确保连接有效
+        if not self._ensure_connected():
+            self._set_error("CANoe连接无效，无法启动测量")
             return False
 
         try:
