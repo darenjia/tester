@@ -4,7 +4,10 @@
 import json
 import os
 import sys
+import logging
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -111,7 +114,7 @@ class ConfigManager:
                     # 合并配置，确保所有默认配置项都存在
                     self._config = self._merge_config(self.DEFAULT_CONFIG, loaded_config)
             except Exception as e:
-                print(f"加载配置文件失败: {e}，使用默认配置")
+                logger.warning(f"加载配置文件失败: {e}，使用默认配置")
                 self._config = self.DEFAULT_CONFIG.copy()
                 self.save_config()
         else:
@@ -155,7 +158,7 @@ class ConfigManager:
                 json.dump(self._config, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"保存配置文件失败: {e}")
+            logger.error(f"保存配置文件失败: {e}")
             return False
     
     def get(self, key: str, default: Any = None) -> Any:

@@ -72,57 +72,8 @@ def get_task_logs(task_id: str):
         return jsonify({"success": False, "message": f"获取任务日志失败: {str(e)}"}), 500
 
 
-@task_log_bp.route('/logs', methods=['GET'])
-def get_all_logs():
-    """
-    获取所有日志
-    
-    查询参数:
-    - task_id: 任务ID筛选
-    - level: 日志级别筛选
-    - start_time: 开始时间筛选
-    - end_time: 结束时间筛选
-    - page: 页码，默认1
-    - per_page: 每页数量，默认50
-    """
-    try:
-        # 获取查询参数
-        task_id = request.args.get('task_id')
-        level = request.args.get('level')
-        start_time = request.args.get('start_time')
-        end_time = request.args.get('end_time')
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-        
-        # 获取日志
-        logs = task_log_manager.get_all_logs(
-            task_id=task_id,
-            level=level,
-            start_time=start_time,
-            end_time=end_time
-        )
-        
-        # 分页
-        total = len(logs)
-        start = (page - 1) * per_page
-        end = start + per_page
-        paginated_logs = logs[start:end]
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "logs": [log.to_dict() for log in paginated_logs],
-                "pagination": {
-                    "total": total,
-                    "page": page,
-                    "per_page": per_page,
-                    "total_pages": (total + per_page - 1) // per_page
-                }
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "message": f"获取日志失败: {str(e)}"}), 500
+# 注意: /api/logs 路由在 web/server.py 中定义，使用 logger_manager 返回系统日志
+# 此处不重复定义，避免路由冲突
 
 
 @task_log_bp.route('/logs/latest', methods=['GET'])

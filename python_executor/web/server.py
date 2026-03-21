@@ -21,6 +21,7 @@ from api.env_api import env_bp
 from api.functional_test_api import functional_test_bp
 from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp  # TDM2.0 任务接口
+from api.system_check_api import system_check_bp
 
 
 def create_app() -> Flask:
@@ -50,11 +51,10 @@ def create_app() -> Flask:
     config = get_config()
     log_dir = config.get('logging.log_dir', 'logs')
     log_level = config.get('logging.level', 'INFO')
-    
-    # 检查是否已经有处理器，避免重复配置
-    if not logger_manager.logger.handlers:
-        logger_manager.setup(log_dir, log_level)
-    
+
+    # setup() 方法内部有 _setup_done 检查，会自动避免重复初始化
+    logger_manager.setup(log_dir, log_level)
+
     logger = get_logger()
     logger.info("Flask Web 应用启动")
     
@@ -68,6 +68,11 @@ def create_app() -> Flask:
     app.register_blueprint(functional_test_bp)
     app.register_blueprint(case_mapping_bp)
     app.register_blueprint(api_bp)  # TDM2.0 任务接口
+    app.register_blueprint(system_check_bp)
+
+    # 初始化检测项（导入触发注册）
+    from api.system_check_api import register_system_check_api
+    register_system_check_api(app, skip_blueprint=True)
 
     # 注册路由
     register_routes(app)
@@ -95,40 +100,50 @@ def register_routes(app: Flask):
         """任务管理页面"""
         return render_template('tasks.html')
     
+    @app.route('/settings')
+    def settings_page():
+        """系统设置页面"""
+        return render_template('settings.html')
+
     @app.route('/config')
     def config_page():
-        """配置页面"""
-        return render_template('config.html')
+        """配置页面 - 重定向到设置页面"""
+        return render_template('settings.html')
+
+    @app.route('/service-config')
+    def service_config_page():
+        """服务配置页面 - 重定向到设置页面"""
+        return render_template('settings.html')
+
+    @app.route('/report-config')
+    def report_config_page():
+        """上报配置页面 - 重定向到设置页面"""
+        return render_template('settings.html')
     
     @app.route('/logs')
     def logs_page():
         """日志页面"""
         return render_template('logs.html')
-    
-    @app.route('/service-config')
-    def service_config_page():
-        """服务配置页面"""
-        return render_template('service_config.html')
-    
+
     @app.route('/api-docs')
     def api_docs_page():
         """接口文档页面"""
         return render_template('api_docs.html')
-    
+
     @app.route('/env-check')
     def env_check_page():
         """环境检测页面"""
         return render_template('env_check.html')
-    
-    @app.route('/report-config')
-    def report_config_page():
-        """上报配置页面"""
-        return render_template('report_config.html')
-    
+
     @app.route('/functional-test')
     def functional_test_page():
         """功能测试页面"""
         return render_template('functional_test.html')
+
+    @app.route('/system-check')
+    def system_check_page():
+        """系统检测页面"""
+        return render_template('system_check.html', active_page='system-check')
 
     @app.route('/case-mapping')
     def case_mapping_page():

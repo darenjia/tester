@@ -5,6 +5,7 @@
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any
 import threading
+import logging
 
 import sys
 import os
@@ -12,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.env_checker import env_checker
 from models.env_check_log import env_check_log_manager
+
+logger = logging.getLogger(__name__)
 
 # 创建蓝图
 env_bp = Blueprint('env', __name__, url_prefix='/api')
@@ -40,7 +43,7 @@ def start_env_check():
         # 在后台线程执行检测
         def run_check():
             result = env_checker.check_all()
-            print(f"环境检测完成: {result}")
+            logger.info(f"环境检测完成: {result}")
         
         thread = threading.Thread(target=run_check, daemon=True)
         thread.start()

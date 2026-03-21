@@ -324,9 +324,14 @@
     </div>
     
     <!-- 创建任务按钮 -->
-    <button class="btn btn-primary create-task-btn" onclick="showCreateModal()">
-        <i class="fas fa-plus"></i> 创建任务
-    </button>
+    <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <button class="btn btn-primary" onclick="showCreateModal()">
+            <i class="fas fa-plus"></i> 创建任务
+        </button>
+        <button class="btn btn-secondary" onclick="createTestTask()">
+            <i class="fas fa-flask"></i> 添加测试任务
+        </button>
+    </div>
     
     <!-- 标签页 -->
     <div class="tabs">
@@ -380,10 +385,10 @@
             <div class="form-group">
                 <label>任务类型</label>
                 <select id="task-type">
-                    <option value="default">默认</option>
-                    <option value="test">测试</option>
-                    <option value="deploy">部署</option>
-                    <option value="backup">备份</option>
+                    <option value="default">默认任务</option>
+                    <option value="canoe">CANoe 测试</option>
+                    <option value="tsmaster">TSMaster 测试</option>
+                    <option value="ttworkbench">TTworkbench 测试</option>
                 </select>
             </div>
             <div class="form-group">
@@ -414,6 +419,229 @@
         </div>
     </div>
 </div>
+
+<!-- 任务详情模态框 -->
+<div class="modal" id="detail-modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+            <h3>任务详情</h3>
+            <button onclick="hideDetailModal()" style="background:none;border:none;font-size:1.5em;cursor:pointer;">&times;</button>
+        </div>
+
+        <!-- 选项卡导航 -->
+        <div class="detail-tabs" style="display: flex; border-bottom: 1px solid #e9ecef; background: #f8f9fa;">
+            <button class="detail-tab active" data-tab="basic" onclick="switchDetailTab('basic')">基本信息</button>
+            <button class="detail-tab" data-tab="execution" onclick="switchDetailTab('execution')">执行过程</button>
+            <button class="detail-tab" data-tab="results" onclick="switchDetailTab('results')">测试结果</button>
+            <button class="detail-tab" data-tab="logs" onclick="switchDetailTab('logs')">日志</button>
+        </div>
+
+        <div class="modal-body" id="task-detail-body" style="max-height: 60vh; overflow-y: auto;">
+            <!-- 任务详情将在这里动态生成 -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="hideDetailModal()">关闭</button>
+            <button class="btn btn-primary" id="view-full-logs-btn" style="display:none;">查看完整日志</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* 详情选项卡样式 */
+    .detail-tab {
+        padding: 12px 20px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 14px;
+        color: #666;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    .detail-tab:hover {
+        color: #007bff;
+        background: #e9ecef;
+    }
+    .detail-tab.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+        font-weight: 500;
+    }
+
+    /* 详情面板 */
+    .detail-panel {
+        display: none;
+        padding: 15px;
+    }
+    .detail-panel.active {
+        display: block;
+    }
+
+    /* 信息网格 */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    .info-item {
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    .info-item.full-width {
+        grid-column: span 2;
+    }
+    .info-label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 4px;
+    }
+    .info-value {
+        font-size: 14px;
+        font-weight: 500;
+        word-break: break-all;
+    }
+
+    /* 时间线 */
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e9ecef;
+    }
+    .timeline-item {
+        position: relative;
+        padding-bottom: 20px;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -24px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #007bff;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px #007bff;
+    }
+    .timeline-item.pending::before {
+        background: #6c757d;
+        box-shadow: 0 0 0 2px #6c757d;
+    }
+    .timeline-item.completed::before {
+        background: #28a745;
+        box-shadow: 0 0 0 2px #28a745;
+    }
+    .timeline-item.failed::before {
+        background: #dc3545;
+        box-shadow: 0 0 0 2px #dc3545;
+    }
+    .timeline-time {
+        font-size: 12px;
+        color: #666;
+    }
+    .timeline-title {
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .timeline-desc {
+        font-size: 13px;
+        color: #666;
+        margin-top: 4px;
+    }
+
+    /* 测试结果表格 */
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .results-table th, .results-table td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .results-table th {
+        background: #f8f9fa;
+        font-weight: 500;
+    }
+
+    /* 结果徽章 */
+    .result-badge {
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .result-pass { background: #d4edda; color: #155724; }
+    .result-fail { background: #f8d7da; color: #721c24; }
+    .result-block { background: #fff3cd; color: #856404; }
+
+    /* 日志列表 */
+    .log-list {
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 12px;
+    }
+    .log-item {
+        padding: 6px 10px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        gap: 10px;
+    }
+    .log-item:hover {
+        background: #f8f9fa;
+    }
+    .log-time {
+        color: #666;
+        white-space: nowrap;
+    }
+    .log-level {
+        font-weight: 500;
+        min-width: 60px;
+    }
+    .log-level.INFO { color: #17a2b8; }
+    .log-level.WARNING { color: #ffc107; }
+    .log-level.ERROR { color: #dc3545; }
+    .log-level.DEBUG { color: #6c757d; }
+    .log-message {
+        flex: 1;
+        word-break: break-all;
+    }
+
+    /* 摘要卡片 */
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .summary-card {
+        text-align: center;
+        padding: 15px 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    .summary-card .value {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .summary-card .label {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+    }
+    .summary-card.passed .value { color: #28a745; }
+    .summary-card.failed .value { color: #dc3545; }
+    .summary-card.blocked .value { color: #ffc107; }
+</style>
 {% endblock %}
 
 {% block extra_js %}
@@ -500,8 +728,8 @@
         
         tbody.innerHTML = tasks.map(task => `
             <tr>
-                <td>${task.id.substring(0, 8)}...</td>
-                <td>${task.name}</td>
+                <td>${task.id ? task.id.substring(0, 8) + '...' : 'N/A'}</td>
+                <td>${task.name || 'N/A'}</td>
                 <td>${task.task_type}</td>
                 <td><span class="priority-badge priority-${task.priority}">${getPriorityLabel(task.priority)}</span></td>
                 <td><span class="status-badge status-${task.status}">${getStatusLabel(task.status)}</span></td>
@@ -651,8 +879,276 @@
     }
     
     // 查看任务详情
-    function viewTask(taskId) {
-        window.location.href = `/tasks/${taskId}`;
+    let currentTaskId = null;  // 保存当前查看的任务ID
+
+    async function viewTask(taskId) {
+        currentTaskId = taskId;
+        try {
+            const response = await fetch(`/api/tasks/${taskId}`);
+            const result = await response.json();
+
+            if (result.success) {
+                const task = result.data;
+                renderTaskDetail(task);
+                document.getElementById('detail-modal').classList.add('active');
+                // 默认显示基本信息
+                switchDetailTab('basic');
+            } else {
+                showMessage('获取任务详情失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('获取任务详情失败:', error);
+            showMessage('获取任务详情失败', 'error');
+        }
+    }
+
+    // 渲染任务详情
+    function renderTaskDetail(task) {
+        const detailBody = document.getElementById('task-detail-body');
+
+        detailBody.innerHTML = `
+            <!-- 基本信息面板 -->
+            <div class="detail-panel active" id="panel-basic">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">任务ID</div>
+                        <div class="info-value">${task.id || '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">任务名称</div>
+                        <div class="info-value">${task.name || '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">任务类型</div>
+                        <div class="info-value">${task.task_type || '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">状态</div>
+                        <div class="info-value"><span class="status-badge status-${task.status}">${getStatusLabel(task.status)}</span></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">优先级</div>
+                        <div class="info-value"><span class="priority-badge priority-${task.priority}">${getPriorityLabel(task.priority)}</span></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">创建者</div>
+                        <div class="info-value">${task.created_by || '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">创建时间</div>
+                        <div class="info-value">${formatTime(task.created_at)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">超时设置</div>
+                        <div class="info-value">${task.execution?.timeout || 3600} 秒</div>
+                    </div>
+                    ${task.error_message ? `
+                    <div class="info-item full-width">
+                        <div class="info-label">错误信息</div>
+                        <div class="info-value" style="color: #dc3545;">${task.error_message}</div>
+                    </div>
+                    ` : ''}
+                    ${task.params && Object.keys(task.params).length > 0 ? `
+                    <div class="info-item full-width">
+                        <div class="info-label">任务参数</div>
+                        <div class="info-value"><pre style="margin:0;white-space:pre-wrap;font-size:12px;">${JSON.stringify(task.params, null, 2)}</pre></div>
+                    </div>
+                    ` : ''}
+                    ${task.metadata && Object.keys(task.metadata).length > 0 ? `
+                    <div class="info-item full-width">
+                        <div class="info-label">元数据</div>
+                        <div class="info-value"><pre style="margin:0;white-space:pre-wrap;font-size:12px;">${JSON.stringify(task.metadata, null, 2)}</pre></div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+
+            <!-- 执行过程面板 -->
+            <div class="detail-panel" id="panel-execution">
+                <div class="info-grid" style="margin-bottom: 20px;">
+                    <div class="info-item">
+                        <div class="info-label">开始时间</div>
+                        <div class="info-value">${formatTime(task.execution?.started_at)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">结束时间</div>
+                        <div class="info-value">${formatTime(task.execution?.completed_at)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">执行耗时</div>
+                        <div class="info-value">${formatDuration(task.execution?.duration)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">等待时间</div>
+                        <div class="info-value">${task.execution?.wait_time ? task.execution.wait_time.toFixed(1) + ' 秒' : '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">重试次数</div>
+                        <div class="info-value">${task.execution?.retry_count || 0} / ${task.execution?.max_retries || 3}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">是否可重试</div>
+                        <div class="info-value">${task.can_retry ? '是' : '否'}</div>
+                    </div>
+                </div>
+
+                <!-- 执行时间线 -->
+                <h4 style="margin: 20px 0 15px; font-size: 14px;">执行时间线</h4>
+                <div class="timeline">
+                    <div class="timeline-item completed">
+                        <div class="timeline-time">${formatTime(task.created_at)}</div>
+                        <div class="timeline-title">任务创建</div>
+                        <div class="timeline-desc">任务已创建并进入队列</div>
+                    </div>
+                    ${task.execution?.started_at ? `
+                    <div class="timeline-item ${task.status === 'running' ? '' : 'completed'}">
+                        <div class="timeline-time">${formatTime(task.execution.started_at)}</div>
+                        <div class="timeline-title">开始执行</div>
+                        <div class="timeline-desc">任务开始执行，等待时间: ${task.execution.wait_time?.toFixed(1) || 0} 秒</div>
+                    </div>
+                    ` : ''}
+                    ${task.execution?.completed_at ? `
+                    <div class="timeline-item ${task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : ''}">
+                        <div class="timeline-time">${formatTime(task.execution.completed_at)}</div>
+                        <div class="timeline-title">执行${task.status === 'completed' ? '完成' : task.status === 'failed' ? '失败' : '结束'}</div>
+                        <div class="timeline-desc">耗时: ${formatDuration(task.execution.duration)}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+
+            <!-- 测试结果面板 -->
+            <div class="detail-panel" id="panel-results">
+                ${task.result_summary ? `
+                <!-- 结果摘要 -->
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <div class="value">${task.result_summary.total || 0}</div>
+                        <div class="label">总计</div>
+                    </div>
+                    <div class="summary-card passed">
+                        <div class="value">${task.result_summary.passed || 0}</div>
+                        <div class="label">通过</div>
+                    </div>
+                    <div class="summary-card failed">
+                        <div class="value">${task.result_summary.failed || 0}</div>
+                        <div class="label">失败</div>
+                    </div>
+                    <div class="summary-card blocked">
+                        <div class="value">${task.result_summary.blocked || 0}</div>
+                        <div class="label">阻塞</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="value">${task.result_summary.pass_rate || '0%'}</div>
+                        <div class="label">通过率</div>
+                    </div>
+                </div>
+                ` : '<p style="color: #666; text-align: center; padding: 20px;">暂无测试结果</p>'}
+
+                <!-- 测试结果列表 -->
+                ${task.test_results && task.test_results.length > 0 ? `
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>用例名称</th>
+                            <th>类型</th>
+                            <th>结果</th>
+                            <th>错误信息</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${task.test_results.map((r, i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td>${r.name || '-'}</td>
+                            <td>${r.type || '-'}</td>
+                            <td>
+                                <span class="result-badge ${r.verdict === 'PASS' || r.passed === true ? 'result-pass' : r.verdict === 'FAIL' || r.passed === false ? 'result-fail' : 'result-block'}">
+                                    ${r.verdict || (r.passed === true ? 'PASS' : r.passed === false ? 'FAIL' : 'BLOCK')}
+                                </span>
+                            </td>
+                            <td style="color: ${r.error ? '#dc3545' : 'inherit'}; font-size: 12px;">${r.error || '-'}</td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ` : ''}
+            </div>
+
+            <!-- 日志面板 -->
+            <div class="detail-panel" id="panel-logs">
+                <!-- 日志统计 -->
+                ${task.log_stats ? `
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; font-size: 13px;">
+                    <span>总计: <strong>${task.log_stats.total || 0}</strong></span>
+                    <span style="color: #17a2b8;">INFO: ${task.log_stats.INFO || 0}</span>
+                    <span style="color: #ffc107;">WARNING: ${task.log_stats.WARNING || 0}</span>
+                    <span style="color: #dc3545;">ERROR: ${task.log_stats.ERROR || 0}</span>
+                </div>
+                ` : ''}
+
+                <!-- 日志列表 -->
+                ${task.recent_logs && task.recent_logs.length > 0 ? `
+                <div class="log-list">
+                    ${task.recent_logs.map(log => `
+                    <div class="log-item">
+                        <span class="log-time">${formatLogTime(log.timestamp)}</span>
+                        <span class="log-level ${log.level}">[${log.level}]</span>
+                        <span class="log-message">${escapeHtml(log.message)}</span>
+                    </div>
+                    `).join('')}
+                </div>
+                ${task.log_stats && task.log_stats.total > 20 ? `
+                <div style="text-align: center; margin-top: 15px; color: #666; font-size: 13px;">
+                    显示最近 20 条日志，共 ${task.log_stats.total} 条
+                </div>
+                ` : ''}
+                ` : '<p style="color: #666; text-align: center; padding: 20px;">暂无日志</p>'}
+            </div>
+        `;
+
+        // 更新查看完整日志按钮
+        const viewLogsBtn = document.getElementById('view-full-logs-btn');
+        if (task.log_stats && task.log_stats.total > 0) {
+            viewLogsBtn.style.display = 'inline-block';
+            viewLogsBtn.onclick = () => viewLogs(currentTaskId);
+        } else {
+            viewLogsBtn.style.display = 'none';
+        }
+    }
+
+    // 切换详情选项卡
+    function switchDetailTab(tabName) {
+        // 更新选项卡状态
+        document.querySelectorAll('.detail-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+
+        // 更新面板显示
+        document.querySelectorAll('.detail-panel').forEach(panel => {
+            panel.classList.toggle('active', panel.id === `panel-${tabName}`);
+        });
+    }
+
+    // 格式化日志时间
+    function formatLogTime(isoTime) {
+        if (!isoTime) return '-';
+        const date = new Date(isoTime);
+        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) +
+               '.' + String(date.getMilliseconds()).padStart(3, '0');
+    }
+
+    // HTML转义
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // 隐藏详情模态框
+    function hideDetailModal() {
+        document.getElementById('detail-modal').classList.remove('active');
     }
     
     // 查看任务日志
@@ -747,6 +1243,75 @@
         if (seconds < 60) return `${Math.round(seconds)}秒`;
         if (seconds < 3600) return `${Math.round(seconds / 60)}分钟`;
         return `${Math.round(seconds / 3600 * 10) / 10}小时`;
+    }
+
+    // 创建随机测试任务 - TDM2.0格式
+    async function createTestTask() {
+        // 随机生成任务数据 - 与真实TDM2.0接口格式一致
+        const projectNos = ['PRJ001', 'PRJ002', 'PRJ003', 'DEMO'];
+        const deviceIds = ['设备A', '设备B', '测试设备', 'DUT_001'];
+        const modules = ['通信', '诊断', '功能', '性能', '网络管理', '电源管理'];
+        const caseSources = ['标准要求', '客户需求', '内部需求', '法规要求'];
+        const priorities = ['P0紧急', 'P1高', 'P2中', 'P3低'];
+        const maintainers = ['张三', '李四', '王五', '赵六'];
+        const testTypes = ['', '功能测试', '性能测试', '稳定性测试'];
+
+        const randomProjectNo = projectNos[Math.floor(Math.random() * projectNos.length)];
+        const randomDeviceId = deviceIds[Math.floor(Math.random() * deviceIds.length)];
+        const taskNo = 'TT' + Date.now().toString().slice(-10);
+
+        // 随机生成1-3个用例
+        const caseCount = Math.floor(Math.random() * 3) + 1;
+        const caseList = [];
+
+        for (let i = 0; i < caseCount; i++) {
+            const caseNo = `ANM_TG${Math.floor(Math.random() * 5) + 1}_TC${String(Math.floor(Math.random() * 10) + 1).padStart(2, '0')}_SC${String(Math.floor(Math.random() * 5) + 1).padStart(2, '0')}`;
+            const moduleName = modules[Math.floor(Math.random() * modules.length)];
+
+            caseList.push({
+                caseNo: caseNo,
+                caseName: `${moduleName}测试_${['正常', '异常', '边界', '压力'][Math.floor(Math.random() * 4)]}_${Date.now()}`,
+                caseSource: caseSources[Math.floor(Math.random() * caseSources.length)],
+                caseType: testTypes[Math.floor(Math.random() * testTypes.length)],
+                expectedResult: '预期结果：测试通过，无异常',
+                maintainer: maintainers[Math.floor(Math.random() * maintainers.length)],
+                moduleLevel1: moduleName,
+                moduleLevel2: '',
+                moduleLevel3: '',
+                preCondition: '上电后稳定通信',
+                priority: priorities[Math.floor(Math.random() * priorities.length)],
+                stepDescription: `1) 配置测试环境；\n2) 执行${moduleName}测试；\n3) 验证测试结果。`
+            });
+        }
+
+        // TDM2.0格式的任务数据
+        const taskData = {
+            taskNo: taskNo,
+            projectNo: randomProjectNo,
+            deviceId: randomDeviceId,
+            caseList: caseList
+        };
+
+        try {
+            const response = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(taskData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('测试任务已创建: ' + taskNo, 'success');
+                loadTasks();
+                loadStats();
+            } else {
+                showMessage(result.message, 'error');
+            }
+        } catch (error) {
+            console.error('创建测试任务失败:', error);
+            showMessage('创建测试任务失败', 'error');
+        }
     }
 </script>
 {% endblock %}

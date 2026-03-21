@@ -20,16 +20,18 @@ from flask_socketio import SocketIO, emit
 
 from config.settings import settings
 from config.config_manager import config_manager
-from utils.logger import get_logger, setup_logger
+from utils.logger import get_logger, setup_logging
 from utils.exceptions import ExecutorException
 from utils.metrics import performance_monitor, metric_collector
 from utils.validators import InputValidator, ValidationError
 from models.task import Task
 from models.result import Message, StatusUpdate, LogEntry
 from core.task_executor_production import TaskExecutorProduction
+from core.status_monitor import get_status_monitor, ConnectionStatus
 
 print("正在设置日志...")
-logger = setup_logger("executor_production")
+setup_logging()
+logger = get_logger()
 print("日志设置完成")
 
 class PythonExecutorProduction:
@@ -190,7 +192,13 @@ class PythonExecutorProduction:
                     'ip': request.remote_addr
                 }
                 self.clients[sid] = client_info
-                
+
+                # 更新 StatusMonitor 的 WebSocket 状态
+                get_status_monitor().update_websocket_status(
+                    ConnectionStatus.CONNECTED,
+                    datetime.now()
+                )
+
                 logger.info(f"客户端连接: {sid} from {request.remote_addr}")
                 
                 emit('welcome', {
@@ -221,6 +229,12 @@ class PythonExecutorProduction:
                 client_info = self.clients.pop(sid)
                 connected_time = datetime.now() - client_info['connected_at']
                 logger.info(f"客户端断开连接: {sid}, 连接时长: {connected_time}")
+
+            # 如果没有其他客户端，更新 StatusMonitor 的 WebSocket 状态
+            if len(self.clients) == 0:
+                get_status_monitor().update_websocket_status(
+                    ConnectionStatus.DISCONNECTED
+                )
         
         @self.socketio.on('heartbeat')
         def handle_heartbeat(data):

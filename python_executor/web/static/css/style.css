@@ -636,3 +636,57 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
 }
+
+/* 复选框样式 */
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+    vertical-align: middle;
+}
+
+input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+input[type="checkbox"]:checked {
+    accent-color: var(--primary-color);
+}
+
+/* 复选框标签容器 - 内联使用 */
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    flex-shrink: 0;
+    margin: 0;
+}
+
+/* 在 form-group 内的 checkbox-label 覆盖 */
+.form-group .checkbox-label,
+form .checkbox-label {
+    display: inline-flex;
+    margin-bottom: 0;
+}
+
+/* 复选框表单组 - 独占一行使用 */
+.checkbox-form-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.checkbox-form-group input[type="checkbox"] {
+    flex-shrink: 0;
+    margin: 0;
+}

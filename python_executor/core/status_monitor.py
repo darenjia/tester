@@ -26,6 +26,7 @@ class TaskStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
 
 
 class SoftwareStatus(Enum):
@@ -39,7 +40,7 @@ class SoftwareStatus(Enum):
 
 class StatusMonitor:
     """状态监控器"""
-    
+
     def __init__(self):
         self._websocket_status = ConnectionStatus.DISCONNECTED
         self._websocket_last_heartbeat = None
@@ -50,6 +51,7 @@ class StatusMonitor:
             'tsmaster': SoftwareStatus.NOT_INSTALLED,
             'ttworkbench': SoftwareStatus.NOT_INSTALLED
         }
+        self._software_status_checked = False  # 是否已检测过软件状态
         self._system_stats = {
             'cpu_percent': 0.0,
             'memory_percent': 0.0,
@@ -91,13 +93,53 @@ class StatusMonitor:
     def update_software_status(self, software: str, status: SoftwareStatus):
         """
         更新测试软件状态
-        
+
         Args:
             software: 软件名称 (canoe, tsmaster, ttworkbench)
             status: 软件状态
         """
         if software in self._software_status:
             self._software_status[software] = status
+
+    def check_software_status(self) -> Dict[str, Any]:
+        """
+        检测软件安装状态
+
+        Returns:
+            Dict[str, Any]: 软件检测结果
+        """
+        try:
+            from core.software_validator import SoftwareValidator
+
+            validator = SoftwareValidator()
+            results = validator.validate_all()
+
+            # 更新软件状态
+            if 'canoe' in results:
+                if results['canoe'].get('installed'):
+                    self._software_status['canoe'] = SoftwareStatus.READY
+                else:
+                    self._software_status['canoe'] = SoftwareStatus.NOT_INSTALLED
+
+            if 'tsmaster' in results:
+                if results['tsmaster'].get('installed'):
+                    self._software_status['tsmaster'] = SoftwareStatus.READY
+                else:
+                    self._software_status['tsmaster'] = SoftwareStatus.NOT_INSTALLED
+
+            if 'ttman' in results or 'ttworkbench' in results:
+                tt_result = results.get('ttman') or results.get('ttworkbench', {})
+                if tt_result.get('installed'):
+                    self._software_status['ttworkbench'] = SoftwareStatus.READY
+                else:
+                    self._software_status['ttworkbench'] = SoftwareStatus.NOT_INSTALLED
+
+            self._software_status_checked = True
+            return results
+
+        except Exception as e:
+            print(f"检测软件状态失败: {e}")
+            return {}
     
     def update_system_stats(self):
         """更新系统资源统计"""
@@ -130,39 +172,84 @@ class StatusMonitor:
     
     def get_task_status(self) -> Dict[str, Any]:
         """获取当前任务状态"""
-        if not self._current_task:
-            return {
-                'has_task': False,
-                'status': TaskStatus.IDLE.value,
-                'status_display': '空闲',
-                'message': '当前没有执行任务'
+        # 优先使用内部跟踪的当前任务（正在执行的任务）
+        if self._current_task:
+            task_info = self._current_task.copy()
+            task_info['has_task'] = True
+
+            # 计算运行时间
+            if self._task_start_time:
+                elapsed = datetime.now() - self._task_start_time
+                task_info['elapsed_seconds'] = int(elapsed.total_seconds())
+                task_info['elapsed_display'] = self._format_duration(elapsed)
+
+            # 状态显示文本
+            status_mapping = {
+                TaskStatus.PENDING.value: '等待中',
+                TaskStatus.RUNNING.value: '执行中',
+                TaskStatus.COMPLETED.value: '已完成',
+                TaskStatus.FAILED.value: '失败',
+                TaskStatus.CANCELLED.value: '已取消',
+                TaskStatus.TIMEOUT.value: '超时'
             }
-        
-        task_info = self._current_task.copy()
-        task_info['has_task'] = True
-        
-        # 计算运行时间
-        if self._task_start_time:
-            elapsed = datetime.now() - self._task_start_time
-            task_info['elapsed_seconds'] = int(elapsed.total_seconds())
-            task_info['elapsed_display'] = self._format_duration(elapsed)
-        
-        # 状态显示文本
-        status_mapping = {
-            TaskStatus.PENDING.value: '等待中',
-            TaskStatus.RUNNING.value: '执行中',
-            TaskStatus.COMPLETED.value: '已完成',
-            TaskStatus.FAILED.value: '失败',
-            TaskStatus.CANCELLED.value: '已取消'
+            task_info['status_display'] = status_mapping.get(
+                task_info.get('status'), '未知'
+            )
+
+            return task_info
+
+        # 如果没有正在执行的任务，查询全局任务队列
+        try:
+            from models.executor_task import task_queue, TaskStatus as ExecutorTaskStatus
+            from core.task_executor_production import get_task_executor
+
+            # 获取正在运行的任务
+            running_tasks = task_queue.get_running_tasks()
+
+            if running_tasks:
+                # 有正在运行的任务
+                running_task = running_tasks[0]
+                return {
+                    'has_task': True,
+                    'task_id': running_task.id,
+                    'status': ExecutorTaskStatus.RUNNING.value,
+                    'status_display': '执行中',
+                    'tool_type': running_task.task_type,
+                    'message': running_task.name or '执行中...'
+                }
+
+            # 获取排队中的任务
+            pending_tasks = task_queue.get_pending_tasks()
+
+            if pending_tasks:
+                # 有排队中的任务
+                pending_task = pending_tasks[0]
+                return {
+                    'has_task': True,
+                    'task_id': pending_task.id,
+                    'status': ExecutorTaskStatus.PENDING.value,
+                    'status_display': '排队中',
+                    'tool_type': pending_task.task_type,
+                    'message': f'等待执行（队列中还有 {len(pending_tasks)} 个任务）'
+                }
+
+        except Exception as e:
+            print(f"查询任务队列失败: {e}")
+
+        # 没有任何任务
+        return {
+            'has_task': False,
+            'status': TaskStatus.IDLE.value,
+            'status_display': '空闲',
+            'message': '当前没有执行任务'
         }
-        task_info['status_display'] = status_mapping.get(
-            task_info.get('status'), '未知'
-        )
-        
-        return task_info
     
     def get_software_status(self) -> Dict[str, Any]:
         """获取测试软件状态"""
+        # 首次调用时自动检测软件状态
+        if not self._software_status_checked:
+            self.check_software_status()
+
         status_mapping = {
             SoftwareStatus.NOT_INSTALLED: '未安装',
             SoftwareStatus.NOT_RUNNING: '未运行',
@@ -170,7 +257,7 @@ class StatusMonitor:
             SoftwareStatus.BUSY: '忙碌',
             SoftwareStatus.ERROR: '错误'
         }
-        
+
         return {
             'canoe': {
                 'status': self._software_status['canoe'].value,

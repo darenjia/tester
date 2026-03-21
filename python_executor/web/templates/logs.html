@@ -97,17 +97,31 @@
         try {
             const level = document.getElementById('log-level-filter').value;
             const search = document.getElementById('log-search').value;
-            
+
             let url = '/api/logs?limit=500';
             if (level) url += `&level=${level}`;
             if (search) url += `&search=${encodeURIComponent(search)}`;
-            
+
             const response = await fetch(url);
             const result = await response.json();
-            
+
             if (result.success) {
-                displayLogs(result.data.logs);
-                document.getElementById('log-count').textContent = `共 ${result.data.pagination.total} 条`;
+                let logs = [];
+                let total = 0;
+
+                // 兼容两种返回格式
+                if (Array.isArray(result.data)) {
+                    // 格式1: {'data': [...], 'total': ...}
+                    logs = result.data;
+                    total = result.total || logs.length;
+                } else if (result.data && result.data.logs) {
+                    // 格式2: {'data': {'logs': [...], 'pagination': {...}}}
+                    logs = result.data.logs;
+                    total = result.data.pagination?.total || logs.length;
+                }
+
+                displayLogs(logs);
+                document.getElementById('log-count').textContent = `共 ${total} 条`;
             } else {
                 showMessage('加载日志失败: ' + result.message, 'error');
             }

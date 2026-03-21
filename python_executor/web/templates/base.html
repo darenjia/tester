@@ -32,13 +32,9 @@
                     <i class="fas fa-tasks"></i>
                     <span>任务管理</span>
                 </a>
-                <a href="/service-config" class="nav-item {% if active_page == 'service-config' %}active{% endif %}">
+                <a href="/settings" class="nav-item {% if active_page == 'settings' %}active{% endif %}">
                     <i class="fas fa-cog"></i>
-                    <span>服务配置</span>
-                </a>
-                <a href="/config" class="nav-item {% if active_page == 'config' %}active{% endif %}">
-                    <i class="fas fa-sliders-h"></i>
-                    <span>系统配置</span>
+                    <span>系统设置</span>
                 </a>
                 <a href="/api-docs" class="nav-item {% if active_page == 'api-docs' %}active{% endif %}">
                     <i class="fas fa-book"></i>
@@ -48,23 +44,15 @@
                     <i class="fas fa-file-alt"></i>
                     <span>运行日志</span>
                 </a>
-                <a href="/env-check" class="nav-item {% if active_page == 'env-check' %}active{% endif %}">
+                <a href="/system-check" class="nav-item {% if active_page == 'system-check' %}active{% endif %}">
                     <i class="fas fa-stethoscope"></i>
-                    <span>环境检测</span>
-                </a>
-                <a href="/functional-test" class="nav-item {% if active_page == 'functional-test' %}active{% endif %}">
-                    <i class="fas fa-vial"></i>
-                    <span>功能测试</span>
+                    <span>系统检测</span>
                 </a>
                 <a href="/case-mapping" class="nav-item {% if active_page == 'case-mapping' %}active{% endif %}">
                     <i class="fas fa-link"></i>
                     <span>用例映射</span>
                 </a>
-                <a href="/report-config" class="nav-item {% if active_page == 'report-config' %}active{% endif %}">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <span>上报配置</span>
-                </a>
-            </nav>
+                            </nav>
             
             <div class="sidebar-footer">
                 <div id="uptime">运行时间: --</div>
@@ -143,18 +131,18 @@
                     // 检查 WebSocket 是否启用
                     const configResponse = await fetch('/api/config/websocket');
                     const configResult = await configResponse.json();
-                    
+
                     if (configResult.success && configResult.data.enabled) {
                         // WebSocket 启用，显示 WebSocket 状态
                         document.getElementById('connection-status').style.display = 'inline';
                         document.getElementById('http-status').style.display = 'none';
-                        updateConnectionStatus(result.data.websocket.connected);
+                        updateConnectionStatus(result.data.websocket?.connected);
                     } else {
                         // WebSocket 未启用，显示 HTTP 状态
                         document.getElementById('connection-status').style.display = 'none';
                         document.getElementById('http-status').style.display = 'inline';
                     }
-                    
+
                     updateUptime(result.data.uptime);
                 }
             } catch (error) {
@@ -165,12 +153,19 @@
                 document.getElementById('http-status').style.display = 'inline';
             }
         }
-        
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
+            // 只在非 dashboard 页面启动定时刷新
+            // dashboard 页面有自己的刷新逻辑
+            const isDashboard = window.location.pathname === '/' || window.location.pathname === '/dashboard';
+
             fetchStatus();
-            // 每 5 秒更新一次状态
-            setInterval(fetchStatus, 5000);
+
+            // 非 dashboard 页面每 5 秒更新一次状态
+            if (!isDashboard) {
+                setInterval(fetchStatus, 5000);
+            }
         });
     </script>
     

@@ -114,12 +114,21 @@ class StateMachineTaskExecutor:
         """
         # 验证任务数据
         try:
+            test_items = []
+            for item in task.test_items:
+                item_dict = {
+                    'name': item.name,
+                    'type': item.type,
+                    'case_no': getattr(item, 'caseNo', None) or getattr(item, 'case_no', None)
+                }
+                test_items.append(item_dict)
+
             task_data = {
                 'taskNo': task.task_id,
                 'deviceId': task.device_id,
                 'toolType': task.tool_type,
                 'configPath': task.config_path,
-                'testItems': [{'name': item.name, 'type': item.type} for item in task.test_items],
+                'testItems': test_items,
                 'timeout': task.timeout
             }
             InputValidator.validate_task_data(task_data)
@@ -227,14 +236,15 @@ class StateMachineTaskExecutor:
         test_items = [item.name for item in task.test_items]
         
         # 确定适配器类型
-        if task.tool_type == TestToolType.CANOE.value:
+        tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+        if tool_type_lower == TestToolType.CANOE.value:
             adapter_type = TestToolType.CANOE
-        elif task.tool_type == TestToolType.TSMASTER.value:
+        elif tool_type_lower == TestToolType.TSMASTER.value:
             adapter_type = TestToolType.TSMASTER
-        elif task.tool_type == TestToolType.TTWORKBENCH.value:
+        elif tool_type_lower == TestToolType.TTWORKBENCH.value:
             adapter_type = TestToolType.TTWORKBENCH
         else:
-            adapter_type = TestToolType.CANOE  # 默认
+            adapter_type = TestToolType.CANOE
         
         # 注册各状态处理器
         state_machine.register_handler(

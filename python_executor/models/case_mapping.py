@@ -27,7 +27,8 @@ class CaseMapping:
     category: str = ""                   # 分类 (如 "canoe", "system", "tsmaster")
     module: str = ""                     # 模块名称 (如 "CANoe测试")
     script_path: str = ""                # cfg工程文件路径
-    ini_config: str = ""                 # ini文件内容配置 (JSON格式)
+    ini_config: str = ""                 # SelectInfo.ini配置内容 (原始INI格式)
+    para_config: str = ""                # ParaInfo.ini默认参数 (JSON格式)
     enabled: bool = True                 # 是否启用
     priority: int = 0                   # 优先级 (数字越大优先级越高)
     tags: List[str] = field(default_factory=list)  # 标签列表
@@ -51,6 +52,7 @@ class CaseMapping:
             "module": self.module,
             "script_path": self.script_path,
             "ini_config": self.ini_config,
+            "para_config": self.para_config,
             "enabled": self.enabled,
             "priority": self.priority,
             "tags": self.tags,
@@ -70,6 +72,7 @@ class CaseMapping:
             module=data.get("module", ""),
             script_path=data.get("script_path", ""),
             ini_config=data.get("ini_config", ""),
+            para_config=data.get("para_config", ""),
             enabled=data.get("enabled", True),
             priority=data.get("priority", 0),
             tags=data.get("tags", []),

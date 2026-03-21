@@ -212,25 +212,37 @@ class CANoeAdapter(BaseTestAdapter):
     def load_configuration(self, config_path: str) -> bool:
         """
         加载CANoe配置文件
-        
+
         Args:
             config_path: 配置文件路径（.cfg）
-            
+
         Returns:
             加载成功返回True
         """
         if not self.is_connected:
             self._set_error("CANoe未连接，无法加载配置")
             return False
-        
+
         try:
             self.logger.info(f"加载配置: {config_path}")
-            return self._canoe_wrapper.open_configuration(
-                config_path, 
+            result = self._canoe_wrapper.open_configuration(
+                config_path,
                 timeout=self.open_timeout
             )
+            if result:
+                self.logger.info(f"配置加载成功: {config_path}")
+                return True
+            else:
+                # 获取更详细的错误信息
+                error_msg = self._canoe_wrapper.last_error or "未知错误"
+                self._set_error(f"配置加载失败: {error_msg}")
+                return False
         except CANoeError as e:
-            self._set_error(f"加载配置失败: {str(e)}")
+            # 尝试获取更详细的错误信息
+            error_msg = str(e)
+            if self._canoe_wrapper.last_error:
+                error_msg = self._canoe_wrapper.last_error
+            self._set_error(f"加载配置失败: {error_msg}")
             return False
         except Exception as e:
             self._set_error(f"加载配置异常: {str(e)}")
@@ -239,21 +251,28 @@ class CANoeAdapter(BaseTestAdapter):
     def start_test(self) -> bool:
         """
         启动CANoe测量
-        
+
         Returns:
             启动成功返回True
         """
         if not self.is_connected:
             self._set_error("CANoe未连接，无法启动测量")
             return False
-        
+
         try:
-            if self._canoe_wrapper.start_measurement(timeout=self.start_timeout):
-                self.status = AdapterStatus.RUNNING
-                return True
-            return False
+            self._canoe_wrapper.start_measurement(timeout=self.start_timeout)
+            self.status = AdapterStatus.RUNNING
+            self.logger.info("CANoe测量启动成功")
+            return True
         except CANoeError as e:
-            self._set_error(f"启动测量失败: {str(e)}")
+            error_msg = str(e)
+            # 尝试获取更详细的错误信息
+            if self._canoe_wrapper.last_error:
+                error_msg = self._canoe_wrapper.last_error
+            self._set_error(f"启动测量失败: {error_msg}")
+            return False
+        except Exception as e:
+            self._set_error(f"启动测量异常: {str(e)}")
             return False
     
     def stop_test(self) -> bool:
@@ -406,6 +425,8 @@ class CANoeAdapter(BaseTestAdapter):
                 result = self._execute_wait_for_variable(item)
             elif item_type == "send_can_message":
                 result = self._execute_send_can_message(item)
+            elif item_type == "test_module":
+                result = self._execute_test_module(item)
             else:
                 result = {
                     "name": item_name,
@@ -613,12 +634,12 @@ class CANoeAdapter(BaseTestAdapter):
         msg_id = item.get("msg_id")
         data = item.get("data", [])
         msg_type = item.get("msg_type", "standard")
-        
+
         if msg_id is None:
             raise ValueError("send_can_message类型需要指定msg_id参数")
-        
+
         success = self._canoe_wrapper.send_can_message(channel, msg_id, data, msg_type)
-        
+
         return {
             "name": item.get("name", f"CAN_MSG_0x{msg_id:03X}"),
             "type": "send_can_message",
@@ -629,6 +650,66 @@ class CANoeAdapter(BaseTestAdapter):
             "success": success,
             "status": "passed" if success else "failed"
         }
+
+    def _execute_test_module(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行测试模块
+
+        直接通过 CANoe COM 接口执行 TestModule，不使用命名空间/系统变量。
+
+        Args:
+            item: 测试项配置字典
+                - name: 测试模块名称（必需）
+                - timeout: 超时时间（可选，默认600秒）
+
+        Returns:
+            测试结果字典
+        """
+        test_name = item.get("name", "unnamed")
+        if not test_name or test_name == "unnamed":
+            # 尝试从其他字段获取名称
+            test_name = item.get("case_name") or item.get("caseName") or item.get("module_name") or test_name
+
+        timeout = item.get("timeout", self.case_timeout)
+
+        self.logger.info(f"执行测试模块: {test_name}, 超时: {timeout}秒")
+
+        # 直接调用 COM wrapper 执行 TestModule
+        result = self._canoe_wrapper.execute_test_module(test_name, timeout)
+
+        return {
+            "name": test_name,
+            "type": "test_module",
+            "status": "completed" if result.get("success") else ("timeout" if "超时" in str(result.get("error", "")) else "failed"),
+            "verdict": result.get("verdict"),
+            "duration": result.get("duration", 0),
+            "error": result.get("error")
+        }
+
+    def get_test_modules(self) -> List[str]:
+        """
+        获取当前配置中的所有测试模块名称
+
+        Returns:
+            测试模块名称列表
+        """
+        return self._canoe_wrapper.get_test_modules()
+
+    def execute_test_module_direct(self, module_name: str, timeout: float = None) -> Dict[str, Any]:
+        """
+        直接执行指定的测试模块
+
+        Args:
+            module_name: 测试模块名称
+            timeout: 超时时间（秒）
+
+        Returns:
+            执行结果字典
+        """
+        return self._canoe_wrapper.execute_test_module(
+            module_name,
+            timeout or self.case_timeout
+        )
     
     def get_status(self) -> Dict[str, Any]:
         """

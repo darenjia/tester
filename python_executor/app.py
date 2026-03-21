@@ -14,7 +14,8 @@ import webview
 from web.server import app as flask_app
 from config.settings import get_config
 from utils.logger import get_logger, setup_logging
-from core.task_executor import task_executor
+from core.task_executor_production import get_task_executor
+task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 
 

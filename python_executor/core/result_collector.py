@@ -2,6 +2,7 @@
 结果收集与格式化模块
 """
 import time
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -38,7 +39,15 @@ class ResultCollector:
             details=details
         )
         self.logs.append(log_entry)
-        logger.log(getattr(logger, level.lower(), logger.info), f"[{self.taskNo}] {message}")
+        level_mapping = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        log_level = level_mapping.get(level.upper(), logging.INFO)
+        logger.log(log_level, f"[{self.taskNo}] {message}")
 
     def add_status_update(self, status: str, message: str = None, progress: int = None):
         """添加状态更新"""

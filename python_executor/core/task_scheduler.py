@@ -11,7 +11,8 @@ from enum import Enum
 
 from models.executor_task import Task, TaskStatus, TaskPriority, task_queue
 from models.task_log import task_log_manager
-from core.task_executor import task_executor
+from core.task_executor_production import get_task_executor
+task_executor = get_task_executor()
 
 logger = logging.getLogger(__name__)
 

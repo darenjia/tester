@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Dict, Type, Optional, Any
 import logging
 
-from .base_adapter import BaseAdapter
+from .base_adapter import BaseTestAdapter as BaseAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class AdapterFactory:
         """
         try:
             if tool_type == TestToolType.CANOE:
-                from .canoe_adapter import CANoeAdapter
+                from .canoe.adapter import CANoeAdapter
                 cls.register_adapter(tool_type, CANoeAdapter)
             elif tool_type == TestToolType.TSMASTER:
                 from .tsmaster_adapter import TSMasterAdapter

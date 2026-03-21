@@ -6,7 +6,8 @@ from flask import Blueprint, request, jsonify
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from core.task_executor import task_executor
+from core.task_executor_production import get_task_executor
+task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 from models.executor_task import task_queue
 from models.task_log import task_log_manager

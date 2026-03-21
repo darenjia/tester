@@ -5,11 +5,16 @@
 import json
 import uuid
 import threading
+import sys
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, List, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import os
+
+from utils.logger import get_logger
+
+logger = get_logger("task_queue")
 
 
 class TaskStatus(Enum):
@@ -134,29 +139,218 @@ class Task:
 class TaskQueue:
     """
     任务队列管理器
-    
+
     支持优先级队列，高优先级任务优先执行
+    支持持久化到文件，重启后自动恢复
     """
-    
-    def __init__(self):
+
+    _instance = None
+    _init_lock = threading.Lock()
+
+    def __new__(cls, storage_path: str = None):
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, storage_path: str = None):
+        if hasattr(self, '_initialized'):
+            return
+        self._initialized = True
+
         self._queue: List[Task] = []
         self._lock = threading.Lock()
         self._task_map: Dict[str, Task] = {}
+
+        # 设置存储路径
+        if storage_path is None:
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            storage_path = os.path.join(base_dir, 'data', 'tasks.json')
+
+        self.storage_path = storage_path
+        self._ensure_storage_dir()
+        self._load()
+
+    def _ensure_storage_dir(self):
+        """确保存储目录存在"""
+        storage_dir = os.path.dirname(self.storage_path)
+        if storage_dir and not os.path.exists(storage_dir):
+            os.makedirs(storage_dir, exist_ok=True)
+            logger.info(f"创建存储目录: {storage_dir}")
+
+    def _load(self):
+        """从文件加载任务"""
+        try:
+            if os.path.exists(self.storage_path):
+                with open(self.storage_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                self._task_map.clear()
+                self._queue.clear()
+
+                now = datetime.now()
+                retention_days = 7
+
+                for task_id, task_data in data.get('tasks', {}).items():
+                    try:
+                        task = Task.from_dict(task_data)
+
+                        # 处理 id 为 null 的情况 - 生成新的 UUID
+                        if task.id is None:
+                            task.id = str(uuid.uuid4())
+                            logger.warning(f"任务缺少ID，已生成新ID: {task.id}")
+
+                        # 处理 RUNNING 状态任务 - 重启后标记为失败
+                        if task.status == TaskStatus.RUNNING.value:
+                            task.status = TaskStatus.FAILED.value
+                            task.error_message = "应用重启导致任务中断"
+                            task.completed_at = now.isoformat()
+                            logger.warning(f"任务 {task.id} 运行中被中断，已标记为失败")
+
+                        # 跳过过期的已完成任务
+                        if task.is_completed() and task.completed_at:
+                            completed_time = datetime.fromisoformat(task.completed_at)
+                            if (now - completed_time) > timedelta(days=retention_days):
+                                logger.debug(f"跳过过期任务: {task.id}")
+                                continue
+
+                        # 使用任务的 id（而不是 JSON 的键）作为 map 的键
+                        self._task_map[task.id] = task
+                    except Exception as e:
+                        logger.error(f"加载任务 {task_id} 失败: {e}")
+                        continue
+
+                # 重建 pending 队列（按优先级排序）
+                pending_tasks = [t for t in self._task_map.values()
+                               if t.status == TaskStatus.PENDING.value]
+                pending_tasks.sort(key=lambda t: t.priority, reverse=True)
+                self._queue = pending_tasks
+
+                # 清理过多的已完成任务
+                self._cleanup_old_tasks()
+
+                logger.info(f"从存储加载了 {len(self._task_map)} 个任务，其中 {len(self._queue)} 个待执行")
+            else:
+                logger.info("未找到任务存储文件，使用空队列")
+        except Exception as e:
+            logger.error(f"加载任务存储失败: {e}")
+
+    def _save(self):
+        """保存任务到文件"""
+        try:
+            with self._lock:
+                data = {
+                    "tasks": {task_id: task.to_dict() for task_id, task in self._task_map.items()},
+                    "version": "1.0",
+                    "last_updated": datetime.now().isoformat()
+                }
+
+                # 原子写入：先写临时文件，再重命名
+                temp_path = self.storage_path + '.tmp'
+                with open(temp_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+                os.replace(temp_path, self.storage_path)
+                logger.debug("任务数据已保存")
+        except Exception as e:
+            logger.error(f"保存任务存储失败: {e}")
+
+    def _cleanup_old_tasks(self):
+        """清理过多的已完成任务（保留最近100条）"""
+        completed_statuses = [
+            TaskStatus.COMPLETED.value,
+            TaskStatus.FAILED.value,
+            TaskStatus.CANCELLED.value,
+            TaskStatus.TIMEOUT.value
+        ]
+
+        completed_tasks = [
+            (task_id, task) for task_id, task in self._task_map.items()
+            if task.status in completed_statuses
+        ]
+
+        # 按完成时间降序排序
+        completed_tasks.sort(
+            key=lambda x: x[1].completed_at or '',
+            reverse=True
+        )
+
+        max_keep = 100
+        if len(completed_tasks) > max_keep:
+            for task_id, _ in completed_tasks[max_keep:]:
+                del self._task_map[task_id]
+                logger.debug(f"清理过期任务: {task_id}")
+
+    def update_task_status(self, task_id: str, status: str,
+                          error_message: str = None,
+                          result: Dict[str, Any] = None) -> bool:
+        """
+        更新任务状态并自动保存
+
+        Args:
+            task_id: 任务ID
+            status: 新状态
+            error_message: 错误信息（可选）
+            result: 执行结果（可选）
+
+        Returns:
+            是否更新成功
+        """
+        with self._lock:
+            task = self._task_map.get(task_id)
+            if not task:
+                return False
+
+            task.status = status
+            if error_message is not None:
+                task.error_message = error_message
+            if result is not None:
+                task.result = result
+
+            if status == TaskStatus.RUNNING.value:
+                task.started_at = datetime.now().isoformat()
+            elif status in [TaskStatus.COMPLETED.value, TaskStatus.FAILED.value,
+                          TaskStatus.CANCELLED.value, TaskStatus.TIMEOUT.value]:
+                task.completed_at = datetime.now().isoformat()
+
+            # 从队列中移除非 pending 任务
+            if status != TaskStatus.PENDING.value and task in self._queue:
+                self._queue.remove(task)
+
+        self._save()
+        return True
     
-    def add(self, task: Task) -> bool:
+    def add(self, task: Task, overwrite: bool = True) -> bool:
         """
         添加任务到队列
-        
+
         Args:
             task: 任务对象
-            
+            overwrite: 是否覆盖已存在的任务（默认True）
+
         Returns:
             是否添加成功
         """
         with self._lock:
+            # 确保任务有有效的ID
+            if task.id is None:
+                task.id = str(uuid.uuid4())
+                logger.info(f"为任务生成新ID: {task.id}")
+
             if task.id in self._task_map:
-                return False
-            
+                if not overwrite:
+                    return False
+
+                # 覆盖模式：移除旧任务
+                old_task = self._task_map[task.id]
+                if old_task in self._queue:
+                    self._queue.remove(old_task)
+                logger.info(f"覆盖已存在的任务: {task.id}")
+
             # 按优先级插入队列
             inserted = False
             for i, existing_task in enumerate(self._queue):
@@ -164,12 +358,14 @@ class TaskQueue:
                     self._queue.insert(i, task)
                     inserted = True
                     break
-            
+
             if not inserted:
                 self._queue.append(task)
-            
+
             self._task_map[task.id] = task
-            return True
+
+        self._save()
+        return True
     
     def get(self) -> Optional[Task]:
         """
@@ -200,22 +396,24 @@ class TaskQueue:
     def remove(self, task_id: str) -> bool:
         """
         从队列中移除指定任务
-        
+
         Args:
             task_id: 任务ID
-            
+
         Returns:
             是否移除成功
         """
         with self._lock:
             if task_id not in self._task_map:
                 return False
-            
+
             task = self._task_map[task_id]
             if task in self._queue:
                 self._queue.remove(task)
             del self._task_map[task_id]
-            return True
+
+        self._save()
+        return True
     
     def get_task(self, task_id: str) -> Optional[Task]:
         """
@@ -277,10 +475,10 @@ class TaskQueue:
     def clear_completed(self, max_age: Optional[int] = None) -> int:
         """
         清理已完成的任务
-        
+
         Args:
             max_age: 最大保留时间(秒)，None表示清理所有
-            
+
         Returns:
             清理的任务数量
         """
@@ -294,14 +492,16 @@ class TaskQueue:
                         completed_time = datetime.fromisoformat(task.completed_at)
                         if (datetime.now() - completed_time).total_seconds() > max_age:
                             to_remove.append(task_id)
-            
+
             for task_id in to_remove:
                 del self._task_map[task_id]
-            
+
             # 清理队列中的已完成任务
             self._queue = [task for task in self._queue if task.id not in to_remove]
-            
-            return len(to_remove)
+
+        if to_remove:
+            self._save()
+        return len(to_remove)
     
     def size(self) -> int:
         """获取队列大小"""

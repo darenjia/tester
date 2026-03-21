@@ -83,41 +83,47 @@ class LoggerManager:
     def __init__(self):
         if self._initialized:
             return
-        
+
         self._initialized = True
+        self._setup_done = False  # 标记 setup() 是否已调用
         self.logger = logging.getLogger('TestExecutor')
         self.logger.setLevel(logging.INFO)
         self.memory_handler = None
         self.file_handler = None
         self.log_dir = None
-    
+
     def setup(self, log_dir: str = 'logs', level: str = 'INFO', max_memory_entries: int = 1000):
         """
         设置日志系统
-        
+
         Args:
             log_dir: 日志文件目录
             level: 日志级别
             max_memory_entries: 内存中保留的最大日志条数
         """
+        # 如果已经设置过，直接返回，避免重复清除处理器
+        if self._setup_done:
+            self.logger.debug("日志系统已初始化，跳过重复设置")
+            return
+
         self.log_dir = log_dir
-        
+
         # 设置日志级别
         self.logger.setLevel(getattr(logging, level.upper(), logging.INFO))
-        
+
         # 清除现有处理器
         self.logger.handlers.clear()
-        
+
         # 创建内存处理器
         self.memory_handler = MemoryLogHandler(max_entries=max_memory_entries)
         self.logger.addHandler(self.memory_handler)
-        
+
         # 创建文件处理器
         try:
             # 确保日志目录存在
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
-            
+
             # 按日期命名日志文件
             log_file = os.path.join(log_dir, f'executor_{datetime.now().strftime("%Y%m%d")}.log')
             self.file_handler = logging.FileHandler(log_file, encoding='utf-8')
@@ -128,7 +134,7 @@ class LoggerManager:
             self.logger.addHandler(self.file_handler)
         except Exception as e:
             self.logger.error(f"创建日志文件失败: {e}")
-        
+
         # 控制台处理器（开发调试用）
         if not getattr(sys, 'frozen', False):
             console_handler = logging.StreamHandler()
@@ -137,6 +143,9 @@ class LoggerManager:
                 datefmt='%H:%M:%S'
             ))
             self.logger.addHandler(console_handler)
+
+        self._setup_done = True
+        self.logger.info("日志系统初始化完成")
     
     def get_logger(self) -> logging.Logger:
         """获取日志记录器"""

@@ -192,29 +192,37 @@
         try {
             const response = await fetch('/api/status');
             const result = await response.json();
-            
+
             if (result.success) {
                 const data = result.data;
-                
+
                 // 更新 HTTP 服务状态（API调用成功说明HTTP服务正常）
                 updateHttpStatus(true);
-                
+
                 // 更新 WebSocket 状态（如果启用）
                 if (data.websocket) {
                     updateWebSocketStatus(data.websocket);
                 }
-                
+
                 // 更新任务状态
-                updateTaskStatus(data.task);
-                
+                if (data.task) {
+                    updateTaskStatus(data.task);
+                }
+
                 // 更新系统健康状态
-                updateSystemStatus(data.system);
-                
-                // 更新软件状态
-                updateSoftwareStatus(data.software);
-                
-                // 更新系统资源
-                updateSystemResources(data.system);
+                if (data.system) {
+                    updateSystemStatus(data.system);
+                }
+
+                // 更新软件状态（添加空值检查）
+                if (data.software) {
+                    updateSoftwareStatus(data.software);
+                }
+
+                // 更新系统资源（添加空值检查）
+                if (data.system) {
+                    updateSystemResources(data.system);
+                }
             } else {
                 // API 返回 success: false，但 HTTP 服务仍然是正常的（因为能收到响应）
                 console.warn('API 返回失败:', result.message);
@@ -356,71 +364,69 @@
     
     // 更新软件状态
     function updateSoftwareStatus(softwareData) {
-        // CANoe
-        const canoeIndicator = document.getElementById('canoe-indicator');
-        const canoeValue = document.getElementById('canoe-status-value');
+        if (!softwareData) return;
+
+        // CANoe - 只使用 status-text 元素
         const canoeText = document.getElementById('canoe-status-text');
-        
-        canoeValue.textContent = softwareData.canoe.status_display;
-        canoeText.textContent = softwareData.canoe.status_display;
-        
-        if (softwareData.canoe.ready) {
-            canoeIndicator.className = 'status-indicator online';
-            canoeValue.style.color = 'var(--success-color)';
-            canoeText.className = 'badge';
-            canoeText.style.background = 'var(--success-color)';
-            canoeText.style.color = 'white';
-        } else {
-            canoeIndicator.className = 'status-indicator offline';
-            canoeValue.style.color = 'var(--text-secondary)';
-            canoeText.className = 'badge';
-            canoeText.style.background = 'var(--bg-color)';
-            canoeText.style.color = 'var(--text-secondary)';
+        if (canoeText) {
+            canoeText.textContent = softwareData.canoe?.status_display || '未安装';
+            if (softwareData.canoe?.ready) {
+                canoeText.className = 'badge';
+                canoeText.style.background = 'var(--success-color)';
+                canoeText.style.color = 'white';
+            } else {
+                canoeText.className = 'badge badge-secondary';
+                canoeText.style.background = '';
+                canoeText.style.color = '';
+            }
         }
-        
-        // TSMaster
-        const tsmasterIndicator = document.getElementById('tsmaster-indicator');
-        const tsmasterValue = document.getElementById('tsmaster-status-value');
+
+        // TSMaster - 只使用 status-text 元素
         const tsmasterText = document.getElementById('tsmaster-status-text');
-        
-        tsmasterValue.textContent = softwareData.tsmaster.status_display;
-        tsmasterText.textContent = softwareData.tsmaster.status_display;
-        
-        if (softwareData.tsmaster.ready) {
-            tsmasterIndicator.className = 'status-indicator online';
-            tsmasterValue.style.color = 'var(--success-color)';
-            tsmasterText.className = 'badge';
-            tsmasterText.style.background = 'var(--success-color)';
-            tsmasterText.style.color = 'white';
-        } else {
-            tsmasterIndicator.className = 'status-indicator offline';
-            tsmasterValue.style.color = 'var(--text-secondary)';
-            tsmasterText.className = 'badge';
-            tsmasterText.style.background = 'var(--bg-color)';
-            tsmasterText.style.color = 'var(--text-secondary)';
+        if (tsmasterText) {
+            tsmasterText.textContent = softwareData.tsmaster?.status_display || '未安装';
+            if (softwareData.tsmaster?.ready) {
+                tsmasterText.className = 'badge';
+                tsmasterText.style.background = 'var(--success-color)';
+                tsmasterText.style.color = 'white';
+            } else {
+                tsmasterText.className = 'badge badge-secondary';
+                tsmasterText.style.background = '';
+                tsmasterText.style.color = '';
+            }
         }
-        
-        // TTworkbench
+
+        // TTworkbench - 只使用 status-text 元素
         const ttworkbenchText = document.getElementById('ttworkbench-status-text');
-        ttworkbenchText.textContent = softwareData.ttworkbench.status_display;
-        if (softwareData.ttworkbench.ready) {
-            ttworkbenchText.className = 'badge';
-            ttworkbenchText.style.background = 'var(--success-color)';
-            ttworkbenchText.style.color = 'white';
-        } else {
-            ttworkbenchText.className = 'badge';
-            ttworkbenchText.style.background = 'var(--bg-color)';
-            ttworkbenchText.style.color = 'var(--text-secondary)';
+        if (ttworkbenchText) {
+            ttworkbenchText.textContent = softwareData.ttworkbench?.status_display || '未安装';
+            if (softwareData.ttworkbench?.ready) {
+                ttworkbenchText.className = 'badge';
+                ttworkbenchText.style.background = 'var(--success-color)';
+                ttworkbenchText.style.color = 'white';
+            } else {
+                ttworkbenchText.className = 'badge badge-secondary';
+                ttworkbenchText.style.background = '';
+                ttworkbenchText.style.color = '';
+            }
         }
     }
     
     // 更新系统资源
     function updateSystemResources(systemData) {
-        document.getElementById('cpu-value').textContent = `${systemData.cpu_percent.toFixed(1)}%`;
-        document.getElementById('memory-value').textContent = `${systemData.memory_percent.toFixed(1)}%`;
-        document.getElementById('memory-used-value').textContent = 
-            `${systemData.memory_used_gb.toFixed(1)} / ${systemData.memory_total_gb.toFixed(1)} GB`;
-        document.getElementById('disk-value').textContent = `${systemData.disk_percent.toFixed(1)}%`;
+        if (!systemData) return;
+
+        const cpuValue = document.getElementById('cpu-value');
+        const memoryValue = document.getElementById('memory-value');
+        const memoryUsedValue = document.getElementById('memory-used-value');
+        const diskValue = document.getElementById('disk-value');
+
+        if (cpuValue) cpuValue.textContent = `${(systemData.cpu_percent || 0).toFixed(1)}%`;
+        if (memoryValue) memoryValue.textContent = `${(systemData.memory_percent || 0).toFixed(1)}%`;
+        if (memoryUsedValue) {
+            memoryUsedValue.textContent = `${(systemData.memory_used_gb || 0).toFixed(1)} / ${(systemData.memory_total_gb || 0).toFixed(1)} GB`;
+        }
+        if (diskValue) diskValue.textContent = `${(systemData.disk_percent || 0).toFixed(1)}%`;
     }
     
     // 刷新软件状态
@@ -431,13 +437,15 @@
     
     // 更新上报服务状态
     function updateReportStatus(reportData) {
+        if (!reportData) return;
+
         const indicator = document.getElementById('report-indicator');
         const value = document.getElementById('report-status-value');
         const desc = document.getElementById('report-status-desc');
         const lastTime = document.getElementById('last-report-time');
-        
+
         if (!indicator || !value) return;
-        
+
         if (reportData.enabled) {
             indicator.className = 'status-indicator online';
             value.textContent = '已启用';
@@ -450,26 +458,28 @@
             desc.textContent = '请在配置页面设置上报服务器';
         }
     }
-    
+
     // 更新配置缓存状态
     function updateCacheStatus(cacheData) {
+        if (!cacheData) return;
+
         const indicator = document.getElementById('cache-indicator');
         const value = document.getElementById('cache-status-value');
         const desc = document.getElementById('cache-status-desc');
         const fileCount = document.getElementById('cache-file-count');
-        
+
         if (!indicator || !value) return;
-        
+
         if (cacheData.enabled) {
             indicator.className = 'status-indicator online';
             value.textContent = `${cacheData.total_size_mb || 0} MB`;
             value.style.color = 'var(--success-color)';
-            fileCount.textContent = cacheData.file_count || 0;
+            if (fileCount) fileCount.textContent = cacheData.file_count || 0;
         } else {
             indicator.className = 'status-indicator offline';
             value.textContent = '已禁用';
             value.style.color = 'var(--text-secondary)';
-            fileCount.textContent = '0';
+            if (fileCount) fileCount.textContent = '0';
         }
     }
     

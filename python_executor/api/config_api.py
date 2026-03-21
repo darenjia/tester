@@ -4,12 +4,15 @@
 """
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any
+import logging
 
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config_manager import get_runtime_config
+
+logger = logging.getLogger(__name__)
 
 # 创建蓝图
 config_bp = Blueprint('config', __name__, url_prefix='/api')
@@ -328,7 +331,7 @@ def restart_service():
             time.sleep(2)
             # 这里可以实现实际的重启逻辑
             # 例如: os.execv(sys.executable, ['python'] + sys.argv)
-            print("服务重启中...")
+            logger.info("服务重启中...")
         
         # 启动延迟重启线程
         restart_thread = threading.Thread(target=delayed_restart, daemon=True)

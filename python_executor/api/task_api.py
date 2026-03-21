@@ -2,12 +2,14 @@
 任务管理API
 提供任务相关的RESTful接口
 """
+import uuid
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any, Optional
 
 from models.executor_task import Task, TaskStatus, TaskPriority, task_queue
 from models.task_log import task_log_manager
-from core.task_executor import task_executor
+from core.task_executor_production import get_task_executor
+task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 
 
@@ -19,29 +21,96 @@ task_bp = Blueprint('task', __name__, url_prefix='/api')
 def create_task():
     """
     创建新任务
-    
-    请求体:
+
+    支持两种请求格式：
+    1. TDM2.0格式（推荐）:
     {
+        "taskNo": "TT26020203",
+        "projectNo": "yyy",
+        "deviceId": "测试",
+        "caseList": [
+            {
+                "caseNo": "ANM_TG1_TC02_SC01",
+                "caseName": "测试用例名称",
+                "caseSource": "标准要求",
+                "caseType": "",
+                "expectedResult": "预期结果",
+                "maintainer": "维护人",
+                "moduleLevel1": "通信",
+                "moduleLevel2": "",
+                "moduleLevel3": "",
+                "preCondition": "前置条件",
+                "priority": "P3低",
+                "stepDescription": "步骤描述"
+            }
+        ]
+    }
+
+    2. 内部格式（兼容）:
+    {
+        "taskNo": "任务ID",
         "name": "任务名称",
         "type": "任务类型",
-        "priority": 1,  // 0-3, 可选
-        "params": {},   // 任务参数
-        "timeout": 3600,  // 超时时间(秒), 可选
-        "delay": 0,     // 延迟执行时间(秒), 可选
-        "metadata": {}  // 额外元数据, 可选
+        "priority": 1,
+        "params": {},
+        "timeout": 3600,
+        "delay": 0,
+        "metadata": {}
     }
     """
     try:
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
-            
-        # 必填字段
+
+        # 检测是否为TDM2.0格式（包含caseList）
+        if 'caseList' in data:
+            # TDM2.0格式处理
+            from models.task import Task as TDMTask, Case
+
+            case_list = []
+            for case_data in data.get('caseList', []):
+                case_list.append(Case.from_dict(case_data))
+
+            task_no = data.get('taskNo') or data.get('taskNo') or str(uuid.uuid4())
+
+            tdm_task = TDMTask(
+                projectNo=data.get('projectNo', ''),
+                taskNo=task_no,
+                taskName=data.get('taskName', ''),
+                caseList=case_list,
+                deviceId=data.get('deviceId'),
+                toolType=data.get('toolType', 'canoe'),
+                configPath=data.get('configPath'),
+                timeout=data.get('timeout', 3600),
+                timestamp=data.get('timestamp')
+            )
+
+            # 提交到执行器
+            if task_executor.execute_task(tdm_task):
+                return jsonify({
+                    "success": True,
+                    "message": "任务已创建并提交到队列",
+                    "data": {
+                        "taskNo": task_no,
+                        "projectNo": tdm_task.projectNo,
+                        "deviceId": tdm_task.deviceId,
+                        "caseCount": len(case_list)
+                    }
+                })
+            else:
+                return jsonify({"success": False, "message": "任务提交失败"}), 500
+
+        # 内部格式处理（兼容旧接口）
         name = data.get('name') or data.get('projectNo', '未命名任务')
         task_type = data.get('type', 'default')
-            
+
+        # 支持自定义 taskNo（用于幂等性/覆盖）
+        task_id = data.get('taskNo') or data.get('id')
+
         # 创建任务
         task = Task(
+            id=task_id,  # 如果为 None，会自动生成 UUID
             name=name,
             task_type=task_type,
             priority=data.get('priority', TaskPriority.NORMAL.value),
@@ -51,10 +120,10 @@ def create_task():
             created_by=request.remote_addr,
             metadata=data.get('metadata', {})
         )
-        
+
         # 检查是否有延迟
         delay = data.get('delay', 0)
-        
+
         if delay > 0:
             # 定时任务
             if task_scheduler.schedule_task(task, delay):
@@ -71,9 +140,9 @@ def create_task():
                     "message": "任务已创建并提交到队列",
                     "data": task.to_dict()
                 })
-                
+
         return jsonify({"success": False, "message": "任务提交失败"}), 500
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"创建任务失败: {str(e)}"}), 500
 
@@ -140,7 +209,7 @@ def get_tasks():
 def get_task(task_id: str):
     """
     获取任务详情
-    
+
     路径参数:
     - task_id: 任务ID
     """
@@ -148,21 +217,92 @@ def get_task(task_id: str):
         task = task_queue.get_task(task_id)
         if not task:
             return jsonify({"success": False, "message": "任务不存在"}), 404
-            
+
         # 获取任务日志统计
         log_stats = task_log_manager.get_log_stats(task_id)
-        
+
+        # 获取最近的日志（最近20条）
+        recent_logs = task_log_manager.get_latest_logs(count=20, task_id=task_id)
+
+        # 构建执行信息
+        execution_info = {
+            "started_at": task.started_at,
+            "completed_at": task.completed_at,
+            "duration": task.get_duration(),
+            "wait_time": task.get_wait_time(),
+            "timeout": task.timeout,
+            "retry_count": task.retry_count,
+            "max_retries": task.max_retries
+        }
+
+        # 构建测试结果列表
+        test_results = []
+        if task.result and isinstance(task.result, dict):
+            results_list = task.result.get('results', [])
+            for r in results_list:
+                test_results.append({
+                    "name": r.get('name', ''),
+                    "type": r.get('type', ''),
+                    "verdict": r.get('verdict', ''),
+                    "passed": r.get('passed'),
+                    "error": r.get('error'),
+                    "details": r.get('details')
+                })
+
+        # 构建结果摘要
+        result_summary = None
+        if task.result and isinstance(task.result, dict):
+            result_summary = task.result.get('summary')
+        elif test_results:
+            total = len(test_results)
+            passed = sum(1 for r in test_results if r.get('passed') is True or r.get('verdict') == 'PASS')
+            failed = sum(1 for r in test_results if r.get('passed') is False or r.get('verdict') == 'FAIL')
+            blocked = sum(1 for r in test_results if r.get('verdict') == 'BLOCK')
+            result_summary = {
+                "total": total,
+                "passed": passed,
+                "failed": failed,
+                "blocked": blocked,
+                "pass_rate": f"{(passed / total * 100):.1f}%" if total > 0 else "0%"
+            }
+
         return jsonify({
             "success": True,
             "data": {
-                **task.to_dict(),
-                "duration": task.get_duration(),
-                "wait_time": task.get_wait_time(),
+                # 基本信息
+                "id": task.id,
+                "name": task.name,
+                "status": task.status,
+                "priority": task.priority,
+                "task_type": task.task_type,
+                "created_at": task.created_at,
+                "created_by": task.created_by,
+                "error_message": task.error_message,
                 "can_retry": task.can_retry(),
-                "log_stats": log_stats
+
+                # 执行信息
+                "execution": execution_info,
+
+                # 任务参数
+                "params": task.params,
+
+                # 元数据
+                "metadata": task.metadata,
+
+                # 测试结果摘要
+                "result_summary": result_summary,
+
+                # 测试结果列表
+                "test_results": test_results,
+
+                # 日志统计
+                "log_stats": log_stats,
+
+                # 最近日志
+                "recent_logs": [log.to_dict() for log in recent_logs]
             }
         })
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"获取任务详情失败: {str(e)}"}), 500
 

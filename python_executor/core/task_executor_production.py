@@ -2,6 +2,7 @@
 任务执行核心引擎 - 生产环境增强版
 集成熔断器、重试、性能监控、配置热更新等功能
 """
+import os
 import threading
 import time
 import queue
@@ -18,10 +19,13 @@ from utils.report_client import ReportClient
 from config.settings import settings
 from config.config_manager import config_manager
 from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
+from models.result import CaseResult, ExecutionResult
+from models.executor_task import task_queue as global_task_queue, TaskStatus as ExecutorTaskStatus
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
 from core.adapters import create_adapter_with_wrapper, TestToolType
 from core.case_mapping_manager import get_case_mapping_manager
+from core.status_monitor import get_status_monitor
 
 logger = get_logger("task_executor_production")
 
@@ -107,6 +111,7 @@ class TaskExecutorProduction:
         self._worker_pool = ThreadPoolExecutor(max_workers=1)  # 串行执行
         self._running = False
         self._worker_thread = None
+        self.max_workers = 1  # 最大并发任务数
 
         # 性能监控
         self._current_metrics = None
@@ -176,12 +181,21 @@ class TaskExecutorProduction:
         """
         # 验证任务数据
         try:
+            test_items = []
+            for item in task.test_items:
+                item_dict = {
+                    'name': item.name,
+                    'type': item.type,
+                    'case_no': getattr(item, 'caseNo', None) or getattr(item, 'case_no', None)
+                }
+                test_items.append(item_dict)
+
             task_data = {
                 'taskNo': task.task_id,
                 'deviceId': task.device_id,
                 'toolType': task.tool_type,
                 'configPath': task.config_path,
-                'testItems': [{'name': item.name, 'type': item.type} for item in task.test_items],
+                'testItems': test_items,
                 'timeout': task.timeout
             }
             InputValidator.validate_task_data(task_data)
@@ -209,6 +223,7 @@ class TaskExecutorProduction:
 
             self.current_task = task
             self._stop_event.clear()
+            self._start_time = time.time()
 
         # 初始化性能指标
         self._current_metrics = TaskMetrics(task.task_id)
@@ -226,10 +241,16 @@ class TaskExecutorProduction:
 
             logger.info(f"[_execute_task_production] 任务初始化完成，开始配置准备阶段")
 
-            # ========== 配置准备（新增）==========
+            # ========== 配置准备 ==========
             cfg_path = None
-            if task.config_name or task.base_config_dir:
-                # 使用配置管理器准备配置
+
+            # 1. 优先使用任务指定的配置路径
+            if task.config_path:
+                cfg_path = task.config_path
+                logger.info(f"使用任务指定的配置路径: {cfg_path}")
+
+            # 2. 尝试从配置管理器准备配置
+            elif task.config_name or task.base_config_dir:
                 self.current_collector.add_log("INFO", "正在准备测试配置...")
 
                 base_dir = task.base_config_dir or settings.config_base_dir
@@ -239,7 +260,6 @@ class TaskExecutorProduction:
                 # 确定配置名称
                 config_name = task.config_name
                 if not config_name and task.config_path:
-                    import os
                     config_name = os.path.basename(task.config_path).replace('.cfg', '')
 
                 if config_name:
@@ -248,22 +268,39 @@ class TaskExecutorProduction:
                         test_cases=[item.to_dict() for item in task.test_items],
                         variables=task.variables
                     )
-                    cfg_path = config_info['cfg_path']
-                    ini_path = config_info['ini_path']
+                    cfg_path = config_info.get('cfg_path')
+                    ini_path = config_info.get('ini_path')
 
                     self.current_collector.add_log("INFO", f"cfg文件: {cfg_path}")
-                    self.current_collector.add_log("INFO", f"ini文件: {ini_path}")
+                    if ini_path:
+                        self.current_collector.add_log("INFO", f"ini文件: {ini_path}")
                     logger.info(f"配置准备完成: cfg={cfg_path}, ini={ini_path}")
+
+            # 3. 尝试从用例映射获取配置路径
+            if not cfg_path and task.test_items:
+                mapping_manager = get_case_mapping_manager()
+                for test_item in task.test_items:
+                    case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None)
+                    if case_no:
+                        mapping = mapping_manager.get_mapping(case_no)
+                        if mapping and mapping.enabled and mapping.script_path:
+                            cfg_path = mapping.script_path
+                            logger.info(f"从用例映射获取配置路径: case_no={case_no}, cfg_path={cfg_path}")
+                            break
+
+            # 4. 如果仍然没有配置路径，报错
+            if not cfg_path:
+                raise TaskException("未指定配置文件路径(configPath/configName)，也未找到用例映射，无法执行任务")
 
             # 根据工具类型选择控制器（使用适配器工厂）
             step_start = time.time()
             try:
-                # 将字符串工具类型转换为枚举
-                if task.tool_type == TestToolType.CANOE.value:
+                tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+                if tool_type_lower == TestToolType.CANOE.value:
                     adapter_type = TestToolType.CANOE
-                elif task.tool_type == TestToolType.TSMASTER.value:
+                elif tool_type_lower == TestToolType.TSMASTER.value:
                     adapter_type = TestToolType.TSMASTER
-                elif task.tool_type == TestToolType.TTWORKBENCH.value:
+                elif tool_type_lower == TestToolType.TTWORKBENCH.value:
                     adapter_type = TestToolType.TTWORKBENCH
                 else:
                     raise TaskException(f"不支持的测试工具类型: {task.tool_type}")
@@ -281,27 +318,21 @@ class TaskExecutorProduction:
             self._connect_tool_with_retry(task)
             self._current_metrics.record_step('connect_tool', time.time() - step_start)
 
-            # 加载配置（使用新路径或原有路径）
+            # 加载配置文件
             step_start = time.time()
-            if cfg_path:
-                self._load_configuration_by_path(cfg_path)
-            else:
-                self._load_configuration(task)
+            self._load_configuration_by_path(cfg_path)
+            current_cfg_path = cfg_path  # 记录当前加载的配置路径
             self._current_metrics.record_step('load_config', time.time() - step_start)
-            
+
             # 启动测量/仿真
             step_start = time.time()
             self._start_measurement(task)
             self._current_metrics.record_step('start_measurement', time.time() - step_start)
 
-            # 执行测试项（使用新的配置驱动方式）
+            # 执行测试项
             step_start = time.time()
-            if hasattr(self.controller, 'run_test_case_with_config') and task.config_name:
-                # 新方式：通过系统变量控制用例执行
-                results = self._execute_test_items_with_config(task)
-            else:
-                # 回退到原有执行方式
-                results = self._execute_test_items(task)
+            # 使用原有的执行方式（通过ini文件控制）
+            results = self._execute_test_items(task)
             self._current_metrics.record_step('execute_items', time.time() - step_start)
             
             # 停止测量/仿真
@@ -367,6 +398,7 @@ class TaskExecutorProduction:
                 self.current_collector = None
                 self._current_metrics = None
                 self.config_manager = None
+                self._start_time = None
     
     def _connect_tool_with_retry(self, task: Task):
         """带重试的连接工具"""
@@ -395,9 +427,20 @@ class TaskExecutorProduction:
         self.current_collector.add_log("INFO", f"正在加载配置文件: {task.config_path}")
 
         try:
-            self.controller.open_configuration(task.config_path)
-            logger.info("配置文件加载成功")
-            self.current_collector.add_log("INFO", "配置文件加载成功")
+            result = self.controller.open_configuration(task.config_path)
+            if result:
+                logger.info("配置文件加载成功")
+                self.current_collector.add_log("INFO", "配置文件加载成功")
+            else:
+                # 获取更详细的错误信息
+                error_msg = "未知错误"
+                if hasattr(self.controller, 'adapter') and hasattr(self.controller.adapter, 'last_error'):
+                    error_msg = self.controller.adapter.last_error or error_msg
+                elif hasattr(self.controller, 'last_error'):
+                    error_msg = self.controller.last_error or error_msg
+                raise ToolException(f"配置文件加载失败: {error_msg}")
+        except ToolException:
+            raise
         except Exception as e:
             raise ToolException(f"配置文件加载失败: {e}")
 
@@ -407,9 +450,20 @@ class TaskExecutorProduction:
         self.current_collector.add_log("INFO", f"正在加载配置文件: {config_path}")
 
         try:
-            self.controller.open_configuration(config_path)
-            logger.info("配置文件加载成功")
-            self.current_collector.add_log("INFO", "配置文件加载成功")
+            result = self.controller.open_configuration(config_path)
+            if result:
+                logger.info("配置文件加载成功")
+                self.current_collector.add_log("INFO", "配置文件加载成功")
+            else:
+                # 获取更详细的错误信息
+                error_msg = "未知错误"
+                if hasattr(self.controller, 'adapter') and hasattr(self.controller.adapter, 'last_error'):
+                    error_msg = self.controller.adapter.last_error or error_msg
+                elif hasattr(self.controller, 'last_error'):
+                    error_msg = self.controller.last_error or error_msg
+                raise ToolException(f"配置文件加载失败: {error_msg}")
+        except ToolException:
+            raise
         except Exception as e:
             raise ToolException(f"配置文件加载失败: {e}")
     
@@ -417,9 +471,10 @@ class TaskExecutorProduction:
         """启动测量/仿真"""
         logger.info("正在启动测量/仿真...")
         self.current_collector.add_log("INFO", "正在启动测量/仿真")
-        
+
         try:
-            if task.tool_type == TestToolType.CANOE.value:
+            tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+            if tool_type_lower == TestToolType.CANOE.value:
                 success = self.controller.start_measurement()
             else:
                 success = self.controller.start_simulation()
@@ -516,7 +571,7 @@ class TaskExecutorProduction:
         logger.warning(f"目录中有多个.cfg文件且未匹配到特定的case_id，返回第一个: {cfg_files[0]}")
         return os.path.join(directory, cfg_files[0])
 
-    def _execute_test_items_with_config(self, task: Task) -> list:
+    def _execute_test_items_with_config(self, task: Task, current_cfg_path: str = None) -> list:
         """
         使用配置执行测试项 - 新的配置驱动执行方式
 
@@ -527,6 +582,10 @@ class TaskExecutorProduction:
         4. 根据用例配置更新ini文件
         5. 触发测试执行
         6. 等待并获取结果
+
+        Args:
+            task: 任务对象
+            current_cfg_path: 当前已加载的配置路径
         """
         results = []
         total_items = len(task.test_items)
@@ -534,16 +593,10 @@ class TaskExecutorProduction:
         logger.info(f"[_execute_test_items_with_config] 开始执行 {total_items} 个测试项（配置驱动方式）")
         self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
 
-        # 获取命名空间
-        namespace = task.canoe_namespace or settings.canoe_namespace
-
         # 初始化配置管理器（用于生成ini）
         base_dir = task.base_config_dir or settings.config_base_dir
-        logger.info(f"[_execute_test_items_with_config] base_dir={base_dir}, namespace={namespace}")
+        logger.info(f"[_execute_test_items_with_config] base_dir={base_dir}")
         test_config_manager = TestConfigManager(base_config_dir=base_dir)
-
-        # 记录当前加载的cfg路径，用于判断是否需要重新加载
-        current_cfg_path = None
 
         for i, test_item in enumerate(task.test_items, 1):
             # 检查是否被取消
@@ -571,6 +624,7 @@ class TaskExecutorProduction:
                 case_id = mapping.case_no
                 script_path = mapping.script_path
                 ini_config = mapping.ini_config
+                para_config = mapping.para_config
                 logger.info(f"[_execute_test_items_with_config] 用例映射找到: name={test_item.name}, case_id={case_id}, script_path={script_path}, ini_config={ini_config[:100] if ini_config else None}...")
 
                 # 如果script_path是目录，在目录中查找.cfg文件
@@ -581,6 +635,7 @@ class TaskExecutorProduction:
                 case_id = test_item.name
                 script_path = None
                 ini_config = None
+                para_config = None
                 if mapping is None:
                     logger.info(f"[_execute_test_items_with_config] 未找到用例映射，使用原始名称: {test_item.name}")
                 else:
@@ -624,13 +679,27 @@ class TaskExecutorProduction:
                 current_cfg_path = script_path
 
             # 如果用例有ini配置，生成ini文件
-            if ini_config and test_config_manager:
+            if test_config_manager:
                 try:
-                    ini_info = test_config_manager._generate_ini_from_case_config(case_no, ini_config)
-                    logger.debug(f"为用例 {case_no} 生成ini: {ini_info}")
+                    # 设置当前 cfg 路径，以便 ini 文件写入到正确位置
+                    if script_path:
+                        test_config_manager._current_cfg_path = script_path
+                    elif current_cfg_path:
+                        test_config_manager._current_cfg_path = current_cfg_path
+
+                    # 获取属性参数（优先用例params，其次任务variables）
+                    case_variables = getattr(test_item, 'params', {}) or task.variables
+                    ini_info = test_config_manager._generate_ini_from_case_config(
+                        case_no,
+                        ini_config,
+                        variables=case_variables,
+                        para_config=para_config
+                    )
+                    logger.info(f"为用例 {case_no} 生成ini文件: {ini_info}")
                     self.current_collector.add_log("INFO", f"用例 {case_no} ini配置已更新")
                 except Exception as e:
-                    logger.warning(f"生成ini配置失败: {e}")
+                    logger.error(f"生成ini配置失败: {e}")
+                    self.current_collector.add_log("ERROR", f"生成ini配置失败: {e}")
 
             # 执行用例
             if hasattr(self.controller, 'run_test_case_with_config'):
@@ -641,7 +710,6 @@ class TaskExecutorProduction:
                         'params': getattr(test_item, 'params', {}),
                         'repeat': getattr(test_item, 'repeat', 1)
                     },
-                    namespace=namespace,
                     timeout=task.timeout // max(len(task.test_items), 1)
                 )
 
@@ -723,9 +791,10 @@ class TaskExecutorProduction:
         """停止测量/仿真"""
         logger.info("正在停止测量/仿真...")
         self.current_collector.add_log("INFO", "正在停止测量/仿真")
-        
+
         try:
-            if task.tool_type == TestToolType.CANOE.value:
+            tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+            if tool_type_lower == TestToolType.CANOE.value:
                 self.controller.stop_measurement()
             else:
                 self.controller.stop_simulation()
@@ -759,13 +828,43 @@ class TaskExecutorProduction:
         """任务失败"""
         logger.error(f"任务失败: {task.task_id}, 错误: {error_message}")
 
+        # 为所有未执行的测试项生成失败结果
+        if task.test_items:
+            logger.info(f"[_fail_task] 为 {len(task.test_items)} 个测试项生成失败结果")
+            for test_item in task.test_items:
+                item_name = getattr(test_item, 'name', None) or getattr(test_item, 'caseName', '') or '未命名用例'
+                item_type = getattr(test_item, 'type', None) or getattr(test_item, 'caseType', '') or 'test_module'
+                case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None)
+
+                # 检查是否已有结果，避免重复添加
+                existing_names = [r.name for r in self.current_collector.results] if self.current_collector else []
+                if item_name not in existing_names:
+                    failed_result = TestResult(
+                        name=item_name,
+                        type=item_type,
+                        verdict="BLOCK",
+                        error=error_message,
+                        details={
+                            "case_no": case_no,
+                            "status": "blocked",
+                            "reason": "任务执行失败，用例未能执行"
+                        }
+                    )
+                    if self.current_collector:
+                        self.current_collector.add_test_result(failed_result)
+                        logger.info(f"[_fail_task] 添加失败结果: {item_name}, case_no={case_no}")
+
         # 完成结果收集（失败状态）
         if self.current_collector:
             task_result = self.current_collector.finalize(TaskStatus.FAILED.value, error_message)
+            logger.info(f"[_fail_task] 结果收集完成: results={len(task_result.results)}")
             self._report_final_result(task.task_id, task_result)
 
             # 上报到远端服务器
+            logger.info(f"[_fail_task] 开始调用远端上报")
             self._report_to_remote(task, task_result)
+        else:
+            logger.warning(f"[_fail_task] current_collector 为 None，无法上报结果")
 
         # 更新状态
         self._update_task_status(task.task_id, TaskStatus.FAILED, error_message)
@@ -797,12 +896,141 @@ class TaskExecutorProduction:
         self._update_task_status(self.current_task.task_id, TaskStatus.CANCELLED, "任务被用户取消")
 
         return True
+
+    def submit_task(self, task) -> bool:
+        """
+        提交任务到执行队列
+
+        Args:
+            task: 任务对象 (models.executor_task.Task)
+
+        Returns:
+            是否提交成功
+        """
+        try:
+            # 添加到全局任务队列
+            if not global_task_queue.add(task):
+                logger.warning(f"任务 {task.id} 已存在于队列中")
+                return False
+
+            # 转换为执行任务的 Task 模型 (TDM2.0格式)
+            from models.task import Task as ExecTask
+
+            exec_task = ExecTask(
+                taskNo=task.id,
+                taskName=task.name,
+                timeout=task.timeout,
+                toolType=task.params.get('tool_type', 'canoe'),
+                configPath=task.params.get('config_path'),
+                variables=task.params.get('variables', {})
+            )
+
+            # 添加到内部执行队列
+            self._task_queue.put(exec_task)
+
+            logger.info(f"任务 {task.id} 已提交到执行队列")
+            return True
+
+        except Exception as e:
+            logger.error(f"提交任务失败: {e}")
+            return False
+
+    def retry_task(self, task_id: str):
+        """
+        重试任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            新任务对象，失败返回 None
+        """
+        try:
+            # 从全局队列获取原任务
+            old_task = global_task_queue.get_task(task_id)
+            if not old_task:
+                logger.warning(f"任务 {task_id} 不存在")
+                return None
+
+            # 检查是否可以重试
+            if not old_task.can_retry():
+                logger.warning(f"任务 {task_id} 无法重试")
+                return None
+
+            # 创建新任务
+            from models.executor_task import Task as ExecutorTask, TaskPriority
+
+            new_task = ExecutorTask(
+                name=old_task.name,
+                task_type=old_task.task_type,
+                priority=old_task.priority,
+                params=old_task.params,
+                timeout=old_task.timeout,
+                max_retries=old_task.max_retries,
+                created_by=old_task.created_by,
+                metadata=old_task.metadata
+            )
+
+            # 提交新任务
+            if self.submit_task(new_task):
+                # 更新原任务的重试计数
+                old_task.retry_count += 1
+                global_task_queue.update_task_status(
+                    task_id,
+                    old_task.status,
+                    error_message=f"已重试，新任务ID: {new_task.id}"
+                )
+                return new_task
+
+            return None
+
+        except Exception as e:
+            logger.error(f"重试任务失败: {e}")
+            return None
     
     def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):
         """更新任务状态"""
         if self.current_collector:
             self.current_collector.add_status_update(status.value, message, progress)
-        
+
+        # 更新全局任务队列的状态
+        try:
+            global_task_queue.update_task_status(
+                task_no,
+                status.value,
+                error_message=message
+            )
+        except Exception as e:
+            logger.warning(f"更新全局任务队列状态失败: {e}")
+
+        # 更新 StatusMonitor 的任务状态
+        try:
+            monitor = get_status_monitor()
+            from core.status_monitor import TaskStatus as MonitorTaskStatus
+
+            # 状态映射
+            status_mapping = {
+                TaskStatus.PENDING: MonitorTaskStatus.PENDING,
+                TaskStatus.RUNNING: MonitorTaskStatus.RUNNING,
+                TaskStatus.COMPLETED: MonitorTaskStatus.COMPLETED,
+                TaskStatus.FAILED: MonitorTaskStatus.FAILED,
+                TaskStatus.CANCELLED: MonitorTaskStatus.CANCELLED,
+            }
+
+            monitor_status = status_mapping.get(status)
+
+            if status == TaskStatus.COMPLETED or status == TaskStatus.FAILED or status == TaskStatus.CANCELLED:
+                monitor.clear_current_task()
+            else:
+                monitor.update_task_status({
+                    'task_id': task_no,
+                    'tool_type': self.current_task.tool_type.value if self.current_task else None,
+                    'progress': progress or 0,
+                    'message': message
+                }, monitor_status)
+        except Exception as e:
+            logger.warning(f"更新 StatusMonitor 任务状态失败: {e}")
+
         if self.message_sender:
             self.message_sender({
                 "type": "TASK_STATUS",
@@ -837,37 +1065,179 @@ class TaskExecutorProduction:
                 "timestamp": int(time.time() * 1000)
             })
 
-    def _report_to_remote(self, task: Task, task_result: TaskResult):
+    def _report_to_remote(self, task: Task, task_result: TaskResult, report_file_path: str = None):
         """
         上报任务结果到远端服务器
 
         Args:
             task: 任务对象
             task_result: 任务结果对象
+            report_file_path: 报告文件路径（可选）
         """
-        if not self.report_client or not self.report_client.enabled:
-            logger.debug("远端上报未启用，跳过")
-            return
+        logger.info(f"[_report_to_remote] 开始上报任务结果: taskNo={task.task_id}")
 
         try:
-            # 准备额外的任务信息
-            task_info = {
-                "projectNo": task.projectNo,
-                "deviceId": task.deviceId,
-                "taskName": task.taskName,
-                "toolType": task.toolType
-            }
+            # 构建 TDM2.0 格式的上报数据
+            execution_result = self._build_execution_result(task, task_result)
+            logger.info(f"[_report_to_remote] 构建执行结果完成: caseList数量={len(execution_result.caseList)}")
 
-            # 上报结果
-            success = self.report_client.report_task_result(task_result, task_info)
+            # 构建上报数据
+            report_data = execution_result.to_tdm2_format()
+
+            # 添加额外信息
+            report_data["projectNo"] = task.projectNo
+            report_data["deviceId"] = task.deviceId
+            report_data["taskName"] = task.taskName or task.taskNo or task.task_id
+            report_data["toolType"] = task.toolType
+            report_data["status"] = task_result.status
+            report_data["summary"] = task_result.summary
+            report_data["errorMessage"] = task_result.errorMessage
+            report_data["timestamp"] = int(time.time() * 1000)
+
+            if task_result.startTime:
+                report_data["startTime"] = task_result.startTime.isoformat()
+            if task_result.endTime:
+                report_data["endTime"] = task_result.endTime.isoformat()
+
+            logger.info(f"[_report_to_remote] 上报数据: taskNo={report_data.get('taskNo')}, caseList={len(report_data.get('caseList', []))}")
+
+            # 直接执行上报
+            success = self._do_report_direct(report_data)
 
             if success:
-                logger.info(f"任务结果已提交到远端上报队列: {task.task_id}")
+                logger.info(f"[_report_to_remote] 任务结果上报成功: {task.task_id}")
             else:
-                logger.warning(f"任务结果提交到远端上报队列失败: {task.task_id}")
+                logger.warning(f"[_report_to_remote] 任务结果上报失败: {task.task_id}")
 
         except Exception as e:
-            logger.error(f"远端上报任务结果时出错: {e}")
+            logger.error(f"[_report_to_remote] 远端上报任务结果时出错: {e}", exc_info=True)
+
+    def _do_report_direct(self, report_data: Dict[str, Any]) -> bool:
+        """
+        直接执行HTTP上报
+
+        Args:
+            report_data: 上报数据
+
+        Returns:
+            是否成功
+        """
+        import requests
+
+        # 上报URL
+        result_api_url = "http://10.124.11.142:8315/api/python/report"
+
+        try:
+            logger.info(f"[_do_report_direct] 发送上报请求: {result_api_url}")
+
+            response = requests.post(
+                result_api_url,
+                json=report_data,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+
+            logger.info(f"[_do_report_direct] 响应状态码: {response.status_code}")
+            logger.info(f"[_do_report_direct] 响应内容: {response.text[:500] if len(response.text) > 500 else response.text}")
+
+            if response.status_code == 200:
+                return True
+            else:
+                logger.error(f"[_do_report_direct] 上报失败: {response.status_code} - {response.text}")
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.error(f"[_do_report_direct] 上报超时")
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"[_do_report_direct] 连接失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"[_do_report_direct] 上报异常: {e}")
+            return False
+
+    def _build_execution_result(self, task: Task, task_result: TaskResult) -> ExecutionResult:
+        """
+        构建 TDM2.0 格式的执行结果
+
+        Args:
+            task: 任务对象
+            task_result: 任务结果对象
+
+        Returns:
+            ExecutionResult 实例
+        """
+        execution_result = ExecutionResult(taskNo=task.task_id)
+
+        # 如果有测试结果，转换为 CaseResult
+        if task_result.results:
+            for test_result in task_result.results:
+                case_no = self._get_case_no_from_result(test_result, task)
+
+                # 根据结果状态确定 result 字段
+                if test_result.verdict:
+                    result_status = test_result.verdict
+                elif test_result.passed is True:
+                    result_status = "PASS"
+                elif test_result.passed is False:
+                    result_status = "FAIL"
+                elif test_result.error:
+                    result_status = "BLOCK"
+                else:
+                    result_status = "UNKNOWN"
+
+                case_result = CaseResult(
+                    caseNo=case_no,
+                    result=result_status,
+                    remark=test_result.error or f"测试类型: {test_result.type}",
+                    created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+
+                execution_result.add_case_result(case_result)
+
+        # 如果没有结果但任务有测试项，生成 BLOCK 结果
+        elif task.test_items:
+            for test_item in task.test_items:
+                case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None) or 'UNKNOWN'
+                case_result = CaseResult(
+                    caseNo=case_no,
+                    result="BLOCK",
+                    remark=task_result.errorMessage or "任务执行失败，用例未能执行",
+                    created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                execution_result.add_case_result(case_result)
+
+        # 生成摘要
+        execution_result.generate_summary()
+
+        return execution_result
+
+    def _get_case_no_from_result(self, test_result: TestResult, task: Task) -> str:
+        """
+        从测试结果获取用例编号
+
+        Args:
+            test_result: 测试结果
+            task: 任务对象
+
+        Returns:
+            用例编号
+        """
+        # 尝试从 details 中获取
+        if test_result.details and isinstance(test_result.details, dict):
+            case_no = test_result.details.get('case_no')
+            if case_no:
+                return case_no
+
+        # 尝试从任务测试项中匹配
+        if task.test_items:
+            for test_item in task.test_items:
+                item_name = getattr(test_item, 'name', None) or getattr(test_item, 'caseName', '')
+                if test_result.name == item_name:
+                    return getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None) or test_result.name
+
+        # 使用测试结果名称作为 case_no
+        return test_result.name or 'UNKNOWN'
     
     def get_current_status(self) -> Dict[str, Any]:
         """获取当前状态"""
@@ -877,17 +1247,55 @@ class TaskExecutorProduction:
                 "queue_size": self._task_queue.get_queue_size(),
                 "processing_count": self._task_queue.get_processing_count()
             }
-        
+
         return {
             "status": "running",
             "task_id": self.current_task.task_id,
             "tool_type": self.current_task.tool_type,
-            "start_time": datetime.fromtimestamp(self._start_time).isoformat(),
-            "duration": time.time() - self._start_time,
+            "start_time": datetime.fromtimestamp(self._start_time).isoformat() if self._start_time else None,
+            "duration": time.time() - self._start_time if self._start_time else 0,
             "queue_size": self._task_queue.get_queue_size(),
             "processing_count": self._task_queue.get_processing_count(),
             "metrics": self._current_metrics.get_summary() if self._current_metrics else None
         }
 
+    def get_running_count(self) -> int:
+        """
+        获取正在运行的任务数量
+
+        Returns:
+            正在运行的任务数量（0 或 1，因为是串行执行）
+        """
+        with self._lock:
+            if self.current_task and self._running:
+                return 1
+            return 1 if self._task_queue.get_processing_count() > 0 else 0
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        获取执行器统计信息
+
+        Returns:
+            统计信息字典
+        """
+        return {
+            "running": self.get_running_count(),
+            "queue_size": self._task_queue.get_queue_size(),
+            "max_workers": self.max_workers,
+            "is_running": self._running
+        }
+
 # 保持向后兼容
 TaskExecutor = TaskExecutorProduction
+
+# 全局执行器实例
+task_executor = None
+
+def get_task_executor():
+    """获取全局任务执行器实例"""
+    global task_executor
+    if task_executor is None:
+        # 使用空的 message_sender 作为默认值
+        task_executor = TaskExecutorProduction(message_sender=lambda msg: None)
+        task_executor.start()
+    return task_executor

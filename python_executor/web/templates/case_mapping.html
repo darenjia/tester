@@ -89,7 +89,11 @@
     }
 
     .category-filter-item input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
         margin-right: 10px;
+        accent-color: #6366f1;
+        flex-shrink: 0;
     }
 
     .category-name {
@@ -207,10 +211,11 @@
     }
 
     .mapping-checkbox {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         cursor: pointer;
         accent-color: #6366f1;
+        flex-shrink: 0;
     }
 
     .mapping-status {
@@ -472,6 +477,11 @@
         margin-bottom: 6px;
     }
 
+    .form-group label.checkbox-label {
+        display: inline-flex;
+        margin-bottom: 0;
+    }
+
     .form-group input,
     .form-group select,
     .form-group textarea {
@@ -502,10 +512,11 @@
     }
 
     .checkbox-label {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 8px;
         cursor: pointer;
+        font-size: 14px;
     }
 
     .required {
@@ -1089,6 +1100,7 @@
         document.getElementById('module').value = editingMapping.module || '';
         document.getElementById('script_path').value = editingMapping.script_path || '';
         document.getElementById('ini_config').value = editingMapping.ini_config || '';
+        document.getElementById('para_config').value = editingMapping.para_config || '';
         document.getElementById('priority').value = editingMapping.priority || 0;
         document.getElementById('version').value = editingMapping.version || '1.0';
         document.getElementById('description').value = editingMapping.description || '';
@@ -1110,6 +1122,7 @@
         const module = document.getElementById('module').value.trim();
         const scriptPath = document.getElementById('script_path').value.trim();
         const iniConfig = document.getElementById('ini_config').value.trim();
+        const paraConfig = document.getElementById('para_config').value.trim();
         const priority = parseInt(document.getElementById('priority').value) || 0;
         const version = document.getElementById('version').value.trim() || '1.0';
         const description = document.getElementById('description').value.trim();
@@ -1130,6 +1143,16 @@
             return;
         }
 
+        // 验证ParaInfo JSON格式
+        if (paraConfig) {
+            try {
+                JSON.parse(paraConfig);
+            } catch (e) {
+                showMessage('ParaInfo参数配置JSON格式错误: ' + e.message, 'warning');
+                return;
+            }
+        }
+
         const data = {
             case_no: caseNo,
             case_name: caseName,
@@ -1137,6 +1160,7 @@
             module: module,
             script_path: scriptPath,
             ini_config: iniConfig,
+            para_config: paraConfig,
             priority: priority,
             version: version,
             description: description,
@@ -1552,16 +1576,22 @@
 
             const headerTd = document.createElement('td');
             headerTd.textContent = header;
+            headerTd.style.padding = '10px 12px';
             headerTd.style.fontWeight = '500';
+            headerTd.style.borderBottom = '1px solid #e5e7eb';
             tr.appendChild(headerTd);
 
             const arrowTd = document.createElement('td');
             arrowTd.textContent = '→';
             arrowTd.style.textAlign = 'center';
             arrowTd.style.color = '#6366f1';
+            arrowTd.style.padding = '10px 12px';
+            arrowTd.style.borderBottom = '1px solid #e5e7eb';
             tr.appendChild(arrowTd);
 
             const mappingTd = document.createElement('td');
+            mappingTd.style.padding = '8px 12px';
+            mappingTd.style.borderBottom = '1px solid #e5e7eb';
 
             const select = document.createElement('select');
             select.className = 'mapping-select';
@@ -1619,6 +1649,10 @@
             const field = systemFields.find(f => f.name === fieldName);
             const th = document.createElement('th');
             th.textContent = field ? field.display : fieldName;
+            th.style.padding = '10px 12px';
+            th.style.textAlign = 'left';
+            th.style.fontWeight = '500';
+            th.style.borderBottom = '1px solid #e5e7eb';
             previewHead.querySelector('tr').appendChild(th);
         });
 
@@ -1627,6 +1661,8 @@
             Object.keys(currentColumnMapping).forEach(header => {
                 const td = document.createElement('td');
                 td.textContent = row[header] || '';
+                td.style.padding = '10px 12px';
+                td.style.borderBottom = '1px solid #e5e7eb';
                 tr.appendChild(td);
             });
             previewBody.appendChild(tr);
@@ -1661,16 +1697,22 @@
 
             const headerTd = document.createElement('td');
             headerTd.textContent = header;
+            headerTd.style.padding = '10px 12px';
             headerTd.style.fontWeight = '500';
+            headerTd.style.borderBottom = '1px solid #e5e7eb';
             tr.appendChild(headerTd);
 
             const arrowTd = document.createElement('td');
             arrowTd.textContent = '→';
             arrowTd.style.textAlign = 'center';
             arrowTd.style.color = '#6366f1';
+            arrowTd.style.padding = '10px 12px';
+            arrowTd.style.borderBottom = '1px solid #e5e7eb';
             tr.appendChild(arrowTd);
 
             const mappingTd = document.createElement('td');
+            mappingTd.style.padding = '8px 12px';
+            mappingTd.style.borderBottom = '1px solid #e5e7eb';
 
             const select = document.createElement('select');
             select.className = 'mapping-select';
@@ -1728,6 +1770,10 @@
             const field = systemFields.find(f => f.name === fieldName);
             const th = document.createElement('th');
             th.textContent = field ? field.display : fieldName;
+            th.style.padding = '10px 12px';
+            th.style.textAlign = 'left';
+            th.style.fontWeight = '500';
+            th.style.borderBottom = '1px solid #e5e7eb';
             previewHead.querySelector('tr').appendChild(th);
         });
 
@@ -1736,6 +1782,8 @@
             Object.keys(currentColumnMapping).forEach(header => {
                 const td = document.createElement('td');
                 td.textContent = row[header] || '';
+                td.style.padding = '10px 12px';
+                td.style.borderBottom = '1px solid #e5e7eb';
                 tr.appendChild(td);
             });
             previewBody.appendChild(tr);
@@ -1863,24 +1911,24 @@
         const thead = previewTable.querySelector('thead');
         const tbody = previewTable.querySelector('tbody');
 
-        thead.innerHTML = '<tr><th><input type="checkbox" id="preview-select-all" onchange="togglePreviewSelectAll()"></th><th>Case编号</th><th>用例名称</th><th>分类</th><th>模块</th><th>脚本路径</th><th>优先级</th><th>启用</th></tr>';
+        thead.innerHTML = '<tr><th style="padding: 10px; width: 40px; border-bottom: 1px solid #e5e7eb;"><input type="checkbox" id="preview-select-all" onchange="togglePreviewSelectAll()"></th><th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb;">Case编号</th><th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb;">用例名称</th><th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb;">分类</th><th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb;">模块</th><th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb;">脚本路径</th><th style="padding: 10px; text-align: center; border-bottom: 1px solid #e5e7eb;">优先级</th><th style="padding: 10px; text-align: center; border-bottom: 1px solid #e5e7eb;">启用</th></tr>';
 
         if (!previewData.mappings || previewData.mappings.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6b7280;">没有数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #6b7280; padding: 24px;">没有数据</td></tr>';
             return;
         }
 
         let html = '';
         previewData.mappings.forEach((m, idx) => {
-            html += `<tr>
-                <td><input type="checkbox" class="preview-row-checkbox" data-index="${idx}" checked></td>
-                <td style="font-family: monospace;">${m.case_no || ''}</td>
-                <td>${m.case_name || ''}</td>
-                <td>${m.category || ''}</td>
-                <td>${m.module || ''}</td>
-                <td>${m.script_path || ''}</td>
-                <td>${m.priority || 0}</td>
-                <td>${m.enabled ? '是' : '否'}</td>
+            html += `<tr style="border-bottom: 1px solid #e5e7eb;">
+                <td style="padding: 10px; text-align: center;"><input type="checkbox" class="preview-row-checkbox" data-index="${idx}" checked></td>
+                <td style="padding: 10px; font-family: monospace; font-size: 12px;">${m.case_no || ''}</td>
+                <td style="padding: 10px;">${m.case_name || ''}</td>
+                <td style="padding: 10px;"><span style="padding: 2px 8px; background: #e0e7ff; color: #4f46e5; border-radius: 4px; font-size: 12px;">${m.category || ''}</span></td>
+                <td style="padding: 10px;">${m.module || ''}</td>
+                <td style="padding: 10px; font-size: 12px; color: #6b7280;">${m.script_path || '-'}</td>
+                <td style="padding: 10px; text-align: center;">${m.priority || 0}</td>
+                <td style="padding: 10px; text-align: center;">${m.enabled ? '<span style="color: #10b981;">✓</span>' : '<span style="color: #ef4444;">✗</span>'}</td>
             </tr>`;
         });
         tbody.innerHTML = html;
@@ -2303,6 +2351,16 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                     <small style="color: #6b7280; font-size: 12px;">填写SelectInfo.ini的原始内容</small>
                 </div>
 
+                <div class="form-group">
+                    <label>ParaInfo参数配置</label>
+                    <textarea id="para_config" placeholder='{
+  "ECUName": "MTCU1",
+  "Terminal": 1,
+  "Voltage": 12.5
+}' style="min-height: 100px;"></textarea>
+                    <small style="color: #6b7280; font-size: 12px;">填写ParaInfo.ini的默认参数（JSON格式），执行时可被覆盖</small>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>优先级</label>
@@ -2348,19 +2406,19 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
 
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div id="excel-upload-area">
-                <div style="text-align: center; padding: 40px 20px; border: 2px dashed #d1d5db; border-radius: 12px; margin-bottom: 20px;"
-                     ondrop="handleExcelDrop(event)" ondragover="event.preventDefault()" ondragleave="event.target.style.background=''"
-                     ondragenter="event.target.style.background='#f3f4f6'">
-                    <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: #d1d5db; margin-bottom: 16px;"></i>
-                    <p style="font-size: 16px; color: #374151; margin-bottom: 8px;">拖拽 Excel 文件到此处</p>
-                    <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">或</p>
-                    <label class="btn btn-primary" style="cursor: pointer;">
+                <div style="text-align: center; padding: 48px 24px; border: 2px dashed #d1d5db; border-radius: 12px; margin-bottom: 20px; transition: all 0.2s;"
+                     ondrop="handleExcelDrop(event)" ondragover="event.preventDefault()" ondragleave="event.target.style.borderColor='#d1d5db'; event.target.style.background=''"
+                     ondragenter="event.target.style.borderColor='#6366f1'; event.target.style.background='#f5f3ff'">
+                    <i class="fas fa-file-excel" style="font-size: 56px; color: #10b981; margin-bottom: 16px;"></i>
+                    <p style="font-size: 16px; color: #374151; margin-bottom: 8px; font-weight: 500;">拖拽 Excel 文件到此处</p>
+                    <p style="font-size: 14px; color: #9ca3af; margin-bottom: 16px;">或点击下方按钮选择文件</p>
+                    <label class="btn btn-primary" style="cursor: pointer; padding: 10px 20px;">
                         <i class="fas fa-folder-open"></i> 选择文件
                         <input type="file" accept=".xlsx,.xls" style="display: none;" onchange="handleExcelFileSelect(event)">
                     </label>
                     <p style="font-size: 12px; color: #9ca3af; margin-top: 16px;">支持 .xlsx 和 .xls 格式</p>
                 </div>
-                <div style="text-align: center; margin-top: 16px;">
+                <div style="text-align: center;">
                     <button class="btn btn-secondary" onclick="downloadImportTemplate()">
                         <i class="fas fa-download"></i> 下载导入模板
                     </button>
@@ -2386,44 +2444,48 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                 </div>
 
                 <div style="margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">字段映射</h4>
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #f9fafb;">
-                                <th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px;">Excel 列名</th>
-                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #e5e7eb; font-size: 13px; width: 40px;"></th>
-                                <th style="padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px;">系统字段</th>
-                            </tr>
-                        </thead>
-                        <tbody id="mapping-table-body">
-                        </tbody>
-                    </table>
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">字段映射</h4>
+                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f9fafb;">
+                                    <th style="padding: 12px 16px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; font-weight: 600; color: #374151;">Excel 列名</th>
+                                    <th style="padding: 12px 16px; text-align: center; border-bottom: 1px solid #e5e7eb; font-size: 13px; width: 50px; color: #9ca3af;">→</th>
+                                    <th style="padding: 12px 16px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 13px; font-weight: 600; color: #374151;">系统字段</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mapping-table-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div id="batch-category-option" style="margin-top: 12px; padding: 12px; background: #fef3c7; border-radius: 6px; display: none;">
-                    <label style="font-size: 13px; color: #92400e; display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="use-default-category" onchange="toggleDefaultCategory()">
-                        批量设置分类:
-                    </label>
-                    <select id="default-category-select" style="margin-left: 24px; margin-top: 8px; padding: 6px 8px; border: 1px solid #d97706; border-radius: 4px; font-size: 13px;">
-                        <option value="canoe">canoe - CANoe测试</option>
-                        <option value="tsmaster">tsmaster - TSMaster测试</option>
-                        <option value="ttman">ttman - TTman测试</option>
-                    </select>
-                    <div style="font-size: 12px; color: #92400e; margin-top: 4px; margin-left: 24px;">当Excel中分类列为空或被忽略时使用此分类</div>
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <label class="checkbox-label" style="font-size: 13px; color: #92400e; margin: 0;">
+                            <input type="checkbox" id="use-default-category" onchange="toggleDefaultCategory()">
+                            批量设置分类
+                        </label>
+                        <select id="default-category-select" style="padding: 6px 10px; border: 1px solid #d97706; border-radius: 4px; font-size: 13px; background: white;">
+                            <option value="canoe">canoe - CANoe测试</option>
+                            <option value="tsmaster">tsmaster - TSMaster测试</option>
+                            <option value="ttman">ttman - TTman测试</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 12px; color: #92400e; margin-top: 6px;">当Excel中分类列为空或被忽略时使用此分类</div>
                 </div>
 
                 <div id="batch-script-path-option" style="margin-top: 12px; padding: 12px; background: #eff6ff; border-radius: 6px;">
-                    <label style="font-size: 13px; color: #1e40af; display: flex; align-items: center; gap: 8px;">
+                    <label class="checkbox-label" style="font-size: 13px; color: #1e40af; margin-bottom: 8px;">
                         <input type="checkbox" id="use-batch-script-path" onchange="toggleBatchScriptPath()">
-                        批量设置脚本路径:
+                        批量设置脚本路径
                     </label>
-                    <input type="text" id="batch-script-path-input" placeholder="例如: C:\Projects\CANoe\cfg\" style="margin-left: 24px; margin-top: 8px; width: calc(100% - 24px); padding: 6px 8px; border: 1px solid #3b82f6; border-radius: 4px; font-size: 13px;">
-                    <div style="font-size: 12px; color: #1e40af; margin-top: 4px; margin-left: 24px;">将作为所有导入用例的脚本路径基础前缀，可与Excel中的相对路径组合</div>
+                    <input type="text" id="batch-script-path-input" placeholder="例如: C:\Projects\CANoe\cfg\" style="width: 100%; padding: 8px 10px; border: 1px solid #3b82f6; border-radius: 4px; font-size: 13px;" disabled>
+                    <div style="font-size: 12px; color: #1e40af; margin-top: 6px;">将作为所有导入用例的脚本路径基础前缀，可与Excel中的相对路径组合</div>
                 </div>
 
                 <div>
-                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">数据预览</h4>
+                    <h4 style="margin: 16px 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">数据预览</h4>
                     <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
                         <table id="excel-preview-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
                             <thead style="background: #f9fafb;">
@@ -2438,40 +2500,40 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
 
             <div id="excel-preview-area" style="display: none;">
                 <div style="margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">导入预览</h4>
-                    <div style="display: flex; gap: 24px; padding: 16px; background: #f3f4f6; border-radius: 8px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 700; color: #374151;" id="preview-total">0</div>
-                            <div style="font-size: 12px; color: #6b7280;">总数</div>
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">导入预览</h4>
+                    <div style="display: flex; gap: 16px;">
+                        <div style="flex: 1; text-align: center; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                            <div style="font-size: 28px; font-weight: 700; color: #475569;" id="preview-total">0</div>
+                            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">总数</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 700; color: #10b981;" id="preview-valid">0</div>
-                            <div style="font-size: 12px; color: #6b7280;">有效</div>
+                        <div style="flex: 1; text-align: center; padding: 16px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;">
+                            <div style="font-size: 28px; font-weight: 700; color: #16a34a;" id="preview-valid">0</div>
+                            <div style="font-size: 12px; color: #15803d; margin-top: 4px;">有效</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 700; color: #ef4444;" id="preview-invalid">0</div>
-                            <div style="font-size: 12px; color: #6b7280;">无效</div>
+                        <div style="flex: 1; text-align: center; padding: 16px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;">
+                            <div style="font-size: 28px; font-weight: 700; color: #dc2626;" id="preview-invalid">0</div>
+                            <div style="font-size: 12px; color: #b91c1c; margin-top: 4px;">无效</div>
                         </div>
                     </div>
                 </div>
 
                 <div style="margin-bottom: 16px;">
-                    <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280;">错误信息</h5>
-                    <div id="preview-errors" style="padding: 12px; background: #fef2f2; border-radius: 6px; font-size: 13px;"></div>
+                    <h5 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6b7280;">错误信息</h5>
+                    <div id="preview-errors" style="padding: 12px; background: #fef2f2; border-radius: 6px; font-size: 13px; border: 1px solid #fecaca;"></div>
                 </div>
 
                 <div>
-                    <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280;">预览数据（前10条）</h5>
+                    <h5 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6b7280;">预览数据（前10条）</h5>
                     <div style="overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
                         <table id="preview-result-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
                             <thead style="background: #f9fafb;">
                                 <tr>
-                                    <th>Case编号</th>
-                                    <th>用例名称</th>
-                                    <th>分类</th>
-                                    <th>模块</th>
-                                    <th>优先级</th>
-                                    <th>启用</th>
+                                    <th style="padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">Case编号</th>
+                                    <th style="padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">用例名称</th>
+                                    <th style="padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">分类</th>
+                                    <th style="padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">模块</th>
+                                    <th style="padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: 600;">优先级</th>
+                                    <th style="padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb; font-weight: 600;">启用</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2481,37 +2543,38 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                 </div>
 
                 <div style="margin-top: 16px; padding: 16px; background: #f9fafb; border-radius: 8px;">
-                    <div class="form-group" style="margin-bottom: 12px;">
-                        <label style="font-size: 13px; font-weight: 500;">导入选项</label>
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 13px; font-weight: 500; color: #374151;">导入选项</label>
                     </div>
-                    <div class="form-group" style="margin-bottom: 12px;">
-                        <label class="checkbox-label">
+                    <div style="margin-bottom: 12px;">
+                        <label class="checkbox-label" style="font-size: 13px;">
                             <input type="checkbox" id="import-overwrite" checked>
                             覆盖已存在的映射（相同 case_no）
                         </label>
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
+                    <div style="margin-bottom: 0;">
                         <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">变更原因</label>
                         <input type="text" id="import-reason" placeholder="从Excel批量导入" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
                     </div>
                 </div>
             </div>
 
-            <div id="excel-result-area" style="display: none; text-align: center; padding: 40px 20px;">
-                <i class="fas fa-check-circle" style="font-size: 64px; color: #10b981; margin-bottom: 16px;"></i>
-                <h3 style="margin: 0 0 24px 0; font-size: 18px; color: #374151;" id="result-message">导入完成！</h3>
-                <div style="display: flex; justify-content: center; gap: 32px; margin-bottom: 24px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: #10b981;" id="result-success">0</div>
-                        <div style="font-size: 13px; color: #6b7280;">成功</div>
+            <div id="excel-result-area" style="display: none; text-align: center; padding: 48px 24px;">
+                <i class="fas fa-check-circle" style="font-size: 72px; color: #10b981; margin-bottom: 20px;"></i>
+                <h3 style="margin: 0 0 8px 0; font-size: 20px; color: #374151;" id="result-message">导入完成！</h3>
+                <p style="margin: 0 0 24px 0; font-size: 14px; color: #6b7280;">用例映射已成功导入</p>
+                <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 24px;">
+                    <div style="text-align: center; padding: 16px 24px; background: #f0fdf4; border-radius: 8px; min-width: 100px;">
+                        <div style="font-size: 36px; font-weight: 700; color: #16a34a;" id="result-success">0</div>
+                        <div style="font-size: 13px; color: #15803d;">成功</div>
                     </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: #f59e0b;" id="result-skipped">0</div>
-                        <div style="font-size: 13px; color: #6b7280;">跳过</div>
+                    <div style="text-align: center; padding: 16px 24px; background: #fffbeb; border-radius: 8px; min-width: 100px;">
+                        <div style="font-size: 36px; font-weight: 700; color: #d97706;" id="result-skipped">0</div>
+                        <div style="font-size: 13px; color: #b45309;">跳过</div>
                     </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: #ef4444;" id="result-failed">0</div>
-                        <div style="font-size: 13px; color: #6b7280;">失败</div>
+                    <div style="text-align: center; padding: 16px 24px; background: #fef2f2; border-radius: 8px; min-width: 100px;">
+                        <div style="font-size: 36px; font-weight: 700; color: #dc2626;" id="result-failed">0</div>
+                        <div style="font-size: 13px; color: #b91c1c;">失败</div>
                     </div>
                 </div>
                 <button class="btn btn-primary" onclick="finishExcelImport()">

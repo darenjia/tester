@@ -191,11 +191,12 @@
     }
     
     .test-checkbox {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         cursor: pointer;
+        flex-shrink: 0;
     }
-    
+
     .test-status-icon {
         width: 32px;
         height: 32px;
@@ -545,7 +546,7 @@
         color: #6b7280;
         margin-bottom: 4px;
     }
-    
+
     .config-row input[type="text"],
     .config-row input[type="number"] {
         width: 100%;
@@ -554,21 +555,7 @@
         border-radius: 6px;
         font-size: 13px;
     }
-    
-    .config-checkbox {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-        font-size: 13px;
-        color: #374151;
-    }
-    
-    .config-checkbox input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-    }
-    
+
     .tsmaster-steps-panel {
         padding: 20px;
         display: flex;
@@ -765,7 +752,12 @@
         color: #374151;
         margin-bottom: 6px;
     }
-    
+
+    .form-group label.checkbox-label {
+        display: inline-flex;
+        margin-bottom: 0;
+    }
+
     .form-group input,
     .form-group select {
         width: 100%;
@@ -789,7 +781,7 @@
     }
     
     .checkbox-label {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 8px;
         cursor: pointer;

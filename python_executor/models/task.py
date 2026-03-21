@@ -94,13 +94,18 @@ class Case:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Case':
         """从字典创建用例 - 支持TDM2.0字段名"""
+        # 处理 caseType：允许空字符串，只有当字段不存在时才使用默认值
+        case_type = data.get("caseType")
+        if case_type is None:
+            case_type = TestItemType.TEST_MODULE.value
+
         return cls(
             moduleLevel1=data.get("moduleLevel1", ""),
             moduleLevel2=data.get("moduleLevel2", ""),
             moduleLevel3=data.get("moduleLevel3", ""),
             caseName=data.get("caseName", ""),
             priority=data.get("priority", ""),
-            caseType=data.get("caseType") or TestItemType.TEST_MODULE.value,
+            caseType=case_type,
             preCondition=data.get("preCondition", ""),
             stepDescription=data.get("stepDescription", ""),
             expectedResult=data.get("expectedResult", ""),

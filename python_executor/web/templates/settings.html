@@ -1,0 +1,980 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - 测试执行器{% endblock %}
+{% block page_title %}系统设置{% endblock %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">配置管理</span>
+    </div>
+    <div class="content-card-body">
+        <!-- 主标签页 -->
+        <div class="main-tabs" style="display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 0;">
+            <button class="main-tab active" onclick="switchMainTab('network')" data-tab="network">
+                <i class="fas fa-network-wired"></i> 网络服务
+            </button>
+            <button class="main-tab" onclick="switchMainTab('system')" data-tab="system">
+                <i class="fas fa-cogs"></i> 系统配置
+            </button>
+            <button class="main-tab" onclick="switchMainTab('report')" data-tab="report">
+                <i class="fas fa-cloud-upload-alt"></i> 上报配置
+            </button>
+        </div>
+
+        <!-- 网络服务标签页 -->
+        <div id="network-tab" class="main-tab-content active">
+            <!-- 子标签页 -->
+            <div class="sub-tabs" style="display: flex; gap: 8px; margin-bottom: 20px;">
+                <button class="sub-tab active" onclick="switchSubTab('http')" data-tab="http">HTTP服务</button>
+                <button class="sub-tab" onclick="switchSubTab('ws-service')" data-tab="ws-service">WebSocket服务</button>
+                <button class="sub-tab" onclick="switchSubTab('ws-client')" data-tab="ws-client">远程服务连接</button>
+            </div>
+
+            <!-- HTTP服务配置 -->
+            <div id="http-subtab" class="sub-tab-content active">
+                <div class="form-section">
+                    <h3 class="form-section-title">HTTP服务配置</h3>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+                        配置本机HTTP服务的监听参数
+                    </p>
+
+                    <div style="background: var(--bg-color); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">当前端口</div>
+                                <div id="current-http-port" style="font-size: 16px; font-weight: 600;">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">主机地址</div>
+                                <div id="current-http-host" style="font-size: 16px; font-weight: 600;">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">调试模式</div>
+                                <div id="current-http-debug" style="font-size: 16px; font-weight: 600;">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">端口号</label>
+                        <input type="number" class="form-input" id="http-port" min="1" max="65535">
+                        <small style="color: var(--text-secondary); font-size: 12px;">HTTP服务监听端口，范围 1-65535</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">主机地址</label>
+                        <input type="text" class="form-input" id="http-host" placeholder="0.0.0.0">
+                        <small style="color: var(--text-secondary); font-size: 12px;">0.0.0.0 表示监听所有网络接口</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">调试模式</label>
+                        <select class="form-select" id="http-debug">
+                            <option value="false">关闭</option>
+                            <option value="true">开启</option>
+                        </select>
+                        <small style="color: var(--text-secondary); font-size: 12px;">开启后会显示详细的错误信息（生产环境建议关闭）</small>
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 16px;">
+                        <button type="button" class="btn btn-primary" onclick="saveHttpConfig()">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebSocket服务配置 -->
+            <div id="ws-service-subtab" class="sub-tab-content">
+                <div class="form-section">
+                    <h3 class="form-section-title">WebSocket服务配置</h3>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+                        配置本机WebSocket服务的监听参数（用于实时推送任务状态）
+                    </p>
+
+                    <div style="background: var(--bg-color); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">服务状态</div>
+                                <div id="current-ws-status">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">端口</div>
+                                <div id="current-ws-port" style="font-size: 16px; font-weight: 600;">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">主机地址</div>
+                                <div id="current-ws-host" style="font-size: 16px; font-weight: 600;">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">启用WebSocket服务</label>
+                        <select class="form-select" id="ws-enabled">
+                            <option value="false">关闭</option>
+                            <option value="true">开启</option>
+                        </select>
+                        <small style="color: var(--text-secondary); font-size: 12px;">WebSocket用于实时推送任务状态和日志</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">端口号</label>
+                        <input type="number" class="form-input" id="ws-port" min="1" max="65535">
+                        <small style="color: var(--text-secondary); font-size: 12px;">WebSocket服务监听端口</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">主机地址</label>
+                        <input type="text" class="form-input" id="ws-host" placeholder="0.0.0.0">
+                        <small style="color: var(--text-secondary); font-size: 12px;">0.0.0.0 表示监听所有网络接口</small>
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 16px;">
+                        <button type="button" class="btn btn-primary" onclick="saveWsConfig()">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 远程服务连接配置 -->
+            <div id="ws-client-subtab" class="sub-tab-content">
+                <div class="form-section">
+                    <h3 class="form-section-title">远程服务连接配置</h3>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+                        配置连接到远程Java服务端的参数
+                    </p>
+
+                    <div class="form-group">
+                        <label class="form-label">WebSocket 地址</label>
+                        <input type="text" class="form-input" id="websocket_url" name="server.websocket_url"
+                               placeholder="ws://localhost:8080/ws/executor">
+                        <small style="color: var(--text-secondary); font-size: 12px;">Java 服务端 WebSocket 连接地址</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">心跳间隔（秒）</label>
+                        <input type="number" class="form-input" id="heartbeat_interval" name="server.heartbeat_interval"
+                               min="5" max="300" placeholder="30">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">重连间隔（秒）</label>
+                        <input type="number" class="form-input" id="reconnect_interval" name="server.reconnect_interval"
+                               min="1" max="60" placeholder="5">
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 16px;">
+                        <button type="button" class="btn btn-primary" onclick="saveServerConfig()">
+                            <i class="fas fa-save"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统配置标签页 -->
+        <div id="system-tab" class="main-tab-content">
+            <form id="system-config-form">
+                <!-- 设备信息配置 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">设备信息配置</h3>
+
+                    <div class="form-group">
+                        <label class="form-label">设备 ID</label>
+                        <input type="text" class="form-input" id="device_id" name="device.device_id"
+                               placeholder="DEVICE_001">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">设备名称</label>
+                        <input type="text" class="form-input" id="device_name" name="device.device_name"
+                               placeholder="测试执行设备-01">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">设备位置</label>
+                        <input type="text" class="form-input" id="location" name="device.location"
+                               placeholder="实验室">
+                    </div>
+                </div>
+
+                <!-- 测试软件路径配置 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">测试软件路径配置</h3>
+
+                    <div class="form-group">
+                        <label class="form-label">CANoe 路径</label>
+                        <input type="text" class="form-input" id="canoe_path" name="software.canoe_path"
+                               placeholder="C:\Program Files\Vector\CANoe 17\Exec64\CANoe64.exe">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">TSMaster 路径</label>
+                        <input type="text" class="form-input" id="tsmaster_path" name="software.tsmaster_path"
+                               placeholder="C:\Program Files\TSMaster">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">TTman 路径</label>
+                        <input type="text" class="form-input" id="ttman_path" name="software.ttman_path"
+                               placeholder="C:\Spirent\TTman.bat">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">工作空间路径</label>
+                        <input type="text" class="form-input" id="workspace_path" name="software.workspace_path"
+                               placeholder="C:\TestWorkspace">
+                    </div>
+                </div>
+
+                <!-- 日志配置 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">日志配置</h3>
+
+                    <div class="form-group">
+                        <label class="form-label">日志级别</label>
+                        <select class="form-select" id="log_level" name="logging.level">
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">日志目录</label>
+                        <input type="text" class="form-input" id="log_dir" name="logging.log_dir"
+                               placeholder="logs">
+                    </div>
+                </div>
+
+                <!-- 执行配置 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">执行配置</h3>
+
+                    <div class="form-group">
+                        <label class="form-label">默认超时时间（秒）</label>
+                        <input type="number" class="form-input" id="default_timeout" name="execution.default_timeout"
+                               min="60" max="7200" placeholder="3600">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto_start" name="execution.auto_start">
+                            自动启动服务
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 配置缓存管理 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">配置缓存管理</h3>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="cache_enabled" name="config_cache.enabled">
+                            启用配置缓存
+                        </label>
+                        <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                            开启后，配置文件会被缓存到本地，提高加载速度
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">缓存目录</label>
+                        <input type="text" class="form-input" id="cache_dir" name="config_cache.cache_dir"
+                               placeholder="workspace/cache/configs" readonly>
+                        <small style="color: var(--text-secondary); font-size: 12px;">缓存文件存储位置（只读）</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">最大缓存数量</label>
+                        <input type="number" class="form-input" id="max_cache_count" name="config_cache.max_cache_count"
+                               min="10" max="200" placeholder="50">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">缓存有效期（小时）</label>
+                        <input type="number" class="form-input" id="cache_ttl_hours" name="config_cache.cache_ttl_hours"
+                               min="24" max="720" placeholder="168">
+                        <small style="color: var(--text-secondary); font-size: 12px;">超过此时间的缓存会被自动清理</small>
+                    </div>
+
+                    <!-- 缓存状态显示 -->
+                    <div id="cache-status-section" style="background: var(--bg-color); padding: 16px; border-radius: 8px; margin-top: 16px;">
+                        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-secondary);">当前缓存状态</h4>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">缓存文件数</div>
+                                <div id="cache-file-count" style="font-size: 20px; font-weight: 600; color: var(--text-color);">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">缓存大小</div>
+                                <div id="cache-total-size" style="font-size: 20px; font-weight: 600; color: var(--text-color);">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">缓存目录</div>
+                                <div id="cache-dir-display" style="font-size: 12px; color: var(--text-color); word-break: break-all;">-</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="clearCache()">
+                                <i class="fas fa-trash-alt"></i> 清理缓存
+                            </button>
+                            <span id="cache-clear-result" style="margin-left: 12px; font-size: 12px;"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="resetSystemConfig()">
+                        <i class="fas fa-undo"></i> 重置默认
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 上报配置标签页 -->
+        <div id="report-tab" class="main-tab-content">
+            <form id="report-config-form">
+                <!-- 上报服务开关 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">上报服务开关</h3>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="report_enabled" name="report_server.enabled">
+                            启用任务结果上报
+                        </label>
+                        <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                            开启后，任务执行完成会自动上报结果到指定服务器
+                        </small>
+                    </div>
+                </div>
+
+                <!-- 服务器配置 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">服务器配置</h3>
+
+                    <div class="form-group">
+                        <label class="form-label">服务器地址 <span style="color: var(--danger-color);">*</span></label>
+                        <input type="text" class="form-input" id="report_host" name="report_server.host"
+                               placeholder="192.168.1.100">
+                        <small style="color: var(--text-secondary); font-size: 12px;">上报服务器的IP地址或域名</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">服务器端口 <span style="color: var(--danger-color);">*</span></label>
+                        <input type="number" class="form-input" id="report_port" name="report_server.port"
+                               min="1" max="65535" placeholder="8080">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">上报接口路径</label>
+                        <input type="text" class="form-input" id="report_path" name="report_server.path"
+                               placeholder="/api/report">
+                        <small style="color: var(--text-secondary); font-size: 12px;">接收任务结果的上报接口路径</small>
+                    </div>
+                </div>
+
+                <!-- 上报选项 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">上报选项</h3>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="upload_report" name="report_server.upload_report">
+                            上传报告文件
+                        </label>
+                        <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                            开启后，会同时上传生成的测试报告文件
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">报告文件路径</label>
+                        <input type="text" class="form-input" id="report_file_path" name="report_server.report_file_path"
+                               placeholder="C:\TestReports\report.pdf">
+                        <small style="color: var(--text-secondary); font-size: 12px;">测试报告文件的路径，将上传到服务器</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">文件上传地址</label>
+                        <input type="text" class="form-input" id="upload_url" name="report_server.upload_url"
+                               placeholder="http://10.124.11.142:8204/upload">
+                        <small style="color: var(--text-secondary); font-size: 12px;">报告文件上传的目标地址</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">超时时间（秒）</label>
+                        <input type="number" class="form-input" id="report_timeout" name="report_server.timeout"
+                               min="5" max="300" placeholder="30">
+                        <small style="color: var(--text-secondary); font-size: 12px;">上报请求的超时时间</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">重试次数</label>
+                        <input type="number" class="form-input" id="retry_count" name="report_server.retry_count"
+                               min="0" max="10" placeholder="3">
+                        <small style="color: var(--text-secondary); font-size: 12px;">上报失败时的重试次数</small>
+                    </div>
+                </div>
+
+                <!-- 连接测试 -->
+                <div class="form-section">
+                    <h3 class="form-section-title">连接测试</h3>
+
+                    <div class="form-group">
+                        <button type="button" class="btn btn-secondary" onclick="testReportConnection()">
+                            <i class="fas fa-plug"></i> 测试连接
+                        </button>
+                        <span id="test-result" style="margin-left: 12px; font-size: 14px;"></span>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="resetReportConfig()">
+                        <i class="fas fa-undo"></i> 重置默认
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .main-tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 20px;
+    }
+
+    .main-tab {
+        padding: 12px 20px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--text-secondary);
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .main-tab:hover {
+        color: var(--text-color);
+    }
+
+    .main-tab.active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+
+    .main-tab-content {
+        display: none;
+    }
+
+    .main-tab-content.active {
+        display: block;
+    }
+
+    .sub-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .sub-tab {
+        padding: 8px 16px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-color);
+        cursor: pointer;
+        font-size: 13px;
+        border-radius: 4px;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+    }
+
+    .sub-tab:hover {
+        border-color: var(--primary-color);
+        color: var(--text-color);
+    }
+
+    .sub-tab.active {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: white;
+    }
+
+    .sub-tab-content {
+        display: none;
+    }
+
+    .sub-tab-content.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 当前配置缓存
+    let currentConfig = {};
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAllConfig();
+    });
+
+    // 切换主标签页
+    function switchMainTab(tab) {
+        document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+
+        document.querySelector(`.main-tab[data-tab="${tab}"]`).classList.add('active');
+        document.getElementById(tab + '-tab').classList.add('active');
+    }
+
+    // 切换子标签页
+    function switchSubTab(tab) {
+        document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.sub-tab-content').forEach(c => c.classList.remove('active'));
+
+        document.querySelector(`.sub-tab[data-tab="${tab}"]`).classList.add('active');
+        document.getElementById(tab + '-subtab').classList.add('active');
+    }
+
+    // 加载所有配置
+    async function loadAllConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const result = await response.json();
+
+            if (result.success) {
+                currentConfig = result.data;
+                fillAllForms(currentConfig);
+                loadCacheStatus();
+            } else {
+                showMessage('加载配置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            showMessage('加载配置失败', 'error');
+        }
+    }
+
+    // 填充所有表单
+    function fillAllForms(config) {
+        // HTTP配置
+        document.getElementById('http-port').value = config.http?.port || 8180;
+        document.getElementById('http-host').value = config.http?.host || '0.0.0.0';
+        document.getElementById('http-debug').value = config.http?.debug ? 'true' : 'false';
+
+        document.getElementById('current-http-port').textContent = config.http?.port || '-';
+        document.getElementById('current-http-host').textContent = config.http?.host || '-';
+        document.getElementById('current-http-debug').textContent = config.http?.debug ? '开启' : '关闭';
+
+        // WebSocket服务配置
+        document.getElementById('ws-enabled').value = config.websocket?.enabled ? 'true' : 'false';
+        document.getElementById('ws-port').value = config.websocket?.port || 8080;
+        document.getElementById('ws-host').value = config.websocket?.host || '0.0.0.0';
+
+        const wsStatus = config.websocket?.enabled ?
+            '<span style="color: var(--success-color);">已启用</span>' :
+            '<span style="color: var(--text-secondary);">未启用</span>';
+        document.getElementById('current-ws-status').innerHTML = wsStatus;
+        document.getElementById('current-ws-port').textContent = config.websocket?.port || '-';
+        document.getElementById('current-ws-host').textContent = config.websocket?.host || '-';
+
+        // 远程服务连接配置
+        document.getElementById('websocket_url').value = config.server?.websocket_url || '';
+        document.getElementById('heartbeat_interval').value = config.server?.heartbeat_interval || '';
+        document.getElementById('reconnect_interval').value = config.server?.reconnect_interval || '';
+
+        // 设备信息配置
+        document.getElementById('device_id').value = config.device?.device_id || '';
+        document.getElementById('device_name').value = config.device?.device_name || '';
+        document.getElementById('location').value = config.device?.location || '';
+
+        // 测试软件路径配置
+        document.getElementById('canoe_path').value = config.software?.canoe_path || '';
+        document.getElementById('tsmaster_path').value = config.software?.tsmaster_path || '';
+        document.getElementById('ttman_path').value = config.software?.ttman_path || '';
+        document.getElementById('workspace_path').value = config.software?.workspace_path || '';
+
+        // 日志配置
+        document.getElementById('log_level').value = config.logging?.level || 'INFO';
+        document.getElementById('log_dir').value = config.logging?.log_dir || '';
+
+        // 执行配置
+        document.getElementById('default_timeout').value = config.execution?.default_timeout || '';
+        document.getElementById('auto_start').checked = config.execution?.auto_start || false;
+
+        // 配置缓存
+        document.getElementById('cache_enabled').checked = config.config_cache?.enabled ?? true;
+        document.getElementById('cache_dir').value = config.config_cache?.cache_dir || 'workspace/cache/configs';
+        document.getElementById('max_cache_count').value = config.config_cache?.max_cache_count || '';
+        document.getElementById('cache_ttl_hours').value = config.config_cache?.cache_ttl_hours || '';
+
+        // 上报配置
+        document.getElementById('report_enabled').checked = config.report_server?.enabled || false;
+        document.getElementById('report_host').value = config.report_server?.host || '';
+        document.getElementById('report_port').value = config.report_server?.port || '';
+        document.getElementById('report_path').value = config.report_server?.path || '';
+        document.getElementById('upload_report').checked = config.report_server?.upload_report || false;
+        document.getElementById('report_file_path').value = config.report_server?.report_file_path || '';
+        document.getElementById('upload_url').value = config.report_server?.upload_url || '';
+        document.getElementById('report_timeout').value = config.report_server?.timeout || '';
+        document.getElementById('retry_count').value = config.report_server?.retry_count || '';
+    }
+
+    // 加载缓存状态
+    async function loadCacheStatus() {
+        try {
+            const response = await fetch('/api/config/cache/status');
+            const result = await response.json();
+
+            if (result.success) {
+                const data = result.data;
+                const stats = data.stats || {};
+
+                document.getElementById('cache-file-count').textContent = stats.cache_count || 0;
+                document.getElementById('cache-total-size').textContent = (stats.total_size_mb || 0) + ' MB';
+                document.getElementById('cache-dir-display').textContent = data.cache_dir || '-';
+            }
+        } catch (error) {
+            console.error('加载缓存状态失败:', error);
+        }
+    }
+
+    // 清理缓存
+    async function clearCache() {
+        if (!confirm('确定要清理所有配置缓存吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config/cache/clear', {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('缓存已清理', 'success');
+                document.getElementById('cache-clear-result').textContent = '清理成功';
+                document.getElementById('cache-clear-result').style.color = 'var(--success-color)';
+                loadCacheStatus();
+            } else {
+                showMessage('清理失败: ' + result.message, 'error');
+                document.getElementById('cache-clear-result').textContent = '清理失败';
+                document.getElementById('cache-clear-result').style.color = 'var(--danger-color)';
+            }
+        } catch (error) {
+            console.error('清理缓存失败:', error);
+            showMessage('清理缓存失败', 'error');
+        }
+    }
+
+    // 保存HTTP配置
+    async function saveHttpConfig() {
+        const port = parseInt(document.getElementById('http-port').value);
+        const host = document.getElementById('http-host').value;
+        const debug = document.getElementById('http-debug').value === 'true';
+
+        if (!port || port < 1 || port > 65535) {
+            showMessage('端口号必须是1-65535之间的整数', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config/http', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port, host, debug })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('HTTP配置已保存', 'success');
+                loadAllConfig();
+            } else {
+                showMessage(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存HTTP配置失败:', error);
+            showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 保存WebSocket服务配置
+    async function saveWsConfig() {
+        const enabled = document.getElementById('ws-enabled').value === 'true';
+        const port = parseInt(document.getElementById('ws-port').value);
+        const host = document.getElementById('ws-host').value;
+
+        if (!port || port < 1 || port > 65535) {
+            showMessage('端口号必须是1-65535之间的整数', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config/websocket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, port, host })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('WebSocket配置已保存', 'success');
+                loadAllConfig();
+            } else {
+                showMessage(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存WebSocket配置失败:', error);
+            showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 保存远程服务连接配置
+    async function saveServerConfig() {
+        const config = {
+            server: {
+                websocket_url: document.getElementById('websocket_url').value,
+                heartbeat_interval: parseInt(document.getElementById('heartbeat_interval').value) || 30,
+                reconnect_interval: parseInt(document.getElementById('reconnect_interval').value) || 5
+            }
+        };
+
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('远程服务配置已保存', 'success');
+            } else {
+                showMessage(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 系统配置表单提交
+    document.getElementById('system-config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveSystemConfig();
+    });
+
+    // 保存系统配置
+    async function saveSystemConfig() {
+        const config = {
+            device: {
+                device_id: document.getElementById('device_id').value,
+                device_name: document.getElementById('device_name').value,
+                location: document.getElementById('location').value
+            },
+            software: {
+                canoe_path: document.getElementById('canoe_path').value,
+                tsmaster_path: document.getElementById('tsmaster_path').value,
+                ttman_path: document.getElementById('ttman_path').value,
+                workspace_path: document.getElementById('workspace_path').value
+            },
+            logging: {
+                level: document.getElementById('log_level').value,
+                log_dir: document.getElementById('log_dir').value
+            },
+            execution: {
+                default_timeout: parseInt(document.getElementById('default_timeout').value) || 3600,
+                auto_start: document.getElementById('auto_start').checked
+            },
+            config_cache: {
+                enabled: document.getElementById('cache_enabled').checked,
+                cache_dir: document.getElementById('cache_dir').value,
+                max_cache_count: parseInt(document.getElementById('max_cache_count').value) || 50,
+                cache_ttl_hours: parseInt(document.getElementById('cache_ttl_hours').value) || 168
+            }
+        };
+
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('系统配置已保存', 'success');
+            } else {
+                showMessage(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 重置系统配置
+    async function resetSystemConfig() {
+        if (!confirm('确定要重置为默认配置吗？当前配置将丢失。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config/reset', {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('配置已重置为默认值', 'success');
+                fillAllForms(result.data);
+            } else {
+                showMessage('重置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('重置配置失败:', error);
+            showMessage('重置配置失败', 'error');
+        }
+    }
+
+    // 上报配置表单提交
+    document.getElementById('report-config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveReportConfig();
+    });
+
+    // 保存上报配置
+    async function saveReportConfig() {
+        const config = {
+            report_server: {
+                enabled: document.getElementById('report_enabled').checked,
+                host: document.getElementById('report_host').value.trim(),
+                port: parseInt(document.getElementById('report_port').value) || 8080,
+                path: document.getElementById('report_path').value.trim() || '/api/report',
+                upload_report: document.getElementById('upload_report').checked,
+                report_file_path: document.getElementById('report_file_path').value.trim(),
+                upload_url: document.getElementById('upload_url').value.trim(),
+                timeout: parseInt(document.getElementById('report_timeout').value) || 30,
+                retry_count: parseInt(document.getElementById('retry_count').value) || 3
+            }
+        };
+
+        // 验证
+        if (config.report_server.enabled && !config.report_server.host) {
+            showMessage('服务器地址不能为空', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('上报配置已保存', 'success');
+            } else {
+                showMessage(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 重置上报配置
+    async function resetReportConfig() {
+        if (!confirm('确定要重置为默认配置吗？当前配置将丢失。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/config/reset', {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('配置已重置为默认值', 'success');
+                fillAllForms(result.data);
+            } else {
+                showMessage('重置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('重置配置失败:', error);
+            showMessage('重置配置失败', 'error');
+        }
+    }
+
+    // 测试上报连接
+    async function testReportConnection() {
+        const config = {
+            host: document.getElementById('report_host').value.trim(),
+            port: parseInt(document.getElementById('report_port').value) || 8080,
+            path: document.getElementById('report_path').value.trim() || '/api/report',
+            enabled: true
+        };
+
+        if (!config.host) {
+            showMessage('服务器地址不能为空', 'error');
+            return;
+        }
+
+        const resultEl = document.getElementById('test-result');
+        resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 测试中...';
+        resultEl.style.color = 'var(--text-secondary)';
+
+        try {
+            const response = await fetch('/api/config/report-server/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                resultEl.innerHTML = '<i class="fas fa-check-circle" style="color: var(--success-color);"></i> 连接成功';
+                resultEl.style.color = 'var(--success-color)';
+            } else {
+                resultEl.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> ' + (result.message || '连接失败');
+                resultEl.style.color = 'var(--danger-color)';
+            }
+        } catch (error) {
+            console.error('测试连接失败:', error);
+            resultEl.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> 测试失败';
+            resultEl.style.color = 'var(--danger-color)';
+        }
+    }
+</script>
+{% endblock %}
