@@ -16,6 +16,29 @@ from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
 from ..realtime_logger import TaskLogAdapter
 
 
+class TTmanReturnCode:
+    """TTman返回码定义
+    110 - None: 无判定
+    111 - Pass: 全部通过
+    112 - Inconclusive: 不确定
+    113 - Fail: 有失败
+    """
+    NONE = 110
+    PASS = 111
+    INCONCLUSIVE = 112
+    FAIL = 113
+
+    @classmethod
+    def get_verdict(cls, return_code: int) -> str:
+        mapping = {
+            cls.NONE: "NONE",
+            cls.PASS: "PASS",
+            cls.INCONCLUSIVE: "INCONCLUSIVE",
+            cls.FAIL: "FAIL"
+        }
+        return mapping.get(return_code, f"UNKNOWN({return_code})")
+
+
 class TTworkbenchAdapter(BaseTestAdapter):
     """
     TTworkbench测试工具适配器
@@ -32,7 +55,7 @@ class TTworkbenchAdapter(BaseTestAdapter):
     def __init__(self, config: dict = None):
         """
         初始化TTworkbench适配器
-        
+
         Args:
             config: 配置字典，可包含：
                 - ttman_path: TTman.bat路径
@@ -40,16 +63,18 @@ class TTworkbenchAdapter(BaseTestAdapter):
                 - log_path: 日志输出路径
                 - report_path: 报告输出路径
                 - report_format: 报告格式（pdf/html/xml，默认pdf）
+                - log_format: 日志格式（tlz/xml，默认tlz）
                 - timeout: 测试超时时间（默认3600秒）
         """
         super().__init__(config)
-        
+
         # TTworkbench路径配置
         self.ttman_path = self.config.get("ttman_path", "")
         self.workspace_path = self.config.get("workspace_path", "")
         self.log_path = self.config.get("log_path", "")
         self.report_path = self.config.get("report_path", "")
         self.report_format = self.config.get("report_format", "pdf")
+        self.log_format = self.config.get("log_format", "tlz")
         self.timeout = self.config.get("timeout", 3600)
         
         # 执行状态
@@ -343,41 +368,87 @@ class TTworkbenchAdapter(BaseTestAdapter):
     def _execute_clf_test(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行单个clf测试文件"""
         clf_file = item.get("clf_file")
-        
+
         if not clf_file:
             raise ValueError("clf_test类型需要指定clf_file参数")
-        
+
         if not os.path.isfile(clf_file):
             raise FileNotFoundError(f"clf文件不存在: {clf_file}")
-        
+
         # 构建TTman命令
         cmd = self._build_ttman_command(clf_file)
-        
+
         self.logger.info(f"执行TTman命令: {' '.join(cmd)}")
-        
+
         # 执行命令
         result = self._run_ttman_command(cmd)
-        
+
         # 获取测试用例名
         test_case_name = Path(clf_file).stem
-        
+
         # 获取报告和日志文件
         report_file = self._get_report_file(test_case_name)
         log_file = self._get_log_file(test_case_name)
-        
+
+        # 解析TLZ日志获取详细结果
+        log_details = None
+        if log_file:
+            log_details = self.parse_tlz_log(log_file)
+            self.logger.info(f"TLZ日志解析结果: verdict={log_details.get('verdict')}, return_code={log_details.get('return_code')}")
+
+        # 根据返回码确定测试状态
+        # TTman返回码: 110-None, 111-Pass, 112-Inconclusive, 113-Fail
+        ttman_return_code = result["return_code"]
+        status = "failed"
+        verdict_text = "NONE"
+
+        if log_details and log_details.get("parsed"):
+            # 使用TLZ解析结果
+            ttman_return_code = log_details.get("return_code", ttman_return_code)
+            verdict_text = log_details.get("verdict", "NONE")
+
+            if ttman_return_code == TTmanReturnCode.PASS:
+                status = "passed"
+            elif ttman_return_code == TTmanReturnCode.FAIL:
+                status = "failed"
+            elif ttman_return_code == TTmanReturnCode.INCONCLUSIVE:
+                status = "inconclusive"
+            else:
+                # 如果return_code是0（进程正常退出），也认为是passed
+                status = "passed" if result["return_code"] == 0 else "failed"
+        else:
+            # 如果无法解析日志，使用进程返回码判断
+            # 进程返回码0表示成功执行（不一定表示测试通过）
+            # TTman成功执行后会将verdict写入日志文件
+            if result["return_code"] == 0:
+                # 进程正常退出，但需要检查TLZ日志判断实际结果
+                if log_file and os.path.isfile(log_file):
+                    # 有日志文件，认为是passed
+                    status = "passed"
+                    verdict_text = "PASS"
+                else:
+                    # 没有日志文件，可能是进程异常
+                    status = "inconclusive"
+                    verdict_text = "INCONCLUSIVE"
+            else:
+                status = "failed"
+                verdict_text = "FAIL"
+
         return {
             "name": item.get("name"),
             "type": "clf_test",
             "clf_file": clf_file,
             "test_case_name": test_case_name,
             "command": ' '.join(cmd),
-            "return_code": result["return_code"],
+            "return_code": ttman_return_code,
+            "verdict": verdict_text,
             "stdout": result["stdout"],
             "stderr": result["stderr"],
             "execution_time": result["execution_time"],
             "report_file": report_file,
             "log_file": log_file,
-            "status": "passed" if result["return_code"] == 0 else "failed"
+            "log_details": log_details,
+            "status": status
         }
     
     def _execute_batch_test(self, item: Dict[str, Any]) -> Dict[str, Any]:
@@ -421,6 +492,7 @@ class TTworkbenchAdapter(BaseTestAdapter):
             self.ttman_path,
             '--data', self.workspace_path,
             '--log', self.log_path,
+            '--log-format', self.log_format,
             '-r', self.report_format,
             '--report-dir', self.report_path,
             clf_file
@@ -550,6 +622,233 @@ class TTworkbenchAdapter(BaseTestAdapter):
         """获取测试日志文件路径"""
         log_file = os.path.join(self.log_path, f"{test_case_name}.tlz")
         return log_file if os.path.isfile(log_file) else None
+
+    def compile_ttcn3(self, ttcn3_file: str, project_path: str = None) -> Dict[str, Any]:
+        """
+        编译TTCN3测试文件
+
+        Args:
+            ttcn3_file: TTCN3源文件路径
+            project_path: 项目路径（可选）
+
+        Returns:
+            编译结果字典
+        """
+        import shutil
+        from pathlib import Path
+
+        if not os.path.isfile(ttcn3_file):
+            self._set_error(f"TTCN3文件不存在: {ttcn3_file}")
+            return {
+                "status": "error",
+                "error": f"TTCN3文件不存在: {ttcn3_file}"
+            }
+
+        # 获取TTworkbench安装路径
+        ttworkbench_dir = os.path.dirname(self.ttman_path)
+        compiler = os.path.join(ttworkbench_dir, "TTthree.bat")
+
+        if not os.path.isfile(compiler):
+            self._set_error(f"TTthree编译器不存在: {compiler}")
+            return {
+                "status": "error",
+                "error": f"TTthree编译器不存在: {compiler}"
+            }
+
+        # 构建编译命令
+        cmd = [compiler]
+        if project_path:
+            cmd.extend(["--project", project_path])
+        cmd.append(ttcn3_file)
+
+        self.logger.info(f"执行TTthree编译: {' '.join(cmd)}")
+
+        try:
+            start_time = time.time()
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                timeout=self.timeout
+            )
+            execution_time = time.time() - start_time
+
+            success = result.returncode == 0
+
+            return {
+                "status": "passed" if success else "failed",
+                "return_code": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "execution_time": execution_time,
+                "compiler": compiler,
+                "source_file": ttcn3_file
+            }
+
+        except subprocess.TimeoutExpired:
+            self.logger.error("TTthree编译超时")
+            return {
+                "status": "error",
+                "error": "编译超时"
+            }
+        except Exception as e:
+            self.logger.error(f"TTthree编译异常: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    def parse_tlz_log(self, log_file: str) -> Dict[str, Any]:
+        """
+        解析TLZ日志文件获取详细测试结果
+
+        TLZ文件是TTworkbench的测试日志格式，包含测试用例执行结果，
+        错误信息等详细信息。
+
+        Args:
+            log_file: TLZ日志文件路径
+
+        Returns:
+            解析结果字典，包含：
+            - verdict: 测试判定（PASS/FAIL/INCONCLUSIVE/NONE）
+            - return_code: TTman返回码
+            - test_cases: 测试用例列表
+            - error_info: 错误信息列表
+            - duration: 测试执行时间
+        """
+        import zipfile
+        import xml.etree.ElementTree as ET
+        import json
+
+        result = {
+            "verdict": "NONE",
+            "return_code": TTmanReturnCode.NONE,
+            "test_cases": [],
+            "error_info": [],
+            "duration": 0,
+            "parsed": False
+        }
+
+        if not log_file or not os.path.isfile(log_file):
+            self.logger.warning(f"TLZ日志文件不存在: {log_file}")
+            result["error_info"].append(f"日志文件不存在: {log_file}")
+            return result
+
+        try:
+            # TLZ文件本质上是ZIP压缩文件
+            with zipfile.ZipFile(log_file, 'r') as zf:
+                # 查找主要的日志文件
+                log_files = [f for f in zf.namelist() if f.endswith('.log') or f.endswith('.xml')]
+
+                # 尝试解析JSON格式的日志
+                json_log_files = [f for f in zf.namelist() if f.endswith('.json')]
+                if json_log_files:
+                    for json_file in json_log_files:
+                        try:
+                            with zf.open(json_file) as f:
+                                content = f.read().decode('utf-8', errors='ignore')
+                                # 尝试解析JSON
+                                log_data = json.loads(content)
+                                result["parsed"] = True
+                                # 提取verdict信息
+                                if "verdict" in log_data:
+                                    result["verdict"] = log_data["verdict"]
+                                if "returnCode" in log_data:
+                                    result["return_code"] = log_data["returnCode"]
+                                if "testCases" in log_data:
+                                    result["test_cases"] = log_data["testCases"]
+                                if "errors" in log_data:
+                                    result["error_info"] = log_data["errors"]
+                                if "duration" in log_data:
+                                    result["duration"] = log_data["duration"]
+                                break
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+
+                # 如果没有JSON，尝试解析XML格式
+                if not result["parsed"]:
+                    xml_log_files = [f for f in zf.namelist() if f.endswith('.xml')]
+                    for xml_file in xml_log_files:
+                        try:
+                            with zf.open(xml_file) as f:
+                                content = f.read().decode('utf-8', errors='ignore')
+                                root = ET.fromstring(content)
+
+                                # 查找verdict
+                                verdict_elem = root.find(".//verdict")
+                                if verdict_elem is not None:
+                                    result["verdict"] = verdict_elem.text or "NONE"
+
+                                # 查找returnCode
+                                return_code_elem = root.find(".//returnCode")
+                                if return_code_elem is not None and return_code_elem.text:
+                                    result["return_code"] = int(return_code_elem.text)
+
+                                # 查找test cases
+                                test_cases = root.findall(".//testCase")
+                                for tc in test_cases:
+                                    tc_name = tc.get("name", "Unknown")
+                                    tc_verdict = tc.find("verdict")
+                                    tc_result = {
+                                        "name": tc_name,
+                                        "verdict": tc_verdict.text if tc_verdict is not None else "NONE"
+                                    }
+                                    # 查找错误信息
+                                    errors = tc.findall(".//error")
+                                    for err in errors:
+                                        tc_result["error"] = err.text
+                                        result["error_info"].append(err.text)
+                                    result["test_cases"].append(tc_result)
+
+                                # 查找duration
+                                duration_elem = root.find(".//duration")
+                                if duration_elem is not None and duration_elem.text:
+                                    result["duration"] = float(duration_elem.text)
+
+                                result["parsed"] = True
+                                break
+                        except ET.ParseError:
+                            continue
+
+                # 如果仍然没有解析，尝试从纯文本日志中提取信息
+                if not result["parsed"]:
+                    text_log_files = [f for f in zf.namelist() if f.endswith('.log')]
+                    for text_file in text_log_files:
+                        try:
+                            with zf.open(text_file) as f:
+                                content = f.read().decode('utf-8', errors='ignore')
+                                # 查找常见的verdict关键字
+                                if "verdict" in content.lower():
+                                    if "pass" in content.lower() and "fail" not in content.lower():
+                                        result["verdict"] = "PASS"
+                                        result["return_code"] = TTmanReturnCode.PASS
+                                    elif "fail" in content.lower():
+                                        result["verdict"] = "FAIL"
+                                        result["return_code"] = TTmanReturnCode.FAIL
+                                    elif "inconclusive" in content.lower():
+                                        result["verdict"] = "INCONCLUSIVE"
+                                        result["return_code"] = TTmanReturnCode.INCONCLUSIVE
+                                result["parsed"] = True
+                                break
+                        except Exception:
+                            continue
+
+            # 如果仍然没有成功解析，返回原始状态
+            if not result["parsed"]:
+                self.logger.warning(f"无法解析TLZ日志文件: {log_file}")
+                result["error_info"].append("无法解析日志文件格式")
+
+        except zipfile.BadZipFile:
+            self.logger.error(f"无效的TLZ文件格式: {log_file}")
+            result["error_info"].append("无效的TLZ文件格式")
+        except Exception as e:
+            self.logger.error(f"解析TLZ日志异常: {e}")
+            result["error_info"].append(f"解析异常: {str(e)}")
+
+        return result
     
     def read_report_content(self, report_file: str) -> Optional[str]:
         """
