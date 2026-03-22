@@ -1,0 +1,40 @@
+{
+    "enabled": true,
+    "httpServerEnabled": true,
+    "listenUrl": "http://+:8180/",
+    "autoConnect": true,
+    "autoExecute": true,
+    "schedulerUrl": "http://10.124.11.142:8315",
+    "reportApiPath": "/api/python/report",
+    "pollingIntervalMs": 1000,
+
+    "deviceBinding": {
+        "vehicleType": "车型A",
+        "vehicleConfig": "配置1",
+        "vehicleStage": "阶段2",
+        "testChannel": "CAN1",
+        "dbcPath": "C:\\DBC\\车型A\\",
+        "defaultBaudRate": "500000",
+        "deviceId": "DEVICE_001",
+        "deviceName": "测试执行设备-01"
+    },
+
+    "taskCategoryMapping": {
+        "CAN通信单元": "CANUnit",
+        "CAN通信集成": "CANIntegration",
+        "LIN通信主节点": "LINMaster",
+        "LIN通信从节点": "LINSalve",
+        "LIN通信集成": "LINIntegration",
+        "直接NM单元": "DirectNMUnit",
+        "直接NM集成": "DirectNMIntegration",
+        "动力域NM主节点": "DynamicNMMaster",
+        "动力域NM从节点": "DynamicNMSlave",
+        "动力域NM集成": "DynamicNMIntegration",
+        "间接NM单元": "IndirectNMUnit",
+        "间接NM集成": "IndirectNMIntegration",
+        "通信DTC": "CommunicationDTC",
+        "OSEK NM单元": "OSEKNMUnit",
+        "OSEK NM集成": "OSEKNMIntegration",
+        "网关路由": "GatewayRouting"
+    }
+}
