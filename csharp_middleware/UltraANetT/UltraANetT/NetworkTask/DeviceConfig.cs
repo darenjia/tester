@@ -72,6 +72,7 @@ namespace UltraANetT.NetworkTask
     {
         private static DeviceConfig _instance;
         private static readonly object _lock = new object();
+        private static readonly object _configLock = new object();  // 配置操作锁
 
         private DeviceBindingConfig _bindingConfig;
         private readonly string _configPath;
@@ -119,70 +120,84 @@ namespace UltraANetT.NetworkTask
         /// <summary>
         /// 从配置文件加载
         /// </summary>
-        public void Load()
+        /// <returns>加载成功返回 true</returns>
+        public bool Load()
         {
-            try
+            lock (_configLock)
             {
-                if (!File.Exists(_configPath))
+                try
                 {
-                    System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置文件不存在: {_configPath}");
-                    return;
+                    if (!File.Exists(_configPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置文件不存在: {_configPath}");
+                        return false;
+                    }
+
+                    var json = File.ReadAllText(_configPath);
+                    var config = JsonConvert.DeserializeObject<NetworkTaskConfigJson>(json);
+
+                    if (config != null && config.DeviceBinding != null)
+                    {
+                        _bindingConfig = config.DeviceBinding;
+                        System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置加载成功: VehicleType={_bindingConfig.VehicleType}");
+                        return true;
+                    }
+                    return false;
                 }
-
-                var json = File.ReadAllText(_configPath);
-                var config = JsonConvert.DeserializeObject<NetworkTaskConfigJson>(json);
-
-                if (config != null && config.DeviceBinding != null)
+                catch (Exception ex)
                 {
-                    _bindingConfig = config.DeviceBinding;
-                    System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置加载成功: VehicleType={_bindingConfig.VehicleType}");
+                    System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 加载配置失败: {ex.Message}");
+                    return false;
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 加载配置失败: {ex.Message}");
             }
         }
 
         /// <summary>
         /// 保存配置到文件
         /// </summary>
-        public void Save(DeviceBindingConfig config)
+        /// <param name="config">要保存的配置</param>
+        /// <returns>保存成功返回 true</returns>
+        public bool Save(DeviceBindingConfig config)
         {
-            try
+            lock (_configLock)
             {
-                _bindingConfig = config ?? new DeviceBindingConfig();
-
-                // 读取现有配置
-                NetworkTaskConfigJson fullConfig;
-                if (File.Exists(_configPath))
+                try
                 {
-                    var json = File.ReadAllText(_configPath);
-                    fullConfig = JsonConvert.DeserializeObject<NetworkTaskConfigJson>(json) ?? new NetworkTaskConfigJson();
+                    _bindingConfig = config ?? new DeviceBindingConfig();
+
+                    // 读取现有配置
+                    NetworkTaskConfigJson fullConfig;
+                    if (File.Exists(_configPath))
+                    {
+                        var json = File.ReadAllText(_configPath);
+                        fullConfig = JsonConvert.DeserializeObject<NetworkTaskConfigJson>(json) ?? new NetworkTaskConfigJson();
+                    }
+                    else
+                    {
+                        fullConfig = new NetworkTaskConfigJson();
+                    }
+
+                    // 更新设备绑定配置
+                    fullConfig.DeviceBinding = _bindingConfig;
+
+                    // 保存
+                    var directory = Path.GetDirectoryName(_configPath);
+                    if (!Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    var newJson = JsonConvert.SerializeObject(fullConfig, Formatting.Indented);
+                    File.WriteAllText(_configPath, newJson);
+
+                    System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置保存成功: {_configPath}");
+                    return true;
                 }
-                else
+                catch (Exception ex)
                 {
-                    fullConfig = new NetworkTaskConfigJson();
+                    System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 保存配置失败: {ex.Message}");
+                    return false;
                 }
-
-                // 更新设备绑定配置
-                fullConfig.DeviceBinding = _bindingConfig;
-
-                // 保存
-                var directory = Path.GetDirectoryName(_configPath);
-                if (!Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                var newJson = JsonConvert.SerializeObject(fullConfig, Formatting.Indented);
-                File.WriteAllText(_configPath, newJson);
-
-                System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 配置保存成功: {_configPath}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[DeviceConfig] 保存配置失败: {ex.Message}");
             }
         }
 
@@ -207,6 +222,42 @@ namespace UltraANetT.NetworkTask
             return !string.IsNullOrEmpty(_bindingConfig.VehicleType) &&
                    !string.IsNullOrEmpty(_bindingConfig.VehicleConfig) &&
                    !string.IsNullOrEmpty(_bindingConfig.VehicleStage);
+        }
+
+        /// <summary>
+        /// 验证配置并返回错误信息
+        /// </summary>
+        /// <param name="errorMessage">错误信息</param>
+        /// <returns>验证通过返回 true</returns>
+        public bool Validate(out string errorMessage)
+        {
+            errorMessage = "";
+
+            if (string.IsNullOrEmpty(_bindingConfig.VehicleType))
+            {
+                errorMessage = "车型不能为空";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(_bindingConfig.VehicleConfig))
+            {
+                errorMessage = "配置不能为空";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(_bindingConfig.VehicleStage))
+            {
+                errorMessage = "阶段不能为空";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(_bindingConfig.TestChannel))
+            {
+                errorMessage = "测试通道不能为空";
+                return false;
+            }
+
+            return true;
         }
     }
 
