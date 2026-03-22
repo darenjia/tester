@@ -36,6 +36,13 @@ class CaseMapping:
     description: str = ""                # 用例描述
     created_at: str = ""                 # 创建时间
     updated_at: str = ""                 # 更新时间
+    # TTworkbench专用字段
+    ttcn3_source: str = ""               # TTCN-3源码路径
+    ttthree_path: str = ""               # TTthree编译器路径
+    compile_params: str = ""             # 编译参数字典（JSON格式）
+    clf_file: str = ""                   # 预生成的CLF文件路径
+    log_format: str = "pdf"              # 日志格式
+    test_timeout: int = 3600             # 测试超时时间
 
     def __post_init__(self):
         if not self.created_at:
@@ -59,7 +66,14 @@ class CaseMapping:
             "version": self.version,
             "description": self.description,
             "created_at": self.created_at,
-            "updated_at": self.updated_at
+            "updated_at": self.updated_at,
+            # TTworkbench专用字段
+            "ttcn3_source": self.ttcn3_source,
+            "ttthree_path": self.ttthree_path,
+            "compile_params": self.compile_params,
+            "clf_file": self.clf_file,
+            "log_format": self.log_format,
+            "test_timeout": self.test_timeout
         }
 
     @classmethod
@@ -79,7 +93,14 @@ class CaseMapping:
             version=data.get("version", "1.0"),
             description=data.get("description", ""),
             created_at=data.get("created_at", ""),
-            updated_at=data.get("updated_at", "")
+            updated_at=data.get("updated_at", ""),
+            # TTworkbench专用字段
+            ttcn3_source=data.get("ttcn3_source", ""),
+            ttthree_path=data.get("ttthree_path", ""),
+            compile_params=data.get("compile_params", ""),
+            clf_file=data.get("clf_file", ""),
+            log_format=data.get("log_format", "pdf"),
+            test_timeout=data.get("test_timeout", 3600)
         )
 
 
