@@ -191,7 +191,7 @@ class CANoeCOMWrapper:
                 self.logger.debug("COM环境初始化成功")
             except Exception as e:
                 self.logger.warning(f"COM环境初始化失败（可能已初始化）: {e}")
-    
+
     def _uninit_com(self):
         """反初始化COM环境"""
         if self._com_initialized:
@@ -201,24 +201,91 @@ class CANoeCOMWrapper:
                 self.logger.debug("COM环境反初始化成功")
             except Exception as e:
                 self.logger.warning(f"COM环境反初始化失败: {e}")
+
+    def _validate_com_environment(self) -> bool:
+        """
+        验证COM环境是否有效
+
+        当CANoe进程被关闭后，COM环境中缓存的代理对象会失效。
+        此方法检测这种情况，以便在connect时清理失效的COM环境。
+
+        Returns:
+            True: COM环境有效或未初始化
+            False: COM环境已失效，需要重新初始化
+        """
+        if not self._com_initialized:
+            return True
+
+        try:
+            # 尝试获取一个临时COM对象来验证环境是否有效
+            # 使用ROT (Running Object Table) 检查CANoe是否还在运行
+            import pythoncom
+            from win32com.client import Dispatch
+
+            # 尝试连接到CANoe.Application来验证
+            # 如果CANoe进程已关闭，这里会失败或返回失效的代理
+            try:
+                test_app = Dispatch("CANoe.Application")
+                # 尝试访问一个简单属性来验证对象是否真的有效
+                _ = test_app.Version
+                # 成功访问，环境有效
+                return True
+            except Exception as e:
+                # 访问失败，说明COM环境中的代理已失效
+                self.logger.warning(f"COM环境验证失败，需要重新初始化: {e}")
+                return False
+
+        except Exception as e:
+            self.logger.warning(f"COM环境验证异常: {e}")
+            return False
+
+    def _reset_com_environment(self):
+        """
+        重置COM环境
+
+        当检测到COM环境失效时（如CANoe进程被关闭），
+        需要完全清理并重新初始化COM环境。
+        """
+        self.logger.info("正在重置COM环境...")
+
+        # 清理所有缓存的COM对象引用
+        self._app = None
+        self._measurement = None
+        self._system = None
+        self._namespaces = None
+        self._namespace_cache.clear()
+        self._variable_cache.clear()
+        self.is_connected = False
+        self.is_measurement_running = False
+
+        # 反初始化COM
+        self._uninit_com()
+
+        # 短暂等待确保COM资源释放
+        time.sleep(0.5)
+
+        # 重新初始化COM
+        self._init_com()
+
+        self.logger.info("COM环境重置完成")
     
     def connect(self, retry_count: int = 3, retry_interval: float = 2.0) -> bool:
         """
         连接CANoe应用程序
-        
+
         尝试连接到正在运行的CANoe应用程序实例。
         如果CANoe未运行，将尝试启动它。
-        
+
         Args:
             retry_count: 重试次数
             retry_interval: 重试间隔（秒）
-            
+
         Returns:
             连接成功返回True，否则返回False
-            
+
         Raises:
             CANoeConnectionError: 连接失败时抛出
-            
+
         Example:
             >>> wrapper = CANoeCOMWrapper()
             >>> success = wrapper.connect(retry_count=5)
@@ -228,42 +295,51 @@ class CANoeCOMWrapper:
             if self.is_connected:
                 self.logger.warning("CANoe已连接")
                 return True
-            
+
             self._check_win32com()
             self._init_com()
-            
+
+            # 验证COM环境是否有效（修复：处理CANoe进程被关闭后的失效情况）
+            if self._com_initialized:
+                if not self._validate_com_environment():
+                    self.logger.info("检测到COM环境失效，正在重置...")
+                    self._reset_com_environment()
+
             for attempt in range(retry_count):
                 try:
                     self.logger.info(f"正在连接CANoe (尝试 {attempt + 1}/{retry_count})...")
-                    
+
                     # 创建CANoe应用程序对象
                     self._app = win32com.client.Dispatch("CANoe.Application")
-                    
+
                     # 获取测量对象
                     self._measurement = self._app.Measurement
-                    
+
                     # 获取系统对象
                     self._system = self._app.System
-                    
+
                     # 获取命名空间集合
                     self._namespaces = self._system.Namespaces
-                    
+
                     # 获取版本信息
                     self._load_version_info()
-                    
+
                     self.is_connected = True
                     self.logger.info(f"CANoe连接成功 (版本: {self.version})")
                     return True
-                    
+
                 except Exception as e:
                     self.logger.warning(f"连接尝试 {attempt + 1} 失败: {e}")
+                    # 连接失败时，尝试重置COM环境再重试
                     if attempt < retry_count - 1:
+                        self.logger.info("连接失败，尝试重置COM环境后重试...")
+                        self._reset_com_environment()
                         time.sleep(retry_interval)
                     else:
                         raise CANoeConnectionError(
                             f"连接CANoe失败（已重试{retry_count}次）: {e}"
                         )
-            
+
             return False
     
     def _load_version_info(self):
