@@ -127,7 +127,7 @@ class ReportClient:
 
             report_data = self._build_report_data(task_result, task_info)
 
-            self._executor.submit(self._do_report, report_data)
+            self._executor.submit(self._do_report, report_data, task_info)
 
             return True
         except Exception as e:
@@ -159,8 +159,15 @@ class ReportClient:
 
         return data
 
-    def _do_report(self, report_data: Dict[str, Any]):
-        """执行实际上报（在线程中运行）"""
+    def _do_report(self, report_data: Dict[str, Any], task_info: Dict[str, Any] = None):
+        """执行实际上报（在线程中运行）
+
+        Args:
+            report_data: 上报数据
+            task_info: 额外的任务信息
+        """
+        task_no = report_data.get('taskNo', 'unknown')
+
         try:
             response = self._make_request(
                 method="POST",
@@ -169,12 +176,103 @@ class ReportClient:
             )
 
             if response is not None:
-                logger.info(f"任务结果上报成功: taskNo={report_data.get('taskNo')}")
+                logger.info(f"任务结果上报成功: taskNo={task_no}")
+                # 重置连续失败计数器
+                self._reset_failure_counter()
             else:
-                logger.error(f"任务结果上报失败: taskNo={report_data.get('taskNo')}")
+                # 上报失败，持久化以便重试
+                self._handle_report_failure(report_data, task_info, "服务器无响应")
 
         except Exception as e:
-            logger.error(f"任务结果上报异常: {e}")
+            # 上报异常，持久化以便重试
+            self._handle_report_failure(report_data, task_info, str(e))
+
+    def _handle_report_failure(self, report_data: Dict[str, Any],
+                                task_info: Dict[str, Any] = None,
+                                error: str = "未知错误"):
+        """
+        处理上报失败 - 持久化以便重试
+
+        Args:
+            report_data: 上报数据
+            task_info: 额外的任务信息
+            error: 错误信息
+        """
+        task_no = report_data.get('taskNo', 'unknown')
+        logger.error(f"任务结果上报失败: taskNo={task_no}, error={error}")
+
+        # 检查是否启用失败持久化
+        retry_enabled = True
+        if self.config_manager:
+            retry_enabled = self.config_manager.get('report_retry.enabled', True)
+
+        if not retry_enabled:
+            logger.warning("失败报告持久化未启用，丢弃上报数据")
+            return
+
+        try:
+            from core.failed_report_manager import get_failed_report_manager
+
+            manager = get_failed_report_manager(self.config_manager)
+
+            # 计算优先级（失败任务优先级更高）
+            priority = self._calculate_priority(report_data)
+
+            # 获取最大重试次数
+            max_retries = None
+            if self.config_manager:
+                max_retries = self.config_manager.get('report_retry.max_retries', 10)
+
+            # 持久化失败报告
+            report_id = manager.add_failed_report(
+                report_data=report_data,
+                task_info=task_info,
+                max_retries=max_retries,
+                priority=priority
+            )
+
+            logger.info(f"失败报告已持久化: report_id={report_id}, task_no={task_no}")
+
+        except Exception as e:
+            logger.error(f"持久化失败报告时出错: {e}")
+
+    def _calculate_priority(self, report_data: Dict[str, Any]) -> int:
+        """
+        计算报告优先级
+
+        Args:
+            report_data: 上报数据
+
+        Returns:
+            优先级（0-10，越高越紧急）
+        """
+        priority = 0
+
+        # 失败任务优先级更高
+        results = report_data.get('results', [])
+        for result in results:
+            if isinstance(result, dict):
+                verdict = result.get('verdict', '')
+                if verdict == 'FAIL':
+                    priority += 2
+                elif verdict == 'BLOCK':
+                    priority += 3
+
+        # 任务状态为失败时提高优先级
+        status = report_data.get('status', '')
+        if status in ['failed', 'FAILED']:
+            priority += 3
+
+        return min(priority, 10)
+
+    def _reset_failure_counter(self):
+        """重置连续失败计数器"""
+        try:
+            from core.report_callback_handler import get_callback_handler
+            handler = get_callback_handler(self.config_manager)
+            handler.reset_consecutive_failures()
+        except Exception:
+            pass
 
     def upload_report_file(self, file_path: str) -> Optional[str]:
         """

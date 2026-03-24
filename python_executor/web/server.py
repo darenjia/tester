@@ -21,6 +21,30 @@ from api.env_api import env_bp
 from api.functional_test_api import functional_test_bp
 from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp  # TDM2.0 任务接口
+from api.report_retry_api import report_retry_bp  # 报告重试API
+
+
+def initialize_retry_system():
+    """初始化报告重试系统"""
+    try:
+        from core.failed_report_manager import get_failed_report_manager
+        from core.report_retry_scheduler import get_report_retry_scheduler
+        from core.report_callback_handler import get_callback_handler
+
+        # 初始化管理器
+        manager = get_failed_report_manager()
+
+        # 注册回调
+        handler = get_callback_handler()
+        manager.register_failure_callback(handler.handle_failure)
+
+        # 启动调度器
+        scheduler = get_report_retry_scheduler()
+        scheduler.start()
+
+        get_logger().info("报告重试系统初始化完成")
+    except Exception as e:
+        get_logger().error(f"初始化报告重试系统失败: {e}")
 
 
 def create_app() -> Flask:
@@ -68,10 +92,14 @@ def create_app() -> Flask:
     app.register_blueprint(functional_test_bp)
     app.register_blueprint(case_mapping_bp)
     app.register_blueprint(api_bp)  # TDM2.0 任务接口
+    app.register_blueprint(report_retry_bp)  # 报告重试API
 
     # 注册路由
     register_routes(app)
-    
+
+    # 初始化重试系统
+    initialize_retry_system()
+
     return app
 
 
@@ -134,6 +162,11 @@ def register_routes(app: Flask):
     def case_mapping_page():
         """用例映射管理页面"""
         return render_template('case_mapping.html')
+
+    @app.route('/report-status')
+    def report_status_page():
+        """上报管理页面"""
+        return render_template('report_status.html')
     
     # ========== API 路由 ==========
     

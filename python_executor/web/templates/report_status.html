@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+
+{% block title %}上报管理 - 测试执行器{% endblock %}
+{% block page_title %}上报管理{% endblock %}
+{% set active_page = 'report-status' %}
+
+{% block content %}
+<!-- 状态卡片 -->
+<div class="status-cards">
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">待重试</span>
+            <div class="status-indicator warning"></div>
+        </div>
+        <div id="pending-count" class="status-card-value" style="color: var(--warning-color);">--</div>
+        <div class="status-card-desc">等待重试的报告</div>
+    </div>
+
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">已失败</span>
+            <div class="status-indicator offline"></div>
+        </div>
+        <div id="failed-count" class="status-card-value" style="color: var(--danger-color);">--</div>
+        <div class="status-card-desc">达到最大重试次数</div>
+    </div>
+
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">已成功</span>
+            <div class="status-indicator online"></div>
+        </div>
+        <div id="success-count" class="status-card-value" style="color: var(--success-color);">--</div>
+        <div class="status-card-desc">上报成功</div>
+    </div>
+
+    <div class="status-card">
+        <div class="status-card-header">
+            <span class="status-card-title">总计</span>
+            <div class="status-indicator"></div>
+        </div>
+        <div id="total-count" class="status-card-value">--</div>
+        <div class="status-card-desc">所有记录</div>
+    </div>
+</div>
+
+<!-- 操作按钮 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">操作</span>
+    </div>
+    <div class="content-card-body">
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="retryAll()">
+                <i class="fas fa-redo"></i> 重试全部待重试
+            </button>
+            <button class="btn btn-secondary" onclick="cleanupReports()">
+                <i class="fas fa-trash"></i> 清理旧记录
+            </button>
+            <button class="btn btn-secondary" onclick="loadReports()">
+                <i class="fas fa-sync"></i> 刷新列表
+            </button>
+        </div>
+
+        <!-- 状态筛选 -->
+        <div class="filter-group" style="margin-top: 15px;">
+            <label>状态筛选：</label>
+            <select id="status-filter" onchange="loadReports()">
+                <option value="">全部</option>
+                <option value="pending">待重试</option>
+                <option value="failed">已失败</option>
+                <option value="success">已成功</option>
+                <option value="retrying">重试中</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- 报告列表 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">失败报告列表</span>
+        <span id="list-info" style="font-size: 12px; color: var(--text-secondary);"></span>
+    </div>
+    <div class="content-card-body">
+        <div id="reports-table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>任务编号</th>
+                        <th>状态</th>
+                        <th>重试次数</th>
+                        <th>最后错误</th>
+                        <th>创建时间</th>
+                        <th>下次重试</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="reports-tbody">
+                    <tr>
+                        <td colspan="7" class="empty-state">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 分页 -->
+        <div id="pagination" class="pagination" style="margin-top: 15px;"></div>
+    </div>
+</div>
+
+<!-- 报告详情模态框 -->
+<div id="detail-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>报告详情</h3>
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <pre id="detail-content" style="max-height: 400px; overflow: auto; background: var(--card-bg); padding: 15px; border-radius: 4px;"></pre>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    const pageSize = 20;
+
+    // 加载状态统计
+    async function loadStatus() {
+        try {
+            const response = await fetch('/api/report-retry/status');
+            const result = await response.json();
+
+            if (result.success) {
+                const stats = result.data;
+                document.getElementById('pending-count').textContent = stats.pending || 0;
+                document.getElementById('failed-count').textContent = stats.failed || 0;
+                document.getElementById('success-count').textContent = stats.success || 0;
+                document.getElementById('total-count').textContent = stats.total || 0;
+            }
+        } catch (error) {
+            console.error('加载状态失败:', error);
+        }
+    }
+
+    // 加载报告列表
+    async function loadReports(page = 1) {
+        currentPage = page;
+        const status = document.getElementById('status-filter').value;
+
+        try {
+            let url = `/api/report-retry/list?page=${page}&page_size=${pageSize}`;
+            if (status) {
+                url += `&status=${status}`;
+            }
+
+            const response = await fetch(url);
+            const result = await response.json();
+
+            if (result.success) {
+                renderReports(result.data.reports);
+                renderPagination(result.data.pagination);
+                document.getElementById('list-info').textContent =
+                    `共 ${result.data.pagination.total} 条记录`;
+            }
+        } catch (error) {
+            console.error('加载报告列表失败:', error);
+            document.getElementById('reports-tbody').innerHTML =
+                '<tr><td colspan="7" class="empty-state" style="color: var(--danger-color);">加载失败</td></tr>';
+        }
+    }
+
+    // 渲染报告列表
+    function renderReports(reports) {
+        const tbody = document.getElementById('reports-tbody');
+
+        if (!reports || reports.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = reports.map(report => {
+            const statusClass = getStatusClass(report.status);
+            const statusText = getStatusText(report.status);
+
+            return `
+                <tr>
+                    <td><strong>${report.task_no || '--'}</strong></td>
+                    <td><span class="badge ${statusClass}">${statusText}</span></td>
+                    <td>${report.retry_count}/${report.max_retries}</td>
+                    <td title="${report.last_error || ''}">${truncate(report.last_error, 30)}</td>
+                    <td>${report.created_at || '--'}</td>
+                    <td>${report.next_retry_time || '--'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="retryReport('${report.report_id}')" title="重试">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="showDetail('${report.report_id}')" title="详情">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteReport('${report.report_id}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // 获取状态样式类
+    function getStatusClass(status) {
+        const classes = {
+            'pending': 'badge-warning',
+            'failed': 'badge-danger',
+            'success': 'badge-success',
+            'retrying': 'badge-info'
+        };
+        return classes[status] || 'badge-secondary';
+    }
+
+    // 获取状态文本
+    function getStatusText(status) {
+        const texts = {
+            'pending': '待重试',
+            'failed': '已失败',
+            'success': '已成功',
+            'retrying': '重试中'
+        };
+        return texts[status] || status;
+    }
+
+    // 截断文本
+    function truncate(text, maxLength) {
+        if (!text) return '--';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    // 渲染分页
+    function renderPagination(pagination) {
+        const container = document.getElementById('pagination');
+
+        if (pagination.total_pages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        if (pagination.page > 1) {
+            html += `<button class="btn btn-sm btn-secondary" onclick="loadReports(${pagination.page - 1})">上一页</button>`;
+        }
+
+        for (let i = 1; i <= pagination.total_pages; i++) {
+            if (i === pagination.page) {
+                html += `<button class="btn btn-sm btn-primary">${i}</button>`;
+            } else if (i === 1 || i === pagination.total_pages || Math.abs(i - pagination.page) <= 2) {
+                html += `<button class="btn btn-sm btn-secondary" onclick="loadReports(${i})">${i}</button>`;
+            } else if (i === 2 || i === pagination.total_pages - 1) {
+                html += `<span style="margin: 0 5px;">...</span>`;
+            }
+        }
+
+        if (pagination.page < pagination.total_pages) {
+            html += `<button class="btn btn-sm btn-secondary" onclick="loadReports(${pagination.page + 1})">下一页</button>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // 重试单个报告
+    async function retryReport(reportId) {
+        if (!confirm('确定要立即重试此报告吗？')) return;
+
+        try {
+            const response = await fetch(`/api/report-retry/${reportId}/retry`, { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('已触发重试', 'success');
+                loadReports(currentPage);
+                loadStatus();
+            } else {
+                showMessage(result.message || '重试失败', 'error');
+            }
+        } catch (error) {
+            showMessage('请求失败', 'error');
+        }
+    }
+
+    // 重试全部
+    async function retryAll() {
+        if (!confirm('确定要重试所有待重试的报告吗？')) return;
+
+        try {
+            const response = await fetch('/api/report-retry/retry-all', { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage(result.message, 'success');
+                loadReports();
+                loadStatus();
+            } else {
+                showMessage(result.message || '批量重试失败', 'error');
+            }
+        } catch (error) {
+            showMessage('请求失败', 'error');
+        }
+    }
+
+    // 删除报告
+    async function deleteReport(reportId) {
+        if (!confirm('确定要删除此报告记录吗？')) return;
+
+        try {
+            const response = await fetch(`/api/report-retry/${reportId}`, { method: 'DELETE' });
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage('已删除', 'success');
+                loadReports(currentPage);
+                loadStatus();
+            } else {
+                showMessage(result.message || '删除失败', 'error');
+            }
+        } catch (error) {
+            showMessage('请求失败', 'error');
+        }
+    }
+
+    // 清理旧记录
+    async function cleanupReports() {
+        if (!confirm('确定要清理7天前的已成功/已失败记录吗？')) return;
+
+        try {
+            const response = await fetch('/api/report-retry/cleanup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ days: 7 })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage(result.message, 'success');
+                loadReports();
+                loadStatus();
+            } else {
+                showMessage(result.message || '清理失败', 'error');
+            }
+        } catch (error) {
+            showMessage('请求失败', 'error');
+        }
+    }
+
+    // 显示详情
+    async function showDetail(reportId) {
+        try {
+            const response = await fetch(`/api/report-retry/${reportId}`);
+            const result = await response.json();
+
+            if (result.success) {
+                document.getElementById('detail-content').textContent =
+                    JSON.stringify(result.data, null, 2);
+                document.getElementById('detail-modal').style.display = 'flex';
+            } else {
+                showMessage('获取详情失败', 'error');
+            }
+        } catch (error) {
+            showMessage('请求失败', 'error');
+        }
+    }
+
+    // 关闭模态框
+    function closeModal() {
+        document.getElementById('detail-modal').style.display = 'none';
+    }
+
+    // 点击模态框外部关闭
+    document.getElementById('detail-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadStatus();
+        loadReports();
+
+        // 定时刷新
+        setInterval(loadStatus, 10000);
+    });
+</script>
+
+<style>
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .filter-group select {
+        padding: 8px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .data-table th {
+        background: var(--card-bg);
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .data-table tbody tr:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .empty-state {
+        text-align: center;
+        color: var(--text-secondary);
+        padding: 40px !important;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .badge-warning { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+    .badge-danger { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+    .badge-success { background: rgba(40, 167, 69, 0.2); color: #28a745; }
+    .badge-info { background: rgba(23, 162, 184, 0.2); color: #17a2b8; }
+    .badge-secondary { background: rgba(108, 117, 125, 0.2); color: #6c757d; }
+
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+
+    .btn-danger {
+        background: var(--danger-color);
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+    }
+
+    .pagination {
+        display: flex;
+        gap: 5px;
+        justify-content: center;
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: var(--card-bg);
+        border-radius: 8px;
+        width: 90%;
+        max-height: 80vh;
+        overflow: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .modal-close {
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+    }
+
+    .modal-close:hover {
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+</style>
+{% endblock %}
