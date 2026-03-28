@@ -22,6 +22,7 @@ from api.functional_test_api import functional_test_bp
 from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp  # TDM2.0 任务接口
 from api.system_check_api import system_check_bp
+from api.tsmaster_api import tsmaster_bp  # TSMasterAPI 安装管理
 
 
 def create_app() -> Flask:
@@ -69,6 +70,7 @@ def create_app() -> Flask:
     app.register_blueprint(case_mapping_bp)
     app.register_blueprint(api_bp)  # TDM2.0 任务接口
     app.register_blueprint(system_check_bp)
+    app.register_blueprint(tsmaster_bp)  # TSMasterAPI 安装管理
 
     # 初始化检测项（导入触发注册）
     from api.system_check_api import register_system_check_api
