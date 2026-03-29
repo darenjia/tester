@@ -54,17 +54,10 @@
             <div id="report-indicator" class="status-indicator offline"></div>
         </div>
         <div id="report-status-value" class="status-card-value">未配置</div>
-        <div id="report-status-desc" class="status-card-desc">最近上报: <span id="last-report-time">-</span></div>
-    </div>
-    
-    <!-- 配置缓存状态 -->
-    <div class="status-card">
-        <div class="status-card-header">
-            <span class="status-card-title">配置缓存</span>
-            <div id="cache-indicator" class="status-indicator online"></div>
+        <div id="report-status-desc" class="status-card-desc">
+            待重试: <span id="report-pending">-</span> |
+            失败: <span id="report-failed">-</span>
         </div>
-        <div id="cache-status-value" class="status-card-value">0 MB</div>
-        <div id="cache-status-desc" class="status-card-desc">缓存文件: <span id="cache-file-count">0</span> 个</div>
     </div>
 </div>
 
@@ -81,47 +74,6 @@
                     <i class="fas fa-clipboard-list"></i>
                 </div>
                 <div class="empty-state-text">当前没有正在执行的任务</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 测试软件状态 -->
-<div class="content-card">
-    <div class="content-card-header">
-        <span class="content-card-title">测试软件状态</span>
-        <button class="btn btn-sm btn-secondary" onclick="refreshSoftwareStatus()">
-            <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-    </div>
-    <div class="content-card-body">
-        <div class="software-list">
-            <div class="software-item">
-                <div class="software-name">
-                    <i class="fas fa-car" style="color: #3b82f6;"></i>
-                    <span>Vector CANoe</span>
-                </div>
-                <div class="software-status">
-                    <span id="canoe-status-text" class="badge badge-secondary">未安装</span>
-                </div>
-            </div>
-            <div class="software-item">
-                <div class="software-name">
-                    <i class="fas fa-microchip" style="color: #10b981;"></i>
-                    <span>TSMaster</span>
-                </div>
-                <div class="software-status">
-                    <span id="tsmaster-status-text" class="badge badge-secondary">未安装</span>
-                </div>
-            </div>
-            <div class="software-item">
-                <div class="software-name">
-                    <i class="fas fa-network-wired" style="color: #f59e0b;"></i>
-                    <span>TTworkbench</span>
-                </div>
-                <div class="software-status">
-                    <span id="ttworkbench-status-text" class="badge badge-secondary">未安装</span>
-                </div>
             </div>
         </div>
     </div>
@@ -429,12 +381,6 @@
         if (diskValue) diskValue.textContent = `${(systemData.disk_percent || 0).toFixed(1)}%`;
     }
     
-    // 刷新软件状态
-    function refreshSoftwareStatus() {
-        updateDashboard();
-        showMessage('软件状态已刷新', 'success');
-    }
-    
     // 更新上报服务状态
     function updateReportStatus(reportData) {
         if (!reportData) return;
@@ -443,6 +389,8 @@
         const value = document.getElementById('report-status-value');
         const desc = document.getElementById('report-status-desc');
         const lastTime = document.getElementById('last-report-time');
+        const pendingSpan = document.getElementById('report-pending');
+        const failedSpan = document.getElementById('report-failed');
 
         if (!indicator || !value) return;
 
@@ -450,12 +398,16 @@
             indicator.className = 'status-indicator online';
             value.textContent = '已启用';
             value.style.color = 'var(--success-color)';
-            desc.textContent = '上报服务正常运行';
         } else {
             indicator.className = 'status-indicator offline';
             value.textContent = '未配置';
             value.style.color = 'var(--text-secondary)';
-            desc.textContent = '请在配置页面设置上报服务器';
+        }
+
+        // 更新待重试/失败数量
+        if (reportData.queue_status) {
+            if (pendingSpan) pendingSpan.textContent = reportData.queue_status.pending || 0;
+            if (failedSpan) failedSpan.textContent = reportData.queue_status.failed || 0;
         }
     }
 
@@ -488,19 +440,29 @@
         try {
             const response = await fetch('/api/dashboard/status');
             const result = await response.json();
-            
+
             if (result.success) {
                 const data = result.data;
-                
+
                 // 更新上报状态
                 if (data.report) {
                     updateReportStatus(data.report);
                 }
-                
-                // 更新缓存状态
-                if (data.cache) {
-                    updateCacheStatus(data.cache);
+            }
+
+            // 获取上报队列状态
+            try {
+                const queueResponse = await fetch('/api/report-retry/status');
+                const queueResult = await queueResponse.json();
+                if (queueResult.success) {
+                    // 将队列状态附加到report数据
+                    updateReportStatus({
+                        enabled: result.data?.report?.enabled ?? true,
+                        queue_status: queueResult.data
+                    });
                 }
+            } catch (e) {
+                console.warn('获取上报队列状态失败:', e);
             }
         } catch (error) {
             console.error('加载Dashboard状态失败:', error);

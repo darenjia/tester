@@ -205,6 +205,38 @@ def get_tasks():
         return jsonify({"success": False, "message": f"获取任务列表失败: {str(e)}"}), 500
 
 
+def _extract_ttman_result(result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """从任务结果中提取TTworkbench专用结果"""
+    if not result:
+        return None
+
+    # 从results列表中查找包含log_details的结果
+    if isinstance(result, dict):
+        results_list = result.get('results', [])
+        for r in results_list:
+            if isinstance(r, dict) and r.get('log_details'):
+                log_details = r.get('log_details')
+                if log_details.get('parsed'):
+                    return {
+                        "verdict": log_details.get('verdict', 'NONE'),
+                        "verdict_code": log_details.get('return_code'),
+                        "total_cases": log_details.get('total_cases', 1),
+                        "passed_cases": log_details.get('passed_cases', 0),
+                        "failed_cases": log_details.get('failed_cases', 0),
+                        "inconclusive_cases": log_details.get('inconclusive_cases', 0),
+                        "case_results": log_details.get('case_results', []),
+                        "execution_time": log_details.get('execution_time', 0),
+                        "parse_errors": log_details.get('parse_errors')
+                    }
+
+        # 也检查summary中是否有ttman_result
+        summary = result.get('summary', {})
+        if isinstance(summary, dict) and summary.get('ttman_result'):
+            return summary.get('ttman_result')
+
+    return None
+
+
 @task_bp.route('/tasks/<task_id>', methods=['GET'])
 def get_task(task_id: str):
     """
@@ -289,11 +321,17 @@ def get_task(task_id: str):
                 # 元数据
                 "metadata": task.metadata,
 
+                # 分类信息（从params或metadata获取）
+                "category": task.params.get('category') or task.metadata.get('category', 'canoe'),
+
                 # 测试结果摘要
                 "result_summary": result_summary,
 
                 # 测试结果列表
                 "test_results": test_results,
+
+                # TTworkbench专用结果
+                "ttman_result": _extract_ttman_result(task.result),
 
                 # 日志统计
                 "log_stats": log_stats,

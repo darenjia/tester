@@ -296,14 +296,19 @@ class AdapterWrapper:
     def start_test_case(self, namespace: str = "mutualVar") -> bool:
         """
         启动当前测试用例
-        
+
         Args:
             namespace: 命名空间名称
-            
+
         Returns:
             启动成功返回True
         """
         try:
+            # 关键修复：先重置结束标志，避免上一次测试的endTest=1导致立即完成
+            self.set_test_variable("endTest", 0, namespace)
+            self.set_test_variable("testCaseResultState", 0, namespace)
+            self.logger.debug("已重置 endTest 和 testCaseResultState")
+
             result = self.set_test_variable("startTest", 1, namespace)
             if result:
                 self.logger.info("启动测试用例")

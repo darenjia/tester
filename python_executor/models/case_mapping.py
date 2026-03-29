@@ -28,7 +28,7 @@ class CaseMapping:
     module: str = ""                     # 模块名称 (如 "CANoe测试")
     script_path: str = ""                # cfg工程文件路径
     ini_config: str = ""                 # SelectInfo.ini配置内容 (原始INI格式)
-    para_config: str = ""                # ParaInfo.ini默认参数 (JSON格式)
+    para_config: str = ""                # ParaInfo.ini默认参数 (原始INI格式)
     enabled: bool = True                 # 是否启用
     priority: int = 0                   # 优先级 (数字越大优先级越高)
     tags: List[str] = field(default_factory=list)  # 标签列表

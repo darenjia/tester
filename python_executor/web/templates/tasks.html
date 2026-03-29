@@ -1045,6 +1045,68 @@
                 </div>
                 ` : '<p style="color: #666; text-align: center; padding: 20px;">暂无测试结果</p>'}
 
+                <!-- TTworkbench专用结果显示 -->
+                ${task.category === 'ttman' && task.ttman_result ? `
+                <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                    <h4 style="margin: 0 0 15px 0; color: #0369a1; font-size: 14px;"><i class="fas fa-cog"></i> TTworkbench 测试详情</h4>
+                    <div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: ${task.ttman_result.verdict === 'PASS' ? '#10b981' : task.ttman_result.verdict === 'FAIL' ? '#dc3545' : '#f59e0b'};">${task.ttman_result.verdict || '-'}</div>
+                            <div style="font-size: 12px; color: #6b7280;">判定</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${task.ttman_result.total_cases || 0}</div>
+                            <div style="font-size: 12px; color: #6b7280;">总用例</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #10b981;">${task.ttman_result.passed_cases || 0}</div>
+                            <div style="font-size: 12px; color: #6b7280;">通过</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #dc3545;">${task.ttman_result.failed_cases || 0}</div>
+                            <div style="font-size: 12px; color: #6b7280;">失败</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">${task.ttman_result.inconclusive_cases || 0}</div>
+                            <div style="font-size: 12px; color: #6b7280;">不确定</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold;">${task.ttman_result.execution_time ? (task.ttman_result.execution_time / 1000).toFixed(2) + 's' : '-'}</div>
+                            <div style="font-size: 12px; color: #6b7280;">执行时间</div>
+                        </div>
+                    </div>
+
+                    ${task.ttman_result.case_results && task.ttman_result.case_results.length > 0 ? `
+                    <table class="results-table" style="margin-top: 15px;">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>用例名称</th>
+                                <th>判定</th>
+                                <th>耗时(s)</th>
+                                <th>错误信息</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${task.ttman_result.case_results.map((r, i) => `
+                            <tr>
+                                <td>${i + 1}</td>
+                                <td>${r.name || '-'}</td>
+                                <td>
+                                    <span class="result-badge ${r.verdict === 'PASS' ? 'result-pass' : r.verdict === 'FAIL' ? 'result-fail' : 'result-block'}">
+                                        ${r.verdict || '-'}
+                                    </span>
+                                </td>
+                                <td>${r.duration ? (r.duration / 1000).toFixed(2) : '-'}</td>
+                                <td style="color: ${r.error_message ? '#dc3545' : 'inherit'}; font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.error_message || ''}">${r.error_message || '-'}</td>
+                            </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    ` : ''}
+                </div>
+                ` : ''}
+
                 <!-- 测试结果列表 -->
                 ${task.test_results && task.test_results.length > 0 ? `
                 <table class="results-table">

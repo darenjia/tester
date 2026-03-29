@@ -1080,6 +1080,8 @@
         editingMapping = null;
         document.getElementById('modal-title').textContent = '新增用例映射';
         document.getElementById('mapping-form').reset();
+        // 根据默认分类显示/隐藏TTworkbench字段
+        onCategoryChange();
         document.getElementById('modal-overlay').style.display = 'flex';
     }
 
@@ -1106,6 +1108,17 @@
         document.getElementById('description').value = editingMapping.description || '';
         document.getElementById('enabled').checked = editingMapping.enabled;
         document.getElementById('tags').value = (editingMapping.tags || []).join(', ');
+
+        // TTworkbench专用字段
+        document.getElementById('ttcn3_source').value = editingMapping.ttcn3_source || '';
+        document.getElementById('ttthree_path').value = editingMapping.ttthree_path || '';
+        document.getElementById('clf_file').value = editingMapping.clf_file || '';
+        document.getElementById('compile_params').value = editingMapping.compile_params || '';
+        document.getElementById('log_format').value = editingMapping.log_format || 'pdf';
+        document.getElementById('test_timeout').value = editingMapping.test_timeout || 3600;
+
+        // 根据分类显示/隐藏TTworkbench字段
+        onCategoryChange();
 
         document.getElementById('modal-overlay').style.display = 'flex';
     }
@@ -1153,6 +1166,17 @@
             }
         }
 
+        // 验证compile_params JSON格式（TTworkbench）
+        const compileParams = document.getElementById('compile_params')?.value.trim();
+        if (compileParams) {
+            try {
+                JSON.parse(compileParams);
+            } catch (e) {
+                showMessage('编译参数字典JSON格式错误: ' + e.message, 'warning');
+                return;
+            }
+        }
+
         const data = {
             case_no: caseNo,
             case_name: caseName,
@@ -1166,6 +1190,13 @@
             description: description,
             enabled: enabled,
             tags: tags,
+            // TTworkbench专用字段
+            ttcn3_source: document.getElementById('ttcn3_source')?.value.trim() || '',
+            ttthree_path: document.getElementById('ttthree_path')?.value.trim() || '',
+            clf_file: document.getElementById('clf_file')?.value.trim() || '',
+            compile_params: document.getElementById('compile_params')?.value.trim() || '',
+            log_format: document.getElementById('log_format')?.value || 'pdf',
+            test_timeout: parseInt(document.getElementById('test_timeout')?.value) || 3600,
             changed_by: 'web_user',
             change_reason: currentModalMode === 'add' ? '新增用例映射' : '编辑用例映射'
         };
@@ -2294,6 +2325,19 @@
             showMessage('同步失败: ' + error.message, 'error');
         }
     }
+
+    // 根据分类显示/隐藏TTworkbench专用字段
+    function onCategoryChange() {
+        const category = document.getElementById('category').value;
+        const ttworkbenchFields = document.getElementById('ttworkbench-fields');
+        if (ttworkbenchFields) {
+            if (category === 'ttman') {
+                ttworkbenchFields.style.display = 'block';
+            } else {
+                ttworkbenchFields.style.display = 'none';
+            }
+        }
+    }
 </script>
 
 <div id="modal-overlay" class="modal-overlay" style="display: none;">
@@ -2311,7 +2355,7 @@
                     </div>
                     <div class="form-group">
                         <label>分类 <span class="required">*</span></label>
-                        <select id="category">
+                        <select id="category" onchange="onCategoryChange()">
                             <option value="">请选择</option>
                             <option value="system">系统环境测试</option>
                             <option value="canoe">CANoe测试</option>
@@ -2387,6 +2431,67 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                         <input type="checkbox" id="enabled" checked>
                         启用此用例
                     </label>
+                </div>
+
+                <!-- TTworkbench专用字段 -->
+                <div id="ttworkbench-fields" style="display: none;">
+                    <div style="margin: 20px 0; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                        <h4 style="margin: 0 0 15px 0; color: #0369a1; font-size: 14px;"><i class="fas fa-cog"></i> TTworkbench 配置</h4>
+
+                        <div class="form-group">
+                            <label>TTCN-3源码路径</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="ttcn3_source" placeholder="如: TestModule.ttcn3" style="flex: 1;">
+                                <button type="button" class="btn btn-secondary" onclick="chooseFolder('ttcn3_source')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                            <small style="color: #6b7280; font-size: 12px;">TTCN-3源码文件(.ttcn3)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>TTthree编译器路径</label>
+                            <input type="text" id="ttthree_path" placeholder="留空则使用系统PATH中的TTthree">
+                            <small style="color: #6b7280; font-size: 12px;">TTthree编译器可执行文件路径</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>CLF测试活动文件</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="clf_file" placeholder="预生成的.clf文件路径" style="flex: 1;">
+                                <button type="button" class="btn btn-secondary" onclick="chooseFolder('clf_file')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                            <small style="color: #6b7280; font-size: 12px;">留空则自动编译TTCN-3生成</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>编译参数字典</label>
+                            <textarea id="compile_params" placeholder='{
+  "include_dirs": ["./include"],
+  "lib_dirs": ["./lib"],
+  "libs": ["somelib"]
+}' style="min-height: 80px;"></textarea>
+                            <small style="color: #6b7280; font-size: 12px;">TTthree编译参数（JSON格式）</small>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>日志格式</label>
+                                <select id="log_format">
+                                    <option value="pdf">PDF</option>
+                                    <option value="html">HTML</option>
+                                    <option value="xml">XML</option>
+                                    <option value="text">Text</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>测试超时(秒)</label>
+                                <input type="number" id="test_timeout" value="3600" min="60">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>

@@ -7,6 +7,7 @@ import sys
 import json
 import shutil
 import threading
+import configparser
 from typing import Dict, Any, Optional, Callable, List
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -213,17 +214,21 @@ class TestConfigManager:
         Args:
             file_path: 输出文件路径
             variables: 执行时传入的参数（优先级高，覆盖默认值）
-            default_config: 用例映射中的默认参数（JSON格式）
+            default_config: 用例映射中的默认参数（原始INI格式）
         """
-        # 1. 解析默认配置
+        # 1. 解析默认配置（INI格式，保留大小写）
         merged_vars = {}
         if default_config:
             try:
-                default_dict = json.loads(default_config)
-                if isinstance(default_dict, dict):
-                    merged_vars = default_dict.copy()
-            except json.JSONDecodeError:
-                logger.warning(f"默认参数配置JSON解析失败: {default_config[:50]}...")
+                # 使用自定义解析保留大小写
+                config = configparser.RawConfigParser()
+                config.optionxform = str  # 保留key的原始大小写
+                config.read_string(default_config)
+                if config.has_section('CFG_PARA'):
+                    for key in config.options('CFG_PARA'):
+                        merged_vars[key] = config.get('CFG_PARA', key)
+            except Exception as e:
+                logger.warning(f"默认参数配置INI解析失败: {e}")
 
         # 2. 合并执行时参数（覆盖默认值）
         if variables:

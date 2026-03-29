@@ -65,5 +65,25 @@
     "max_cache_count": 50,
     "cache_ttl_hours": 168,
     "auto_cleanup": true
+  },
+  "report_retry": {
+    "enabled": true,
+    "storage_path": "data/failed_reports.json",
+    "check_interval": 60.0,
+    "batch_size": 10,
+    "max_retries": 10,
+    "base_delay": 30.0,
+    "backoff_factor": 2.0,
+    "max_delay": 3600.0,
+    "cleanup_days": 7
+  },
+  "report_callback": {
+    "enabled": true,
+    "threshold": 3,
+    "cooldown_minutes": 60,
+    "webhook": {
+      "enabled": false,
+      "url": ""
+    }
   }
 }
