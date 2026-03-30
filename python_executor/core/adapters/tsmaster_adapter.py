@@ -657,6 +657,50 @@ class TSMasterAdapter(BaseTestAdapter):
             self._set_error(f"获取测试结果失败: {str(e)}")
             return None
 
+    def get_test_report_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Get test report paths and statistics after execution
+
+        Returns:
+            Dict with report_path, testdata_path, passed, failed, total
+            Returns None if not connected or error
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法获取测试报告信息")
+            return None
+
+        try:
+            self.logger.info("获取测试报告信息")
+
+            if self._using_rpc and self._rpc_client:
+                report_path = self._rpc_client.get_report_path()
+                testdata_path = self._rpc_client.get_testdata_path()
+                passed, failed = self._rpc_client.get_test_case_count()
+            else:
+                report_path = self._read_system_var("Master.ReportPath")
+                testdata_path = self._read_system_var("Master.TestDataLogPath")
+                passed_str = self._read_system_var("TestSystem.TestCasePassCount") or "0"
+                failed_str = self._read_system_var("TestSystem.TestCaseFailCount") or "0"
+                passed, failed = int(passed_str), int(failed_str)
+
+            self._test_stats = {"passed": passed, "failed": failed, "total": passed + failed}
+
+            result = {
+                "report_path": report_path,
+                "testdata_path": testdata_path,
+                "passed": passed,
+                "failed": failed,
+                "total": passed + failed,
+                "success_rate": (passed / (passed + failed) * 100) if (passed + failed) > 0 else 0
+            }
+
+            self.logger.info(f"测试报告信息: passed={passed}, failed={failed}, total={passed+failed}")
+            return result
+
+        except Exception as e:
+            self._set_error(f"获取测试报告信息失败: {str(e)}")
+            return None
+
     def get_test_statistics(self) -> Dict[str, int]:
         """
         获取测试统计信息
