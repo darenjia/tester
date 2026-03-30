@@ -9,7 +9,7 @@ TSMaster测试工具适配器
 
 import time
 import logging
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, List
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
 
@@ -40,11 +40,11 @@ except ImportError:
 class TSMasterAdapter(BaseTestAdapter):
     """
     TSMaster测试工具适配器
-    
+
     支持两种通信模式：
     - RPC模式（推荐）：通过TSMasterAPI进行高性能RPC通信
     - 传统模式：通过TSMaster Python API进行通信
-    
+
     功能：
     - 连接/断开TSMaster应用
     - 加载工程文件(.tproj)
@@ -53,31 +53,51 @@ class TSMasterAdapter(BaseTestAdapter):
     - 报文收发
     - 系统变量操作
     - C脚本调用
+    - Master小程序管理
+    - 测试序列执行
     """
-    
+
+    # 默认超时配置
+    DEFAULT_START_TIMEOUT = 30
+    DEFAULT_STOP_TIMEOUT = 10
+    DEFAULT_OPERATION_TIMEOUT = 60
+
     def __init__(self, config: dict = None):
         """
         初始化TSMaster适配器
-        
+
         Args:
             config: 配置字典，可包含：
                 - start_timeout: 启动超时时间（默认30秒）
                 - stop_timeout: 停止超时时间（默认10秒）
+                - operation_timeout: 操作超时时间（默认60秒）
                 - use_rpc: 是否使用RPC模式（默认True）
                 - rpc_app_name: RPC连接的应用程序名称（默认自动发现）
                 - fallback_to_traditional: RPC失败时是否回退到传统模式（默认True）
+                - master_form_name: Master小程序名称（默认"C 代码编辑器 [Master]"）
+                - auto_start_master: 是否在启动仿真前自动启动Master小程序（默认True）
+                - auto_stop_master: 是否在停止仿真后自动停止Master小程序（默认True）
         """
         super().__init__(config)
-        self.start_timeout = self.config.get("start_timeout", 30)
-        self.stop_timeout = self.config.get("stop_timeout", 10)
+        self.start_timeout = self.config.get("start_timeout", self.DEFAULT_START_TIMEOUT)
+        self.stop_timeout = self.config.get("stop_timeout", self.DEFAULT_STOP_TIMEOUT)
+        self.operation_timeout = self.config.get("operation_timeout", self.DEFAULT_OPERATION_TIMEOUT)
         self.use_rpc = self.config.get("use_rpc", True)
         self.rpc_app_name = self.config.get("rpc_app_name", None)
         self.fallback_to_traditional = self.config.get("fallback_to_traditional", True)
-        
+        self.master_form_name = self.config.get("master_form_name", "C 代码编辑器 [Master]")
+        self.auto_start_master = self.config.get("auto_start_master", True)
+        self.auto_stop_master = self.config.get("auto_stop_master", True)
+
         self._ts = None
         self._rpc_client: Optional[TSMasterRPCClient] = None
         self._using_rpc = False
         self._callbacks: Dict[str, Callable] = {}
+        self._master_form_started = False
+        self._current_project: Optional[str] = None
+
+        # 测试执行统计
+        self._test_stats = {"passed": 0, "failed": 0, "total": 0}
         
     @property
     def tool_type(self) -> TestToolType:
@@ -87,15 +107,15 @@ class TSMasterAdapter(BaseTestAdapter):
     def connect(self) -> bool:
         """
         连接TSMaster应用
-        
+
         优先尝试RPC模式，失败后根据配置决定是否回退到传统模式
-        
+
         Returns:
             连接成功返回True，否则返回False
         """
         self.status = AdapterStatus.CONNECTING
         self.logger.info("正在连接TSMaster应用...")
-        
+
         # 尝试RPC模式
         if self.use_rpc and RPC_CLIENT_AVAILABLE:
             self.logger.info("尝试使用RPC模式连接...")
@@ -110,7 +130,7 @@ class TSMasterAdapter(BaseTestAdapter):
                 if not self.fallback_to_traditional:
                     self._set_error("RPC模式连接失败且未启用回退机制")
                     return False
-        
+
         # 回退到传统模式
         if TSMASTER_AVAILABLE:
             self.logger.info("尝试使用传统模式连接...")
@@ -122,7 +142,7 @@ class TSMasterAdapter(BaseTestAdapter):
                 return True
             else:
                 self.logger.warning("传统模式连接失败")
-        
+
         self._set_error("所有连接方式均失败")
         return False
     
@@ -130,20 +150,36 @@ class TSMasterAdapter(BaseTestAdapter):
         """通过RPC模式连接"""
         try:
             self._rpc_client = TSMasterRPCClient()
-            
+
             # 初始化RPC客户端
             if not self._rpc_client.initialize():
                 return False
-            
-            # 连接到TSMaster
-            if not self._rpc_client.connect(self.rpc_app_name):
+
+            # 设置超时
+            self._rpc_client.connect_timeout = self.start_timeout
+            self._rpc_client.operation_timeout = self.operation_timeout
+
+            # 连接到TSMaster（带超时）
+            if not self._rpc_client.connect(self.rpc_app_name, timeout=self.start_timeout):
                 return False
-            
+
+            # 设置状态监控回调
+            self._rpc_client.set_status_callback(self._on_status_change)
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"RPC连接异常: {str(e)}")
             return False
+
+    def _on_status_change(self, status: str, data: Dict[str, Any]):
+        """RPC状态变化回调"""
+        self.logger.debug(f"RPC状态变化: {status} -> {data}")
+        if status == "simulation_status":
+            sim_status = data.get("status", "")
+            if sim_status == "running" and not self._rpc_client.simulation_running:
+                self.logger.info("检测到仿真启动")
+                self._rpc_client.simulation_running = True
     
     def _connect_via_traditional(self) -> bool:
         """通过传统模式连接"""
@@ -158,7 +194,7 @@ class TSMasterAdapter(BaseTestAdapter):
     def disconnect(self) -> bool:
         """
         断开TSMaster连接
-        
+
         Returns:
             断开成功返回True，否则返回False
         """
@@ -166,24 +202,30 @@ class TSMasterAdapter(BaseTestAdapter):
             # 停止总线（如果正在运行）
             if self.is_connected:
                 self.stop_test()
-            
+
+            # 停止Master小程序
+            if self._master_form_started:
+                self.stop_master_form(self.master_form_name)
+
             # 断开RPC连接
             if self._rpc_client:
                 self._rpc_client.finalize()
                 self._rpc_client = None
-            
+
             # 断开传统连接
             if self._ts:
                 self._ts.disconnect()
                 self._ts = None
-            
+
             self._using_rpc = False
             self._callbacks.clear()
-            
+            self._current_project = None
+            self._test_stats = {"passed": 0, "failed": 0, "total": 0}
+
             self.status = AdapterStatus.DISCONNECTED
             self.logger.info("TSMaster连接已断开")
             return True
-            
+
         except Exception as e:
             self._set_error(f"TSMaster断开连接失败: {str(e)}")
             return False
@@ -191,23 +233,39 @@ class TSMasterAdapter(BaseTestAdapter):
     def load_configuration(self, config_path: str) -> bool:
         """
         加载TSMaster工程文件
-        
+
         Args:
             config_path: 工程文件路径(.tproj)
-            
+
         Returns:
             加载成功返回True，否则返回False
         """
         if not self.is_connected:
             self._set_error("TSMaster未连接，无法加载配置")
             return False
-        
+
         try:
             self.logger.info(f"正在加载工程文件: {config_path}")
-            self._ts.load_config(config_path)
-            self.logger.info("工程文件加载成功")
-            return True
-            
+
+            if self._using_rpc and self._rpc_client:
+                # RPC模式：使用RPC客户端加载工程
+                success = self._rpc_client.load_project(config_path)
+            elif self._ts:
+                # 传统模式
+                self._ts.load_config(config_path)
+                success = True
+            else:
+                self._set_error("未连接到TSMaster")
+                return False
+
+            if success:
+                self._current_project = config_path
+                self.logger.info("工程文件加载成功")
+            else:
+                self._set_error("工程文件加载失败")
+
+            return success
+
         except Exception as e:
             self._set_error(f"工程文件加载失败: {str(e)}")
             return False
@@ -215,27 +273,38 @@ class TSMasterAdapter(BaseTestAdapter):
     def start_test(self) -> bool:
         """
         启动TSMaster总线仿真
-        
+
         Returns:
             启动成功返回True，否则返回False
         """
         if not self.is_connected:
             self._set_error("TSMaster未连接，无法启动仿真")
             return False
-        
+
         try:
             self.logger.info("正在启动总线仿真...")
-            
+
+            # RPC模式：支持Master小程序自动管理
             if self._using_rpc and self._rpc_client:
-                # RPC模式
+                # 自动启动Master小程序
+                if self.auto_start_master and not self._master_form_started:
+                    self.logger.info(f"自动启动Master小程序: {self.master_form_name}")
+                    if not self.start_master_form(self.master_form_name):
+                        self.logger.warning(f"Master小程序启动失败，继续执行...")
+
                 success = self._rpc_client.start_simulation()
+                if success:
+                    # 等待仿真真正启动
+                    if not self._rpc_client.wait_for_simulation_start(timeout=self.start_timeout):
+                        self.logger.warning("等待仿真启动超时")
+
             elif self._ts:
                 # 传统模式
                 self._ts.start_bus()
                 success = True
             else:
                 return False
-            
+
             if success:
                 self.status = AdapterStatus.RUNNING
                 self.logger.info("总线仿真已启动")
@@ -243,7 +312,7 @@ class TSMasterAdapter(BaseTestAdapter):
             else:
                 self._set_error("启动总线仿真失败")
                 return False
-            
+
         except Exception as e:
             self._set_error(f"启动总线仿真失败: {str(e)}")
             return False
@@ -251,27 +320,33 @@ class TSMasterAdapter(BaseTestAdapter):
     def stop_test(self) -> bool:
         """
         停止TSMaster总线仿真
-        
+
         Returns:
             停止成功返回True，否则返回False
         """
         if self.status not in [AdapterStatus.CONNECTED, AdapterStatus.RUNNING]:
             self._set_error("TSMaster未连接，无法停止仿真")
             return False
-        
+
         try:
             self.logger.info("正在停止总线仿真...")
-            
+
             if self._using_rpc and self._rpc_client:
                 # RPC模式
                 success = self._rpc_client.stop_simulation()
+
+                # 自动停止Master小程序
+                if self.auto_stop_master and self._master_form_started:
+                    self.logger.info(f"自动停止Master小程序: {self.master_form_name}")
+                    self.stop_master_form(self.master_form_name)
+
             elif self._ts:
                 # 传统模式
                 self._ts.stop_bus()
                 success = True
             else:
                 return False
-            
+
             if success:
                 self.status = AdapterStatus.CONNECTED
                 self.logger.info("总线仿真已停止")
@@ -279,11 +354,325 @@ class TSMasterAdapter(BaseTestAdapter):
             else:
                 self._set_error("停止总线仿真失败")
                 return False
-            
+
         except Exception as e:
             self._set_error(f"停止总线仿真失败: {str(e)}")
             return False
-    
+
+    def start_master_form(self, form_name: str = None) -> bool:
+        """
+        启动Master小程序
+
+        按照RPC调用流程，在启动仿真前需要先启动Master小程序
+
+        Args:
+            form_name: 小程序名称，默认为配置中的master_form_name
+
+        Returns:
+            启动成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法启动Master小程序")
+            return False
+
+        if form_name is None:
+            form_name = self.master_form_name
+
+        # 仅RPC模式支持
+        if not self._using_rpc or not self._rpc_client:
+            self._set_error("启动Master小程序仅支持RPC模式")
+            return False
+
+        try:
+            self.logger.info(f"正在启动Master小程序: {form_name}")
+            success = self._rpc_client.run_form(form_name)
+
+            if success:
+                self._master_form_started = True
+                self.logger.info(f"Master小程序已启动: {form_name}")
+            else:
+                self.logger.warning(f"Master小程序启动失败: {form_name}")
+
+            return success
+
+        except Exception as e:
+            self._set_error(f"启动Master小程序异常: {str(e)}")
+            return False
+
+    def stop_master_form(self, form_name: str = None) -> bool:
+        """
+        停止Master小程序
+
+        按照RPC调用流程，在停止仿真后需要停止Master小程序
+
+        Args:
+            form_name: 小程序名称，默认为配置中的master_form_name
+
+        Returns:
+            停止成功返回True，否则返回False
+        """
+        if not self._master_form_started:
+            self.logger.info("Master小程序未启动，无需停止")
+            return True
+
+        if form_name is None:
+            form_name = self.master_form_name
+
+        # 仅RPC模式支持
+        if not self._using_rpc or not self._rpc_client:
+            self._set_error("停止Master小程序仅支持RPC模式")
+            return False
+
+        try:
+            self.logger.info(f"正在停止Master小程序: {form_name}")
+            success = self._rpc_client.stop_form(form_name)
+
+            if success:
+                self._master_form_started = False
+                self.logger.info(f"Master小程序已停止: {form_name}")
+            else:
+                self.logger.warning(f"Master小程序停止失败: {form_name}")
+
+            return success
+
+        except Exception as e:
+            self._set_error(f"停止Master小程序异常: {str(e)}")
+            return False
+
+    def reset_test_system(self) -> bool:
+        """
+        重置测试系统
+
+        Returns:
+            重置成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法重置测试系统")
+            return False
+
+        try:
+            self.logger.info("正在重置测试系统...")
+
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.reset_test_system()
+            elif self._ts:
+                # 传统模式：停止测试
+                if self.is_running:
+                    self._ts.stop_bus()
+                success = True
+            else:
+                return False
+
+            if success:
+                self._test_stats = {"passed": 0, "failed": 0, "total": 0}
+                self.logger.info("测试系统已重置")
+
+            return success
+
+        except Exception as e:
+            self._set_error(f"重置测试系统失败: {str(e)}")
+            return False
+
+    def start_test_execution(self, test_cases: Optional[str] = None,
+                            wait_for_complete: bool = True,
+                            timeout: Optional[int] = None) -> bool:
+        """
+        开始测试执行
+
+        Args:
+            test_cases: 测试用例选择字符串，格式如 "TG1_TC1=1,TG1_TC2=1"
+            wait_for_complete: 是否等待测试完成
+            timeout: 执行超时时间（秒）
+
+        Returns:
+            启动成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法执行测试")
+            return False
+
+        timeout = timeout or self.operation_timeout
+
+        try:
+            self.logger.info("开始测试执行...")
+
+            # 选择测试用例
+            if test_cases:
+                if self._using_rpc and self._rpc_client:
+                    self._rpc_client.select_test_cases(test_cases)
+                else:
+                    self._write_system_var("TestSystem.SelectCases", test_cases)
+
+            # 启动测试
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.start_test()
+            else:
+                success = self._write_system_var("TestSystem.Controller", "1")
+
+            if not success:
+                self._set_error("启动测试失败")
+                return False
+
+            if wait_for_complete:
+                self.logger.info(f"等待测试完成（超时: {timeout}秒）...")
+                if not self._wait_for_test_complete(timeout):
+                    self.logger.warning("等待测试完成超时")
+
+            return True
+
+        except Exception as e:
+            self._set_error(f"测试执行启动失败: {str(e)}")
+            return False
+
+    def _wait_for_test_complete(self, timeout: int) -> bool:
+        """
+        等待测试完成
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            测试完成返回True，超时返回False
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                if self._using_rpc and self._rpc_client:
+                    controller = self._rpc_client.read_system_var("TestSystem.Controller")
+                    if controller == "0":
+                        self.logger.info("测试执行完成")
+                        return True
+                else:
+                    controller = self._read_system_var("TestSystem.Controller")
+                    if controller == "0":
+                        self.logger.info("测试执行完成")
+                        return True
+            except Exception as e:
+                self.logger.debug(f"检查测试状态异常: {str(e)}")
+
+            time.sleep(0.5)
+
+        return False
+
+    def wait_for_test_complete(self, timeout: Optional[int] = None) -> bool:
+        """
+        Wait for test to complete by polling is_test_finished()
+
+        Args:
+            timeout: Timeout in seconds. Defaults to operation_timeout.
+
+        Returns:
+            True if test finished, False if timeout
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法等待测试完成")
+            return False
+
+        timeout = timeout or self.operation_timeout
+        start_time = time.time()
+
+        self.logger.info(f"等待测试完成（超时: {timeout}秒）...")
+
+        while time.time() - start_time < timeout:
+            try:
+                if self._using_rpc and self._rpc_client:
+                    if self._rpc_client.read_system_var("TestSystem.Controller") == "0":
+                        self.logger.info("测试执行完成")
+                        return True
+                elif self._ts:
+                    controller = self._read_system_var("TestSystem.Controller")
+                    if controller == "0":
+                        self.logger.info("测试执行完成")
+                        return True
+            except Exception as e:
+                self.logger.debug(f"检查测试状态异常: {str(e)}")
+
+            time.sleep(0.5)
+
+        self.logger.warning(f"等待测试完成超时（{timeout}秒）")
+        return False
+
+    def stop_test_execution(self) -> bool:
+        """
+        停止测试执行
+
+        Returns:
+            停止成功返回True，否则返回False
+        """
+        try:
+            self.logger.info("正在停止测试执行...")
+
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.stop_test()
+            else:
+                success = self._write_system_var("TestSystem.Controller", "0")
+
+            if success:
+                self.logger.info("测试执行已停止")
+
+            return success
+
+        except Exception as e:
+            self._set_error(f"停止测试执行失败: {str(e)}")
+            return False
+
+    def get_test_results(self, result_type: str = "xml") -> Optional[Dict[str, Any]]:
+        """
+        获取测试结果
+
+        Args:
+            result_type: 结果类型，"xml" 或 "html"
+
+        Returns:
+            结果信息字典，失败返回None
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法获取测试结果")
+            return None
+
+        try:
+            self.logger.info(f"获取测试结果（类型: {result_type}）")
+
+            if self._using_rpc and self._rpc_client:
+                result_path = self._rpc_client.get_test_result(result_type)
+                passed, failed = self._rpc_client.get_test_case_count()
+            else:
+                result_path = self._read_system_var(f"TestSystem.Result_{result_type.upper()}")
+                passed_str = self._read_system_var("TestSystem.TestCasePassCount") or "0"
+                failed_str = self._read_system_var("TestSystem.TestCaseFailCount") or "0"
+                passed, failed = int(passed_str), int(failed_str)
+
+            self._test_stats = {"passed": passed, "failed": failed, "total": passed + failed}
+
+            return {
+                "result_path": result_path,
+                "passed": passed,
+                "failed": failed,
+                "total": passed + failed,
+                "success_rate": (passed / (passed + failed) * 100) if (passed + failed) > 0 else 0
+            }
+
+        except Exception as e:
+            self._set_error(f"获取测试结果失败: {str(e)}")
+            return None
+
+    def get_test_statistics(self) -> Dict[str, int]:
+        """
+        获取测试统计信息
+
+        Returns:
+            测试统计字典
+        """
+        if self._using_rpc and self._rpc_client:
+            try:
+                passed, failed = self._rpc_client.get_test_case_count()
+                self._test_stats = {"passed": passed, "failed": failed, "total": passed + failed}
+            except Exception:
+                pass
+
+        return self._test_stats.copy()
+
     def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行单个测试项
@@ -505,16 +894,23 @@ class TSMasterAdapter(BaseTestAdapter):
     def _execute_test_sequence(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行测试序列"""
         sequence_name = item.get("sequence_name")
-        
+        timeout = item.get("timeout", self.operation_timeout)
+        wait_complete = item.get("wait_for_complete", True)
+
         if not sequence_name:
             raise ValueError("测试序列执行需要指定sequence_name参数")
-        
+
         try:
             self.logger.info(f"执行测试序列: {sequence_name}")
-            
+
             if self._using_rpc and self._rpc_client:
                 result = self._rpc_client.execute_test_sequence(sequence_name)
                 success = result is not None
+
+                # 等待测试完成
+                if success and wait_complete:
+                    if not self._wait_for_test_complete(timeout):
+                        self.logger.warning(f"等待测试序列完成超时: {sequence_name}")
             elif self._ts:
                 result = self._ts.test_execute(sequence_name)
                 success = result
@@ -526,15 +922,21 @@ class TSMasterAdapter(BaseTestAdapter):
                     "status": "error",
                     "error": "未连接到TSMaster"
                 }
-            
+
+            # 获取测试统计
+            stats = self.get_test_statistics()
+
             return {
                 "name": item.get("name"),
                 "type": "test_sequence",
                 "sequence_name": sequence_name,
                 "result": result,
+                "passed": stats.get("passed", 0),
+                "failed": stats.get("failed", 0),
+                "total": stats.get("total", 0),
                 "status": "passed" if success else "failed"
             }
-            
+
         except Exception as e:
             self.logger.error(f"执行测试序列失败: {str(e)}")
             return {
@@ -722,22 +1124,28 @@ class TSMasterAdapter(BaseTestAdapter):
     def _execute_test_module(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行测试模块
-        
+
         支持执行TSMaster中的测试模块或测试序列
         """
         module_name = item.get("module_name") or item.get("sequence_name")
-        timeout = item.get("timeout", 60)
-        
+        timeout = item.get("timeout", self.operation_timeout)
+        wait_complete = item.get("wait_for_complete", True)
+
         if not module_name:
             raise ValueError("测试模块执行需要指定module_name或sequence_name参数")
-        
+
         try:
             self.logger.info(f"执行测试模块: {module_name}")
-            
+
             if self._using_rpc and self._rpc_client:
                 # RPC模式：使用test_sequence方式执行
                 result = self._rpc_client.execute_test_sequence(module_name)
                 success = result is not None
+
+                # 等待测试完成
+                if success and wait_complete:
+                    if not self._wait_for_test_complete(timeout):
+                        self.logger.warning(f"等待测试模块完成超时: {module_name}")
             elif self._ts:
                 # 传统模式
                 result = self._ts.test_execute(module_name)
@@ -750,15 +1158,21 @@ class TSMasterAdapter(BaseTestAdapter):
                     "status": "error",
                     "error": "未连接到TSMaster"
                 }
-            
+
+            # 获取测试统计
+            stats = self.get_test_statistics()
+
             return {
                 "name": item.get("name"),
                 "type": "test_module",
                 "module_name": module_name,
                 "result": result,
+                "passed": stats.get("passed", 0),
+                "failed": stats.get("failed", 0),
+                "total": stats.get("total", 0),
                 "status": "passed" if success else "failed"
             }
-            
+
         except Exception as e:
             self.logger.error(f"执行测试模块失败: {str(e)}")
             return {
