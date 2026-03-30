@@ -360,9 +360,13 @@ class TaskExecutorProduction:
             current_cfg_path = cfg_path  # 记录当前加载的配置路径
             self._current_metrics.record_step('load_config', time.time() - step_start)
 
-            # 启动测量/仿真
+            # 启动测量/仿真（对于TSMaster使用完整的测试执行流程）
             step_start = time.time()
-            self._start_measurement(task)
+            tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+            if tool_type_lower == TestToolType.TSMASTER.value:
+                self._start_test_execution(task)
+            else:
+                self._start_measurement(task)
             self._current_metrics.record_step('start_measurement', time.time() - step_start)
 
             # 执行测试项
@@ -370,7 +374,19 @@ class TaskExecutorProduction:
             # 使用原有的执行方式（通过ini文件控制）
             results = self._execute_test_items(task)
             self._current_metrics.record_step('execute_items', time.time() - step_start)
-            
+
+            # 对于TSMaster，获取测试报告信息
+            tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+            if tool_type_lower == TestToolType.TSMASTER.value:
+                try:
+                    report_info = self.controller.get_test_report_info()
+                    if report_info:
+                        self.current_collector.add_log("INFO", f"测试报告路径: {report_info.get('report_path', 'N/A')}")
+                        self.current_collector.add_log("INFO", f"测试数据路径: {report_info.get('testdata_path', 'N/A')}")
+                        self.current_collector.add_log("INFO", f"通过: {report_info.get('passed', 0)}, 失败: {report_info.get('failed', 0)}")
+                except Exception as e:
+                    self.logger.warning(f"获取TSMaster报告信息失败: {e}")
+
             # 停止测量/仿真
             step_start = time.time()
             self._stop_measurement(task)
