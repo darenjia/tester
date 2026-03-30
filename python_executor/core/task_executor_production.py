@@ -172,13 +172,19 @@ class TaskExecutorProduction:
     def execute_task(self, task: Task) -> bool:
         """
         提交任务到队列
-        
+
         Args:
             task: 任务对象
-            
+
         Returns:
             bool: 提交成功返回True
         """
+        # 获取任务ID
+        task_id = getattr(task, 'task_id', None) or getattr(task, 'taskNo', None)
+        if task_id is None:
+            logger.error("execute_task 失败: 任务缺少 task_id 属性")
+            return False
+
         # 验证任务数据
         try:
             test_items = []
@@ -190,8 +196,13 @@ class TaskExecutorProduction:
                 }
                 test_items.append(item_dict)
 
+            # 显式检查 test_items 是否为空
+            if not test_items:
+                logger.error(f"execute_task 失败: 任务 {task_id} 的 test_items 为空")
+                return False
+
             task_data = {
-                'taskNo': task.task_id,
+                'taskNo': task_id,
                 'deviceId': task.device_id,
                 'toolType': task.tool_type,
                 'configPath': task.config_path,
@@ -202,13 +213,38 @@ class TaskExecutorProduction:
         except ValidationError as e:
             logger.error(f"任务数据验证失败: {e}")
             return False
-        
-        # 添加到队列
+        except Exception as e:
+            logger.error(f"execute_task 异常: {e}")
+            return False
+
+        # 添加到内部执行队列
         if self._task_queue.put(task):
-            logger.info(f"任务已加入队列: {task.task_id}")
+            # 同时添加到全局队列供API查询（将TDMTask转换为内部Task格式）
+            from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus
+            exec_task = ExecutorTask(
+                id=task_id,
+                name=getattr(task, 'taskName', '') or getattr(task, 'name', ''),
+                task_type=getattr(task, 'task_type', 'test_module'),
+                priority=1,
+                status=ExecutorTaskStatus.PENDING.value,
+                params={
+                    'tool_type': getattr(task, 'tool_type', 'canoe'),
+                    'config_path': getattr(task, 'config_path', None),
+                    'variables': getattr(task, 'variables', {})
+                },
+                timeout=getattr(task, 'timeout', 3600),
+                metadata={
+                    'taskNo': task_id,
+                    'projectNo': getattr(task, 'projectNo', ''),
+                    'deviceId': getattr(task, 'deviceId', None),
+                    'caseCount': len(getattr(task, 'caseList', []) or [])
+                }
+            )
+            global_task_queue.add(exec_task)
+            logger.info(f"任务已加入队列: {task_id}")
             return True
         else:
-            logger.error(f"任务加入队列失败: {task.task_id}")
+            logger.error(f"任务加入队列失败: {task_id}")
             return False
     
     @TASK_CIRCUIT_BREAKER
@@ -487,7 +523,86 @@ class TaskExecutorProduction:
                 
         except Exception as e:
             raise ToolException(f"启动测量/仿真失败: {e}")
-    
+
+    def _start_test_execution(self, task: Task):
+        """
+        Start TSMaster test execution with full RPC flow.
+
+        Follows the reference example flow:
+        1. Build test case selection string from task.test_items
+        2. Call adapter.start_test_execution(test_cases, wait_for_complete=False)
+        3. Wait for test completion with adapter.wait_for_test_complete()
+
+        Args:
+            task: Task object with test_items containing case info
+        """
+        tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+
+        if tool_type_lower != TestToolType.TSMASTER.value:
+            # Fall back to regular start_measurement for non-TSMaster
+            self._start_measurement(task)
+            return
+
+        self.logger.info("使用TSMaster测试执行流程")
+
+        try:
+            # Build test case selection string from test_items
+            test_cases = self._build_tsmaster_test_cases_string(task)
+
+            if test_cases:
+                self.logger.info(f"执行TSMaster测试用例: {test_cases}")
+                self.current_collector.add_log("INFO", f"选择测试用例: {test_cases}")
+
+                # Call adapter's start_test_execution with test cases
+                success = self.controller.start_test_execution(
+                    test_cases=test_cases,
+                    wait_for_complete=False,  # We wait separately
+                    timeout=task.timeout
+                )
+
+                if not success:
+                    raise ToolException("TSMaster测试执行启动失败")
+
+                # Wait for test to complete
+                self.logger.info("等待TSMaster测试执行完成...")
+                if not self.controller.wait_for_test_complete(timeout=task.timeout):
+                    self.logger.warning("TSMaster测试执行超时")
+            else:
+                self.logger.info("无测试用例，启动仿真")
+                self._start_measurement(task)
+
+        except Exception as e:
+            raise ToolException(f"TSMaster测试执行失败: {e}")
+
+    def _build_tsmaster_test_cases_string(self, task: Task) -> str:
+        """
+        Build TSMaster test case selection string from task.test_items.
+
+        Format: "TG1_TC1=1,TG1_TC2=1" or similar
+
+        Args:
+            task: Task object
+
+        Returns:
+            Test case selection string, empty string if no valid cases
+        """
+        if not task.test_items:
+            return ""
+
+        cases = []
+        for item in task.test_items:
+            # Try to get case identifier from various sources
+            case_id = (
+                getattr(item, 'caseNo', None) or
+                getattr(item, 'case_no', None) or
+                getattr(item, 'name', None)
+            )
+            if case_id:
+                # Format as "case_id=1" for selection
+                cases.append(f"{case_id}=1")
+
+        return ",".join(cases) if cases else ""
+
     def _execute_test_items(self, task: Task) -> list:
         """执行测试项"""
         results = []
@@ -908,27 +1023,33 @@ class TaskExecutorProduction:
             是否提交成功
         """
         try:
+            # 获取任务ID（兼容不同任务类型）
+            task_id = getattr(task, 'id', None) or getattr(task, 'task_id', None)
+            if task_id is None:
+                logger.error("任务缺少ID属性，无法提交")
+                return False
+
             # 添加到全局任务队列
             if not global_task_queue.add(task):
-                logger.warning(f"任务 {task.id} 已存在于队列中")
+                logger.warning(f"任务 {task_id} 已存在于队列中")
                 return False
 
             # 转换为执行任务的 Task 模型 (TDM2.0格式)
             from models.task import Task as ExecTask
 
             exec_task = ExecTask(
-                taskNo=task.id,
-                taskName=task.name,
-                timeout=task.timeout,
-                toolType=task.params.get('tool_type', 'canoe'),
-                configPath=task.params.get('config_path'),
-                variables=task.params.get('variables', {})
+                taskNo=task_id,
+                taskName=getattr(task, 'name', '') or getattr(task, 'taskName', ''),
+                timeout=getattr(task, 'timeout', 3600),
+                toolType=getattr(task, 'params', {}).get('tool_type', 'canoe') if hasattr(task, 'params') else 'canoe',
+                configPath=getattr(task, 'params', {}).get('config_path') if hasattr(task, 'params') else None,
+                variables=getattr(task, 'params', {}).get('variables', {}) if hasattr(task, 'params') else {}
             )
 
             # 添加到内部执行队列
             self._task_queue.put(exec_task)
 
-            logger.info(f"任务 {task.id} 已提交到执行队列")
+            logger.info(f"任务 {task_id} 已提交到执行队列")
             return True
 
         except Exception as e:
@@ -1024,7 +1145,7 @@ class TaskExecutorProduction:
             else:
                 monitor.update_task_status({
                     'task_id': task_no,
-                    'tool_type': self.current_task.tool_type.value if self.current_task else None,
+                    'tool_type': self.current_task.tool_type if self.current_task else None,
                     'progress': progress or 0,
                     'message': message
                 }, monitor_status)
@@ -1108,9 +1229,54 @@ class TaskExecutorProduction:
                 logger.info(f"[_report_to_remote] 任务结果上报成功: {task.task_id}")
             else:
                 logger.warning(f"[_report_to_remote] 任务结果上报失败: {task.task_id}")
+                # 上报失败时持久化以便后续重试
+                self._persist_failed_report(report_data, task)
 
         except Exception as e:
             logger.error(f"[_report_to_remote] 远端上报任务结果时出错: {e}", exc_info=True)
+            # 异常时也持久化
+            if 'report_data' in locals():
+                self._persist_failed_report(report_data, task)
+
+    def _persist_failed_report(self, report_data: Dict[str, Any], task: Task):
+        """
+        持久化失败的上报数据
+
+        Args:
+            report_data: 上报数据
+            task: 任务对象
+        """
+        try:
+            from core.failed_report_manager import get_failed_report_manager
+
+            manager = get_failed_report_manager(self.config_manager)
+
+            task_info = {
+                'taskNo': task.task_id,
+                'projectNo': getattr(task, 'projectNo', ''),
+                'deviceId': getattr(task, 'deviceId', None),
+                'toolType': getattr(task, 'toolType', None),
+                'taskName': getattr(task, 'taskName', '') or getattr(task, 'name', '')
+            }
+
+            # 计算优先级（失败任务优先级更高）
+            priority = 3 if report_data.get('status') in ['failed', 'FAILED'] else 0
+
+            max_retries = 10
+            if self.config_manager:
+                max_retries = self.config_manager.get('report_retry.max_retries', 10)
+
+            report_id = manager.add_failed_report(
+                report_data=report_data,
+                task_info=task_info,
+                max_retries=max_retries,
+                priority=priority
+            )
+
+            logger.info(f"失败报告已持久化: report_id={report_id}, task_no={task.task_id}")
+
+        except Exception as e:
+            logger.error(f"持久化失败报告时出错: {e}")
 
     def _do_report_direct(self, report_data: Dict[str, Any]) -> bool:
         """
