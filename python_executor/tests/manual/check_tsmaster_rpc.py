@@ -213,18 +213,37 @@ class TSMasterRPCChecker:
             self.add_warning("资源释放", "断开连接时可能未停止仿真")
             logger.warning("  ⚠ 断开连接时可能未停止仿真")
             
-        # 7. 其他功能检测
+        # 7. 小程序控制检测
         logger.info("-" * 80)
-        logger.info("7. 其他功能检测")
+        logger.info("7. 小程序控制检测")
         logger.info("-" * 80)
-        
+
+        if "app.run_form" in code or 'run_form' in code:
+            self.add_pass("小程序控制", "支持启动小程序 (run_form)")
+            logger.info("  ✓ 支持启动小程序 (run_form)")
+        else:
+            self.add_issue("严重", "小程序控制", "未实现启动小程序功能")
+            logger.error("  ✗ 未实现启动小程序功能")
+
+        if "app.stop_form" in code or 'stop_form' in code:
+            self.add_pass("小程序控制", "支持停止小程序 (stop_form)")
+            logger.info("  ✓ 支持停止小程序 (stop_form)")
+        else:
+            self.add_issue("严重", "小程序控制", "未实现停止小程序功能")
+            logger.error("  ✗ 未实现停止小程序功能")
+
+        # 8. 其他功能检测
+        logger.info("-" * 80)
+        logger.info("8. 其他功能检测")
+        logger.info("-" * 80)
+
         if "transmit_can" in code or "transmit_can_async" in code:
             self.add_pass("其他功能", "支持CAN报文发送")
             logger.info("  ✓ 支持CAN报文发送")
         else:
             self.add_warning("其他功能", "未实现CAN报文发送")
             logger.warning("  ⚠ 未实现CAN报文发送")
-            
+
         if "__enter__" in code and "__exit__" in code:
             self.add_pass("其他功能", "支持上下文管理器(with语句)")
             logger.info("  ✓ 支持上下文管理器(with语句)")
@@ -266,20 +285,39 @@ class TSMasterRPCChecker:
         logger.info("-" * 80)
         logger.info("2. 适配器仿真控制检测")
         logger.info("-" * 80)
-        
+
         if "start_simulation" in code:
             self.add_pass("适配器", "适配器实现启动仿真")
             logger.info("  ✓ 适配器实现启动仿真")
         else:
             self.add_warning("适配器", "适配器未实现启动仿真")
             logger.warning("  ⚠ 适配器未实现启动仿真")
-            
+
         if "stop_simulation" in code:
             self.add_pass("适配器", "适配器实现停止仿真")
             logger.info("  ✓ 适配器实现停止仿真")
         else:
             self.add_warning("适配器", "适配器未实现停止仿真")
             logger.warning("  ⚠ 适配器未实现停止仿真")
+
+        # 3. 小程序控制检测
+        logger.info("-" * 80)
+        logger.info("3. 适配器小程序控制检测")
+        logger.info("-" * 80)
+
+        if "start_master_form" in code:
+            self.add_pass("适配器", "适配器实现启动Master小程序")
+            logger.info("  ✓ 适配器实现启动Master小程序")
+        else:
+            self.add_issue("严重", "适配器", "适配器未实现启动Master小程序")
+            logger.error("  ✗ 适配器未实现启动Master小程序")
+
+        if "stop_master_form" in code:
+            self.add_pass("适配器", "适配器实现停止Master小程序")
+            logger.info("  ✓ 适配器实现停止Master小程序")
+        else:
+            self.add_issue("严重", "适配器", "适配器未实现停止Master小程序")
+            logger.error("  ✗ 适配器未实现停止Master小程序")
             
         # 3. 测试执行检测
         logger.info("-" * 80)

@@ -187,46 +187,51 @@ class TSMasterValidator:
             "version": None
         }
         
-        # 2. 检查Python API
+        # 2. 检查Python API（TSMasterAPI 函数式 API）
         try:
-            from TSMaster import TSMaster
+            from TSMasterAPI import tsapp_connect, tsapp_disconnect, tsapp_get_tsmaster_version
             result.adapter_test["python_api_available"] = True
         except ImportError:
             pass
-        
+
         # 3. 检查RPC API
         try:
             import TSMasterAPI
             result.adapter_test["rpc_api_available"] = True
         except ImportError:
             pass
-        
+
         if not result.adapter_test["python_api_available"] and not result.adapter_test["rpc_api_available"]:
             result.error = "TSMaster API未安装（Python API和RPC API都不可用）"
             return result
-        
-        # 4. 尝试连接测试（使用Python API）
+
+        # 4. 尝试连接测试（使用 Python API）
         if result.adapter_test["python_api_available"]:
             try:
-                from TSMaster import TSMaster
-                ts = TSMaster()
-                ts.connect()
-                result.adapter_test["connection_test"] = "success"
-                
-                # 获取版本信息
+                from TSMasterAPI import tsapp_connect, tsapp_disconnect, tsapp_get_tsmaster_version
+                from ctypes import c_long, byref
+
+                # 尝试获取版本信息（不需要连接）
                 try:
-                    version = ts.get_version()
-                    result.adapter_test["version"] = str(version)
-                    result.details["version"] = str(version)
-                except:
+                    m = c_long(); mi = c_long(); b = c_long(); r = c_long()
+                    ret = tsapp_get_tsmaster_version(byref(m), byref(mi), byref(b), byref(r))
+                    if ret == 0 or m.value > 0:
+                        version_str = f"{m.value}.{mi.value}.{b.value}.{r.value}"
+                        result.adapter_test["version"] = version_str
+                        result.details["version"] = version_str
+                except Exception:
                     pass
-                
+
+                # 尝试连接
+                tsapp_connect()
+                result.adapter_test["connection_test"] = "success"
+
                 # 断开连接
                 try:
-                    ts.disconnect()
-                except:
+                    tsapp_disconnect()
+                except Exception:
                     pass
-                    
+
             except Exception as e:
                 result.adapter_test["connection_test"] = f"failed: {str(e)}"
                 result.details["connection_error"] = str(e)

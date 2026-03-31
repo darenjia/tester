@@ -232,56 +232,6 @@
                 </div>
 
                 <!-- TSMaster API 安装 -->
-                <div class="form-section">
-                    <h3 class="form-section-title">TSMaster API 安装</h3>
-                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
-                        安装 TSMasterAPI 模块以支持 TSMaster RPC 功能。安装策略：本地优先，网络备用。
-                    </p>
-
-                    <!-- 状态显示区域 -->
-                    <div id="tsmaster-api-status" style="background: var(--bg-color); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary);">API 安装状态</div>
-                                <div id="tsmaster-api-installed" style="font-size: 14px; font-weight: 600;">-</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary);">TSMaster 路径</div>
-                                <div id="tsmaster-path-valid" style="font-size: 14px; font-weight: 600;">-</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary);">本地 whl 文件</div>
-                                <div id="tsmaster-local-whl" style="font-size: 14px; font-weight: 600;">-</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary);">API 版本</div>
-                                <div id="tsmaster-api-version" style="font-size: 14px; font-weight: 600;">-</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 操作按钮 -->
-                    <div class="form-group" style="display: flex; gap: 12px;">
-                        <button type="button" class="btn btn-secondary" onclick="checkTSMasterAPIStatus()">
-                            <i class="fas fa-sync"></i> 检查状态
-                        </button>
-                        <button type="button" class="btn btn-primary" onclick="installTSMasterAPI()">
-                            <i class="fas fa-download"></i> 安装 API
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="uninstallTSMasterAPI()" style="margin-left: auto; background: var(--danger-color); border-color: var(--danger-color);">
-                            <i class="fas fa-trash"></i> 卸载
-                        </button>
-                    </div>
-
-                    <!-- 安装进度区域 -->
-                    <div id="tsmaster-api-progress" style="display: none; background: var(--bg-color); padding: 12px; border-radius: 8px; margin-top: 16px;">
-                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">
-                            <i class="fas fa-spinner fa-spin"></i> <span id="tsmaster-progress-text">正在安装...</span>
-                        </div>
-                        <pre id="tsmaster-progress-log" style="font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto;"></pre>
-                    </div>
-                </div>
-
                 <!-- 日志配置 -->
                 <div class="form-section">
                     <h3 class="form-section-title">日志配置</h3>
@@ -587,10 +537,6 @@
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
         loadAllConfig();
-        // 延迟检查 TSMasterAPI 状态，等待配置加载完成
-        setTimeout(() => {
-            checkTSMasterAPIStatus();
-        }, 500);
     });
 
     // 切换主标签页
@@ -1029,133 +975,6 @@
             console.error('测试连接失败:', error);
             resultEl.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> 测试失败';
             resultEl.style.color = 'var(--danger-color)';
-        }
-    }
-
-    // ==================== TSMaster API 安装管理 ====================
-
-    // 检查 TSMasterAPI 安装状态
-    async function checkTSMasterAPIStatus() {
-        const tsmasterPath = document.getElementById('tsmaster_path')?.value;
-
-        try {
-            const response = await fetch('/api/tsmaster/check-status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tsmaster_path: tsmasterPath })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                const data = result.data;
-
-                // 更新状态显示
-                const installedEl = document.getElementById('tsmaster-api-installed');
-                if (data.installed) {
-                    installedEl.innerHTML = '<span style="color: var(--success-color);"><i class="fas fa-check-circle"></i> 已安装</span>';
-                } else {
-                    installedEl.innerHTML = '<span style="color: var(--danger-color);"><i class="fas fa-times-circle"></i> 未安装</span>';
-                }
-
-                const pathValidEl = document.getElementById('tsmaster-path-valid');
-                if (data.tsmaster_path_valid) {
-                    pathValidEl.innerHTML = '<span style="color: var(--success-color);"><i class="fas fa-check"></i> 有效</span>';
-                } else {
-                    pathValidEl.innerHTML = '<span style="color: var(--warning-color);"><i class="fas fa-exclamation-triangle"></i> 无效</span>';
-                }
-
-                const whlEl = document.getElementById('tsmaster-local-whl');
-                if (data.local_whl_found) {
-                    whlEl.innerHTML = '<span style="color: var(--success-color);"><i class="fas fa-file"></i> 已找到</span>';
-                    whlEl.title = data.local_whl_path;
-                } else {
-                    whlEl.innerHTML = '<span style="color: var(--text-secondary);"><i class="fas fa-file"></i> 未找到</span>';
-                }
-
-                const versionEl = document.getElementById('tsmaster-api-version');
-                versionEl.textContent = data.version || '-';
-
-                showMessage('TSMasterAPI 状态检查完成', 'success');
-            } else {
-                showMessage('检查状态失败: ' + result.message, 'error');
-            }
-        } catch (error) {
-            console.error('检查 TSMasterAPI 状态失败:', error);
-            showMessage('检查状态失败: ' + error.message, 'error');
-        }
-    }
-
-    // 安装 TSMasterAPI
-    async function installTSMasterAPI() {
-        const tsmasterPath = document.getElementById('tsmaster_path')?.value;
-        const progressDiv = document.getElementById('tsmaster-api-progress');
-        const progressText = document.getElementById('tsmaster-progress-text');
-        const progressLog = document.getElementById('tsmaster-progress-log');
-
-        // 显示进度区域
-        progressDiv.style.display = 'block';
-        progressText.textContent = '正在安装 TSMasterAPI...';
-        progressLog.textContent = '';
-
-        try {
-            const response = await fetch('/api/tsmaster/install', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tsmaster_path: tsmasterPath,
-                    prefer_local: true
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                progressText.innerHTML = '<i class="fas fa-check-circle" style="color: var(--success-color);"></i> 安装成功';
-                progressLog.textContent = `安装方式: ${result.data?.install_method || '-'}\n` +
-                    (result.data?.installed_from ? `安装源: ${result.data.installed_from}\n` : '') +
-                    (result.data?.version ? `版本: ${result.data.version}` : '');
-
-                showMessage('TSMasterAPI 安装成功', 'success');
-
-                // 刷新状态
-                setTimeout(() => checkTSMasterAPIStatus(), 1000);
-            } else {
-                progressText.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> 安装失败';
-                progressLog.textContent = result.message + '\n' + (result.data?.output || '');
-                showMessage('安装失败: ' + result.message, 'error');
-            }
-        } catch (error) {
-            console.error('安装 TSMasterAPI 失败:', error);
-            progressText.innerHTML = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i> 安装异常';
-            progressLog.textContent = error.message;
-            showMessage('安装失败: ' + error.message, 'error');
-        }
-    }
-
-    // 卸载 TSMasterAPI
-    async function uninstallTSMasterAPI() {
-        if (!confirm('确定要卸载 TSMasterAPI 吗？')) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/tsmaster/uninstall', {
-                method: 'POST'
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                showMessage('TSMasterAPI 卸载成功', 'success');
-                // 刷新状态
-                checkTSMasterAPIStatus();
-            } else {
-                showMessage('卸载失败: ' + result.message, 'error');
-            }
-        } catch (error) {
-            console.error('卸载 TSMasterAPI 失败:', error);
-            showMessage('卸载失败: ' + error.message, 'error');
         }
     }
 </script>

@@ -162,25 +162,35 @@ def get_tasks():
     try:
         # 获取查询参数
         status = request.args.get('status')
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+
+        # 安全解析分页参数
+        try:
+            page = int(request.args.get('page', 1))
+            per_page = int(request.args.get('per_page', 20))
+        except ValueError as e:
+            return jsonify({"success": False, "message": f"分页参数无效: {str(e)}"}), 400
+
         sort_by = request.args.get('sort_by', 'created_at')
         sort_order = request.args.get('sort_order', 'desc')
-        
+
         # 获取任务列表
         if status:
             tasks = task_queue.get_tasks_by_status(status)
         else:
             tasks = task_queue.get_all_tasks()
+
+        # 确保tasks是列表
+        if tasks is None:
+            tasks = []
             
-        # 排序
+        # 排序（处理None值）
         reverse = sort_order.lower() == 'desc'
         if sort_by == 'created_at':
-            tasks.sort(key=lambda x: x.created_at, reverse=reverse)
+            tasks.sort(key=lambda x: x.created_at or '', reverse=reverse)
         elif sort_by == 'priority':
-            tasks.sort(key=lambda x: x.priority, reverse=reverse)
+            tasks.sort(key=lambda x: x.priority or 0, reverse=reverse)
         elif sort_by == 'status':
-            tasks.sort(key=lambda x: x.status, reverse=reverse)
+            tasks.sort(key=lambda x: x.status or '', reverse=reverse)
             
         # 分页
         total = len(tasks)
@@ -402,9 +412,9 @@ def delete_task(task_id: str):
         if not task:
             return jsonify({"success": False, "message": "任务不存在"}), 404
             
-        # 只能删除已完成的任务
-        if not task.is_completed():
-            return jsonify({"success": False, "message": "只能删除已完成的任务"}), 400
+        # 正在运行的任务不能删除
+        if task.is_running():
+            return jsonify({"success": False, "message": "任务正在执行中，无法删除"}), 400
             
         # 从队列中移除
         if task_queue.remove(task_id):

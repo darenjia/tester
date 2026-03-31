@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Agent",
+      "WebFetch",
+      "Task",         
+      "Tool"        
+    ],
+    "prompt": "default"
+  }
+}

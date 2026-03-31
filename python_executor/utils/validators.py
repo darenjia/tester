@@ -30,39 +30,40 @@ class InputValidator:
         """验证任务ID"""
         if not task_id:
             raise ValidationError("任务ID不能为空")
-        
+
         if len(task_id) > 128:
             raise ValidationError("任务ID长度不能超过128字符")
-        
-        # 只允许字母、数字、下划线、连字符
-        if not re.match(r'^[a-zA-Z0-9_-]+$', task_id):
-            raise ValidationError("任务ID只能包含字母、数字、下划线和连字符")
-        
+
+        # 放宽限制：允许字母、数字、下划线、连字符、点、冒号、中文等常见字符
+        # 只排除可能引起问题的特殊字符（空格、控制字符等）
+        if re.search(r'[\s\x00-\x1f]', task_id):
+            raise ValidationError("任务ID不能包含空格或控制字符")
+
         return task_id
-    
+
     @staticmethod
     def validate_device_id(device_id: str) -> str:
         """验证设备ID"""
         if not device_id:
             raise ValidationError("设备ID不能为空")
-        
+
         if len(device_id) > 64:
             raise ValidationError("设备ID长度不能超过64字符")
-        
+
         return device_id
-    
+
     @staticmethod
     def validate_tool_type(tool_type: str) -> str:
         """验证工具类型"""
-        allowed_types = {'canoe', 'tsmaster'}
-        
+        allowed_types = {'canoe', 'tsmaster', 'ttworkbench'}
+
         if not tool_type:
             raise ValidationError("工具类型不能为空")
-        
+
         tool_type_lower = tool_type.lower()
         if tool_type_lower not in allowed_types:
             raise ValidationError(f"不支持的工具类型: {tool_type}，支持: {allowed_types}")
-        
+
         return tool_type_lower
     
     @staticmethod
@@ -142,12 +143,10 @@ class InputValidator:
         if len(str(name)) > 256:
             raise ValidationError("测试项名称长度不能超过256字符")
         
-        # 验证类型
-        item_type = item.get('type')
-        allowed_types = {'signal_check', 'signal_set', 'test_module'}
-        if item_type not in allowed_types:
-            raise ValidationError(f"不支持的测试项类型: {item_type}，支持: {allowed_types}")
-        
+        # 验证类型 - 为空时设置为默认值
+        item_type = item.get('type') or 'test_module'
+        item['type'] = item_type
+
         # 根据类型验证特定字段
         if item_type in ('signal_check', 'signal_set'):
             signal_name = item.get('signalName')

@@ -13,14 +13,6 @@ from typing import Optional, Dict, Any, Callable, List
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
 
-# 尝试导入TSMaster API
-try:
-    from TSMaster import *
-    TSMASTER_AVAILABLE = True
-except ImportError:
-    TSMASTER_AVAILABLE = False
-    logging.warning("TSMaster Python API未安装，传统模式不可用")
-
 # 尝试导入TSMaster RPC API
 try:
     from TSMasterAPI import *
@@ -127,24 +119,8 @@ class TSMasterAdapter(BaseTestAdapter):
                 return True
             else:
                 self.logger.warning("RPC模式连接失败")
-                if not self.fallback_to_traditional:
-                    self._set_error("RPC模式连接失败且未启用回退机制")
-                    return False
-
-        # 回退到传统模式
-        if TSMASTER_AVAILABLE:
-            self.logger.info("尝试使用传统模式连接...")
-            if self._connect_via_traditional():
-                self._using_rpc = False
-                self.status = AdapterStatus.CONNECTED
-                self._clear_error()
-                self.logger.info("TSMaster传统模式连接成功")
-                return True
-            else:
-                self.logger.warning("传统模式连接失败")
-
-        self._set_error("所有连接方式均失败")
-        return False
+                self._set_error("RPC模式连接失败")
+                return False
     
     def _connect_via_rpc(self) -> bool:
         """通过RPC模式连接"""

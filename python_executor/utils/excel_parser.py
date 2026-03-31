@@ -24,6 +24,7 @@ except ImportError:
     OPENPYXL_AVAILABLE = False
 
 from utils.logger import get_logger
+from core.case_mapping_manager import get_case_mapping_manager
 
 logger = get_logger("excel_parser")
 
@@ -334,6 +335,23 @@ class CaseMappingExcelParser:
                 item['enabled'] = False
             else:
                 item['enabled'] = True
+
+            # 计算 ini_config_preview 并同时保存到 ini_config
+            case_no = item.get('case_no', '')
+            category = item.get('category', '')
+            if case_no and category:
+                try:
+                    mapping_manager = get_case_mapping_manager()
+                    ini_config_preview = mapping_manager.apply_ini_config_rule(case_no, category)
+                    item['ini_config_preview'] = ini_config_preview
+                    item['ini_config'] = ini_config_preview  # 保存自动计算的ini_config
+                except Exception as e:
+                    logger.warning(f"计算ini_config_preview失败: {e}")
+                    item['ini_config_preview'] = ''
+                    item['ini_config'] = ''
+            else:
+                item['ini_config_preview'] = ''
+                item['ini_config'] = ''
 
             converted.append(item)
 

@@ -24,10 +24,24 @@ from utils.logger import get_logger, setup_logging
 from utils.exceptions import ExecutorException
 from utils.metrics import performance_monitor, metric_collector
 from utils.validators import InputValidator, ValidationError
-from models.task import Task
+from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus, task_queue
+from models.task import Task as ExecTask, TaskStatus as ExecTaskStatus, Case
 from models.result import Message, StatusUpdate, LogEntry
 from core.task_executor_production import TaskExecutorProduction
 from core.status_monitor import get_status_monitor, ConnectionStatus
+
+# 注册API蓝图
+from api.task_api import task_bp
+from api.task_log_api import task_log_bp
+from api.service_api import service_bp
+from api.config_api import config_bp
+from api.docs_api import docs_bp
+from api.env_api import env_bp
+from api.functional_test_api import functional_test_bp
+from api.case_mapping_api import case_mapping_bp
+from api.routes import api_bp
+from api.system_check_api import system_check_bp
+from api.report_retry_api import report_retry_bp
 
 print("正在设置日志...")
 setup_logging()
@@ -56,6 +70,7 @@ class PythonExecutorProduction:
         self.running = True
         
         # 设置路由和事件处理器
+        self._register_blueprints()
         self._setup_routes()
         self._setup_websocket_handlers()
         
@@ -76,7 +91,22 @@ class PythonExecutorProduction:
             performance_monitor.register_alert_callback(self._on_performance_alert)
         
         logger.info("Python执行器（生产环境版）初始化完成")
-    
+
+    def _register_blueprints(self):
+        """注册API蓝图"""
+        self.app.register_blueprint(task_bp)
+        self.app.register_blueprint(task_log_bp)
+        self.app.register_blueprint(service_bp)
+        self.app.register_blueprint(config_bp)
+        self.app.register_blueprint(docs_bp)
+        self.app.register_blueprint(env_bp)
+        self.app.register_blueprint(functional_test_bp)
+        self.app.register_blueprint(case_mapping_bp)
+        self.app.register_blueprint(api_bp)
+        self.app.register_blueprint(system_check_bp)
+        self.app.register_blueprint(report_retry_bp)
+        logger.info("API蓝图注册完成")
+
     def _setup_routes(self):
         """设置HTTP路由"""
         @self.app.route('/')
@@ -304,35 +334,121 @@ class PythonExecutorProduction:
                 'taskNo': message.taskNo,
                 'deviceId': message.deviceId
             })
-            
+
             # 验证输入
             validated_data = InputValidator.validate_task_data(task_data)
-            
-            # 创建任务对象
-            task = Task.from_dict(validated_data)
-            
+
+            # 从映射库丰富任务数据（优先使用映射库中的配置）
+            from core.case_mapping_manager import get_case_mapping_manager
+            mapping_manager = get_case_mapping_manager()
+
+            # 确定tool_type
+            tool_type = validated_data.get('toolType')
+            if not tool_type:
+                tool_types = set()
+                for item in validated_data.get('testItems', []):
+                    case_no = item.get('case_no') or item.get('caseNo')
+                    if case_no:
+                        mapping = mapping_manager.get_mapping(case_no)
+                        if mapping and mapping.category:
+                            tool_types.add(mapping.category.lower())
+
+                if len(tool_types) == 1:
+                    tool_type = list(tool_types)[0]
+                    validated_data['toolType'] = tool_type
+                    logger.info(f"从映射库确定toolType: {tool_type}")
+                elif len(tool_types) > 1:
+                    tool_type = list(tool_types)[0]
+                    validated_data['toolType'] = tool_type
+                    logger.warning(f"多种tool_type: {tool_types}，使用第一个: {tool_type}")
+
+            # 获取configPath（如果请求中没有指定）
+            config_path = validated_data.get('configPath')
+            if not config_path:
+                for item in validated_data.get('testItems', []):
+                    case_no = item.get('case_no') or item.get('caseNo')
+                    if case_no:
+                        mapping = mapping_manager.get_mapping(case_no)
+                        if mapping and mapping.enabled and mapping.script_path:
+                            config_path = mapping.script_path
+                            validated_data['configPath'] = config_path
+                            logger.info(f"从映射库获取configPath: case_no={case_no}, path={config_path}")
+                            break
+
+            # 创建 models/task.py 的 Task 对象 (用于 execute_task)
+            # 构建 caseList（从映射库丰富用例信息）
+            case_list = []
+            test_items = validated_data.get('testItems', [])
+            for item in test_items:
+                case_no = item.get('case_no') or item.get('caseNo') or item.get('name', '')
+
+                # 尝试从映射库获取更多信息
+                mapping = mapping_manager.get_mapping(case_no) if case_no else None
+
+                case = Case(
+                    caseName=item.get('name', '') or (mapping.case_name if mapping else ''),
+                    caseType=item.get('type', 'test_module'),
+                    caseNo=case_no,
+                    dtcInfo=item.get('dtc_info') or item.get('dtcInfo'),
+                    params=item.get('params', {}),
+                    repeat=item.get('repeat', 1)
+                )
+
+                # 如果有映射，丰富其他字段
+                if mapping:
+                    if mapping.ini_config:
+                        case.params = {**case.params, 'iniConfig': mapping.ini_config}
+                    if mapping.para_config:
+                        case.params = {**case.params, 'paraConfig': mapping.para_config}
+
+                case_list.append(case)
+
+            # 创建 ExecTask (models/task.py) 用于任务执行
+            exec_task = ExecTask(
+                projectNo=validated_data.get('projectNo', ''),
+                taskNo=validated_data.get('taskNo'),
+                taskName=validated_data.get('taskName', ''),
+                caseList=case_list,
+                deviceId=validated_data.get('deviceId'),
+                toolType=validated_data.get('toolType'),
+                configPath=validated_data.get('configPath'),
+                timeout=validated_data.get('timeout', 3600)
+            )
+
+            # 同时创建 ExecutorTask (executor_task.py) 用于队列管理
+            executor_task = ExecutorTask(
+                id=validated_data.get('taskNo'),
+                name=validated_data.get('taskName') or validated_data.get('taskNo', '未命名任务'),
+                task_type=validated_data.get('toolType', 'default'),
+                params=validated_data,
+                timeout=validated_data.get('timeout', 3600)
+            )
+
+            # 添加到全局任务队列
+            task_queue.add(executor_task)
+
             # 初始化任务执行器（如果还没初始化）
             if not self.task_executor:
                 self.task_executor = TaskExecutorProduction(
                     message_sender=lambda msg: self._send_message_to_client(client_sid, msg)
                 )
                 self.task_executor.start()
-            
-            # 执行任务
-            success = self.task_executor.execute_task(task)
-            
+
+            # 执行任务 (使用 ExecTask)
+            success = self.task_executor.execute_task(exec_task)
+
             if success:
-                logger.info(f"任务已加入队列: {task.task_id}")
+                logger.info(f"任务已加入队列: {exec_task.task_id}")
                 emit('task_response', {
-                    'taskNo': task.task_id,
+                    'taskNo': exec_task.task_id,
                     'status': 'queued',
                     'message': '任务已加入队列',
                     'timestamp': int(time.time() * 1000)
                 })
             else:
-                logger.warning(f"任务加入队列失败: {task.task_id}")
+                logger.warning(f"任务加入队列失败: {exec_task.task_id}")
                 emit('task_response', {
-                    'taskNo': task.task_id,
+                    'taskNo': exec_task.task_id,
                     'status': 'rejected',
                     'message': '任务加入队列失败',
                     'timestamp': int(time.time() * 1000)

@@ -77,8 +77,23 @@ class FailedReportManager:
                     data = json.load(f)
 
                 self.reports.clear()
-                for report_id, report_data in data.get('reports', {}).items():
-                    self.reports[report_id] = FailedReport.from_dict(report_data)
+
+                # 兼容两种格式：reports (新) 或 tasks (旧/混淆格式)
+                report_data = data.get('reports', {})
+                if not report_data:
+                    # 尝试从 tasks 格式加载（旧数据）
+                    report_data = data.get('tasks', {})
+
+                for report_id, report_item in report_data.items():
+                    # 如果是 tasks 格式的任务数据，转换为 FailedReport 格式
+                    if 'status' in report_item and 'error_message' in report_item and 'task_type' in report_item:
+                        # 这是 ExecutorTask 格式，需要转换
+                        failed_report = self._convert_task_to_failed_report(report_id, report_item)
+                        if failed_report:
+                            self.reports[report_id] = failed_report
+                    else:
+                        # 这是 FailedReport 格式
+                        self.reports[report_id] = FailedReport.from_dict(report_item)
 
                 self.retry_history.clear()
                 for record_data in data.get('retry_history', [])[-1000:]:
@@ -95,6 +110,55 @@ class FailedReportManager:
         except Exception as e:
             logger.error(f"加载失败报告数据失败: {e}")
             self._init_empty_storage()
+
+    def _convert_task_to_failed_report(self, report_id: str, task_data: Dict[str, Any]) -> Optional[FailedReport]:
+        """
+        将 ExecutorTask 格式转换为 FailedReport 格式
+
+        Args:
+            report_id: 报告ID
+            task_data: 任务数据
+
+        Returns:
+            FailedReport 实例，转换失败返回 None
+        """
+        try:
+            task_no = task_data.get('id', report_id)
+            error_message = task_data.get('error_message', '')
+
+            failed_report = FailedReport(
+                report_id=report_id,
+                task_no=task_no,
+                report_data={
+                    'taskNo': task_no,
+                    'status': task_data.get('status', 'failed'),
+                    'errorMessage': error_message,
+                    'metadata': task_data.get('metadata', {})
+                },
+                task_info={
+                    'taskNo': task_no,
+                    'projectNo': task_data.get('metadata', {}).get('projectNo', ''),
+                    'deviceId': task_data.get('metadata', {}).get('deviceId', ''),
+                    'caseCount': task_data.get('metadata', {}).get('caseCount', 0)
+                },
+                status=ReportStatus.PENDING.value,
+                retry_count=0,
+                max_retries=task_data.get('max_retries', 3),
+                next_retry_time=calculate_next_retry_time(
+                    0,
+                    base_delay=self._get_config('report_retry.base_delay', 30.0),
+                    backoff_factor=self._get_config('report_retry.backoff_factor', 2.0),
+                    max_delay=self._get_config('report_retry.max_delay', 3600.0)
+                ),
+                last_error=error_message,
+                created_at=task_data.get('created_at', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                updated_at=task_data.get('completed_at', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+
+            return failed_report
+        except Exception as e:
+            logger.error(f"转换任务数据失败: report_id={report_id}, error={e}")
+            return None
 
     def _init_empty_storage(self):
         """初始化空存储"""

@@ -11,6 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config_manager import get_runtime_config
+from config.config_manager import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -458,3 +459,53 @@ def test_report_server_connection():
             
     except Exception as e:
         return jsonify({"success": False, "message": f"测试连接失败: {str(e)}"}), 500
+
+
+@config_bp.route('/config/category_ini_config_rules', methods=['GET'])
+def get_category_ini_config_rules():
+    """
+    获取 category_ini_config_rules 配置
+    """
+    try:
+        rules = config_manager.get('category_ini_config_rules', {})
+        return jsonify({
+            "success": True,
+            "data": rules
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"获取规则配置失败: {str(e)}"}), 500
+
+
+@config_bp.route('/config/category_ini_config_rules', methods=['PUT'])
+def update_category_ini_config_rules():
+    """
+    更新 category_ini_config_rules 配置
+
+    请求体:
+    {
+        "canoe": {
+            "pattern": "^(.*)$",
+            "replacement": "$1=1"
+        },
+        "tsmaster": {
+            "pattern": "^CAN_(.*)$",
+            "replacement": "$1=1"
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求体不能为空"}), 400
+
+        # 更新配置
+        config_manager.set('category_ini_config_rules', data)
+        config_manager.save()
+
+        return jsonify({
+            "success": True,
+            "message": "规则配置已更新",
+            "data": data
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"更新规则配置失败: {str(e)}"}), 500

@@ -753,7 +753,7 @@
                                 <i class="fas fa-redo"></i>
                             </button>
                         ` : ''}
-                        ${task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled' || task.status === 'timeout' ? `
+                        ${task.status !== 'running' ? `
                             <button class="action-btn delete" onclick="deleteTask('${task.id}')" title="删除">
                                 <i class="fas fa-trash"></i>
                             </button>

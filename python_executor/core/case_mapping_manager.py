@@ -4,12 +4,14 @@
 import os
 import sys
 import json
+import re
 import threading
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from models.case_mapping import CaseMapping, CaseChangeRecord, ChangeType
 from utils.logger import get_logger
+from config.config_manager import config_manager
 
 logger = get_logger("case_mapping_manager")
 
@@ -523,6 +525,31 @@ class CaseMappingManager:
             "categories": categories,
             "history_count": len(self.change_history)
         }
+
+    def apply_ini_config_rule(self, case_no: str, category: str) -> str:
+        """根据category对应的正则规则，将case_no转换为ini_config
+
+        Args:
+            case_no: 用例编号
+            category: 分类
+
+        Returns:
+            转换后的ini_config值，如果不符合规则则返回空字符串
+        """
+        try:
+            rules = config_manager.get('category_ini_config_rules', {})
+            rule = rules.get(category)
+            if not rule:
+                return ""
+            pattern = rule.get('pattern', '')
+            replacement = rule.get('replacement', '')
+            if not pattern:
+                return ""
+            if re.match(pattern, case_no):
+                return re.sub(pattern, replacement, case_no)
+        except Exception:
+            pass
+        return ""
 
 
 _case_mapping_manager: Optional[CaseMappingManager] = None

@@ -174,17 +174,24 @@ class TestConfigManager:
             'para_info': para_info_path
         }
 
-    def _generate_select_info_ini(self, file_path: str, test_cases: List[Dict]):
+    def _generate_select_info_ini(self, file_path: str, test_cases: List[Dict] = None):
         """
         生成SelectInfo.ini文件（CANoe规范）
         格式：
         [CFG_PARA]
         TG1_TC04_SC01=1
         TG1_TC05_SC01=1
+
+        使用test_cases中的caseNo字段生成。
+
+        Args:
+            file_path: 输出文件路径
+            test_cases: 测试用例列表（字典）
         """
         lines = ['[CFG_PARA]', '']
 
         if test_cases:
+            # 使用test_cases生成
             for case in test_cases:
                 # 获取用例标识（支持多种字段名）
                 case_id = case.get('caseNo') or case.get('case_id') or case.get('name') or case.get('caseName')

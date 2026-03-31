@@ -95,10 +95,11 @@ class TestExecutionConfig:
     project_path: Optional[str] = None
     auto_start_simulation: bool = True
     auto_stop_simulation: bool = True
-    
+    master_form_name: str = "C 代码编辑器 [Master]"  # Master小程序名称
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
-    
+
     def to_adapter_config(self) -> Dict[str, Any]:
         """转换为适配器配置"""
         return {
@@ -106,7 +107,8 @@ class TestExecutionConfig:
             "rpc_app_name": self.rpc_app_name,
             "fallback_to_traditional": self.fallback_to_traditional,
             "start_timeout": self.start_timeout,
-            "stop_timeout": self.stop_timeout
+            "stop_timeout": self.stop_timeout,
+            "master_form_name": self.master_form_name
         }
 
 
@@ -273,52 +275,73 @@ class TSMasterTestEngine:
     def connect(self, config: TestExecutionConfig) -> bool:
         """
         连接到 TSMaster
-        
+
+        RPC调用流程:
+        1. 初始化并连接RPC客户端
+        2. 启动Master小程序 (app.run_form)
+        3. 启动仿真 (start_simulation)
+
         Args:
             config: 测试执行配置
-            
+
         Returns:
             连接成功返回 True
         """
         try:
             self.logger.info("正在连接 TSMaster...")
-            
+
             # 断开现有连接
             if self.adapter:
                 self.disconnect()
-            
+
             # 创建适配器
             adapter_config = config.to_adapter_config()
             self.adapter = TSMasterAdapter(adapter_config)
-            
+
             # 连接
             if not self.adapter.connect():
                 self.logger.error("连接 TSMaster 失败")
                 return False
-            
+
             # 加载工程文件
             if config.project_path:
                 self.logger.info(f"加载工程文件: {config.project_path}")
                 if not self.adapter.load_configuration(config.project_path):
                     self.logger.warning(f"加载工程文件失败: {config.project_path}")
-            
+
+            # RPC调用流程: 启动Master小程序
+            self.logger.info(f"启动Master小程序: {config.master_form_name}")
+            self.adapter.start_master_form(config.master_form_name)
+
             # 启动仿真
             if config.auto_start_simulation:
                 self.logger.info("自动启动仿真")
                 if not self.adapter.start_test():
                     self.logger.warning("自动启动仿真失败")
-            
+
             self.logger.info("TSMaster 连接成功")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"连接 TSMaster 异常: {e}")
             return False
     
     def disconnect(self):
-        """断开 TSMaster 连接"""
+        """
+        断开 TSMaster 连接
+
+        RPC调用流程:
+        1. 停止仿真 (stop_simulation)
+        2. 停止Master小程序 (app.stop_form)
+        3. 断开RPC连接
+        """
         if self.adapter:
             try:
+                # RPC调用流程: 停止Master小程序
+                self.logger.info("正在停止Master小程序...")
+                self.adapter.stop_master_form()
+
+                # 断开连接
                 self.adapter.disconnect()
             except Exception as e:
                 self.logger.error(f"断开连接异常: {e}")
@@ -447,12 +470,7 @@ class TSMasterTestEngine:
                 }
             
         finally:
-            # 停止仿真
-            if config.auto_stop_simulation and self.adapter:
-                self.logger.info("自动停止仿真")
-                self.adapter.stop_test()
-            
-            # 断开连接
+            # 断开连接（内部会停止仿真和Master小程序）
             self.disconnect()
         
         self._notify_progress("execution_completed", result.to_dict())

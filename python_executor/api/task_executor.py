@@ -7,9 +7,11 @@ HTTP API任务执行模块
 import threading
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from models.executor_task import Task, TaskStatus, task_queue
+from models.task import Task as ExecTask, Case
+from core.case_mapping_manager import get_case_mapping_manager
 from utils.logger import get_logger
 
 logger = get_logger("http_task_executor")
@@ -138,6 +140,93 @@ def _on_task_message(message: Dict[str, Any]):
         logger.error(f"处理任务消息失败: {e}", exc_info=True)
 
 
+def enrich_task_data_from_mappings(task_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    从用例映射库丰富任务数据
+
+    优先从映射库获取以下信息：
+    - toolType: 测试工具类型
+    - configPath: 配置文件路径(script_path)
+    - ini_config: INI配置
+
+    Args:
+        task_data: 原始任务数据
+
+    Returns:
+        丰富后的任务数据
+    """
+    mapping_manager = get_case_mapping_manager()
+    case_list = task_data.get('caseList', [])
+
+    if not case_list:
+        logger.info("[enrich_task_data_from_mappings] caseList为空，跳过映射丰富")
+        return task_data
+
+    # 1. 确定tool_type（如果请求中没有指定）
+    tool_type = task_data.get('toolType')
+    if not tool_type:
+        tool_types = set()
+        for case in case_list:
+            case_no = case.get('caseNo') or case.get('case_no')
+            if case_no:
+                mapping = mapping_manager.get_mapping(case_no)
+                if mapping and mapping.category:
+                    tool_types.add(mapping.category.lower())
+
+        if len(tool_types) == 1:
+            tool_type = list(tool_types)[0]
+            task_data['toolType'] = tool_type
+            logger.info(f"[enrich_task_data_from_mappings] 从映射库确定toolType: {tool_type}")
+        elif len(tool_types) > 1:
+            tool_type = list(tool_types)[0]
+            task_data['toolType'] = tool_type
+            logger.warning(f"[enrich_task_data_from_mappings] 多种tool_type: {tool_types}，使用第一个: {tool_type}")
+
+    # 2. 尝试获取configPath（如果请求中没有指定）
+    config_path = task_data.get('configPath')
+    if not config_path:
+        # 从第一个有效映射获取configPath
+        for case in case_list:
+            case_no = case.get('caseNo') or case.get('case_no')
+            if case_no:
+                mapping = mapping_manager.get_mapping(case_no)
+                if mapping and mapping.enabled and mapping.script_path:
+                    config_path = mapping.script_path
+                    task_data['configPath'] = config_path
+                    logger.info(f"[enrich_task_data_from_mappings] 从映射库获取configPath: case_no={case_no}, path={config_path}")
+                    break
+
+    # 3. 丰富caseList中的用例信息
+    enriched_case_list = []
+    for case in case_list:
+        case_no = case.get('caseNo') or case.get('case_no')
+        if case_no:
+            mapping = mapping_manager.get_mapping(case_no)
+            if mapping:
+                # 用映射信息丰富用例数据
+                enriched_case = case.copy()
+                if mapping.case_name and not case.get('caseName'):
+                    enriched_case['caseName'] = mapping.case_name
+                if mapping.script_path and not case.get('scriptPath'):
+                    enriched_case['scriptPath'] = mapping.script_path
+                if mapping.ini_config and not case.get('iniConfig'):
+                    enriched_case['iniConfig'] = mapping.ini_config
+                if mapping.para_config and not case.get('paraConfig'):
+                    enriched_case['paraConfig'] = mapping.para_config
+                enriched_case_list.append(enriched_case)
+                logger.debug(f"[enrich_task_data_from_mappings] 用例已丰富: case_no={case_no}")
+                continue
+
+        # 没有映射，保留原始数据
+        enriched_case_list.append(case)
+
+    task_data['caseList'] = enriched_case_list
+
+    logger.info(f"[enrich_task_data_from_mappings] 任务数据丰富完成: toolType={task_data.get('toolType')}, configPath={task_data.get('configPath')}, cases={len(enriched_case_list)}")
+
+    return task_data
+
+
 def execute_task_async(task_no: str, task_data: Dict[str, Any]):
     """
     异步执行任务
@@ -155,12 +244,37 @@ def execute_task_async(task_no: str, task_data: Dict[str, Any]):
             _update_task_in_queue(task_no, status=TaskStatus.RUNNING.value,
                                   message="任务开始执行", progress=0)
 
+            # 从映射库丰富任务数据
+            enriched_task_data = enrich_task_data_from_mappings(task_data.copy())
+
             executor = _get_executor()
             logger.info(f"[run_task] 获取到执行器: {executor}")
 
-            from models.task import Task
-            task = Task.from_dict(task_data)
-            logger.info(f"[run_task] 构建任务对象: task.task_id={task.task_id}, task.task_type={task.task_type}, task.tool_type={task.tool_type}")
+            # 构建任务对象
+            case_list = []
+            for case_data in enriched_task_data.get('caseList', []):
+                case = Case(
+                    caseName=case_data.get('caseName', ''),
+                    caseType=case_data.get('caseType', 'test_module'),
+                    caseNo=case_data.get('caseNo') or case_data.get('case_no', ''),
+                    dtcInfo=case_data.get('dtcInfo') or case_data.get('dtc_info'),
+                    params=case_data.get('params', {}),
+                    repeat=case_data.get('repeat', 1)
+                )
+                case_list.append(case)
+
+            task = ExecTask(
+                projectNo=enriched_task_data.get('projectNo', ''),
+                taskNo=enriched_task_data.get('taskNo', task_no),
+                taskName=enriched_task_data.get('taskName', ''),
+                caseList=case_list,
+                deviceId=enriched_task_data.get('deviceId'),
+                toolType=enriched_task_data.get('toolType'),
+                configPath=enriched_task_data.get('configPath'),
+                timeout=enriched_task_data.get('timeout', 3600)
+            )
+
+            logger.info(f"[run_task] 构建任务对象: task.task_id={task.task_id}, tool_type={task.tool_type}, configPath={task.config_path}, cases={len(case_list)}")
 
             result = executor.execute_task(task)
             logger.info(f"[run_task] execute_task 返回: {result}, task_id={task.task_id}")

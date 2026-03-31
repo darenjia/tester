@@ -77,14 +77,14 @@ class TaskScheduler:
         # 获取待处理任务
         pending_count = len(task_queue.get_pending_tasks())
         running_count = task_executor.get_running_count()
-        
+
         # 如果有待处理任务且有空闲工作线程
         if pending_count > 0 and running_count < task_executor.max_workers:
             # 获取下一个任务
             task = task_queue.get()
             if task:
-                # 执行任务
-                task_executor.execute_task(task)
+                # 提交任务到执行队列 (使用 submit_task 处理内部格式)
+                task_executor.submit_task(task)
                 
     def _process_scheduled_tasks(self):
         """处理定时任务"""

@@ -5,7 +5,9 @@ TSMaster RPC客户端封装
 """
 
 import logging
-from typing import Optional, List, Tuple
+import time
+import threading
+from typing import Optional, List, Tuple, Callable, Dict, Any
 
 try:
     from TSMasterAPI import *
@@ -18,21 +20,27 @@ except ImportError:
 class TSMasterRPCClient:
     """
     TSMaster RPC客户端
-    
+
     通过共享内存与TSMaster应用程序进行高性能通信
-    
+
     功能：
     - 连接/断开TSMaster应用
     - 启动/停止仿真
     - 读写CAN/LIN/FlexRay信号
     - 读写系统变量
     - 发送报文
+    - 小程序管理
+    - 测试序列执行
     """
-    
+
+    # 默认超时时间（秒）
+    DEFAULT_CONNECT_TIMEOUT = 30
+    DEFAULT_OPERATION_TIMEOUT = 60
+
     def __init__(self, app_name: str = "TSMasterTest"):
         """
         初始化RPC客户端
-        
+
         Args:
             app_name: 应用程序名称，用于初始化TSMaster库
         """
@@ -41,7 +49,17 @@ class TSMasterRPCClient:
         self.connected = False
         self.simulation_running = False
         self._initialized = False
-        
+        self._master_form_started = False
+
+        # 超时配置
+        self.connect_timeout = self.DEFAULT_CONNECT_TIMEOUT
+        self.operation_timeout = self.DEFAULT_OPERATION_TIMEOUT
+
+        # 状态监控
+        self._status_callback: Optional[Callable] = None
+        self._monitor_thread: Optional[threading.Thread] = None
+        self._stop_monitor = threading.Event()
+
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
     def initialize(self) -> bool:
@@ -72,63 +90,73 @@ class TSMasterRPCClient:
             self.logger.error(f"初始化TSMaster库时发生异常: {str(e)}")
             return False
     
-    def connect(self, app_name: Optional[str] = None) -> bool:
+    def connect(self, app_name: Optional[str] = None, timeout: Optional[int] = None) -> bool:
         """
         连接到TSMaster应用程序
-        
+
         Args:
             app_name: 指定要连接的应用程序名称，如果为None则自动发现
-            
+            timeout: 连接超时时间（秒），默认使用实例配置
+
         Returns:
             连接成功返回True，否则返回False
         """
         if not self._initialized:
             if not self.initialize():
                 return False
-        
+
+        timeout = timeout or self.connect_timeout
+        start_time = time.time()
+
         try:
             self.logger.info("正在获取运行中的TSMaster应用程序列表...")
-            
-            namelist = pchar()
-            ret = get_active_application_list(namelist)
-            
-            if ret != 0:
-                self.logger.error(f"获取应用程序列表失败，错误码: {ret}")
-                return False
-            
-            app_list = namelist.value.decode().split(';')
-            app_list = [app for app in app_list if app.strip()]
-            
+
+            # 等待应用启动（带超时重试）
+            app_list = []
+            while time.time() - start_time < timeout:
+                namelist = pchar()
+                ret = get_active_application_list(namelist)
+
+                if ret == 0:
+                    app_list = namelist.value.decode().split(';')
+                    app_list = [app for app in app_list if app.strip()]
+
+                if app_list:
+                    break
+
+                self.logger.debug(f"等待TSMaster应用启动... ({timeout - int(time.time() - start_time)}s remaining)")
+                time.sleep(0.5)
+
             if not app_list:
                 self.logger.error("未发现运行中的TSMaster应用程序")
                 return False
-            
+
             self.logger.info(f"发现运行中的应用程序: {app_list}")
-            
+
             target_app = app_name if app_name else app_list[0]
-            
+
             if target_app not in app_list:
                 self.logger.error(f"指定的应用程序 '{target_app}' 未在运行")
                 return False
-            
+
             self.logger.info(f"正在连接到应用程序: {target_app}")
-            
+
             ret = rpc_tsmaster_create_client(target_app.encode(), self.rpchandle)
-            
+
             if ret != 0:
                 self.logger.error(f"创建RPC客户端失败，错误码: {ret}")
                 return False
-            
+
             ret = rpc_tsmaster_activate_client(self.rpchandle, True)
-            
+
             if ret != 0:
                 self.logger.error(f"激活RPC客户端失败，错误码: {ret}")
                 return False
-            
+
             self.connected = True
             self.logger.info(f"RPC客户端连接成功: {target_app}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"连接TSMaster时发生异常: {str(e)}")
             return False
@@ -136,27 +164,32 @@ class TSMasterRPCClient:
     def disconnect(self) -> bool:
         """
         断开RPC连接
-        
+
         Returns:
             断开成功返回True，否则返回False
         """
         try:
+            # 停止状态监控线程
+            self._stop_monitor.set()
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                self._monitor_thread.join(timeout=5)
+
             if self.connected:
                 self.logger.info("正在断开RPC连接...")
-                
+
                 if self.simulation_running:
                     self.stop_simulation()
-                
+
                 ret = rpc_tsmaster_activate_client(self.rpchandle, False)
-                
+
                 if ret != 0:
                     self.logger.warning(f"停用RPC客户端失败，错误码: {ret}")
-                
+
                 self.connected = False
                 self.logger.info("RPC连接已断开")
-            
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"断开连接时发生异常: {str(e)}")
             return False
@@ -669,7 +702,154 @@ class TSMasterRPCClient:
         except Exception as e:
             self.logger.error(f"获取应用程序列表时发生异常: {str(e)}")
             return []
-    
+
+    def load_project(self, project_path: str) -> bool:
+        """
+        加载TSMaster工程文件
+
+        Args:
+            project_path: 工程文件路径(.tproj)
+
+        Returns:
+            加载成功返回True，否则返回False
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法加载工程")
+            return False
+
+        try:
+            self.logger.info(f"正在加载工程文件: {project_path}")
+            success = self.call_system_api("app.load_project", [project_path])
+            if success:
+                self.logger.info("工程文件加载成功")
+            else:
+                self.logger.error(f"工程文件加载失败: {project_path}")
+            return success
+        except Exception as e:
+            self.logger.error(f"加载工程文件异常: {str(e)}")
+            return False
+
+    def wait_for_simulation_start(self, timeout: Optional[int] = None) -> bool:
+        """
+        等待仿真启动
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            仿真启动成功返回True，超时返回False
+        """
+        timeout = timeout or self.operation_timeout
+        start_time = time.time()
+
+        self.logger.info("等待仿真启动...")
+
+        while time.time() - start_time < timeout:
+            if self.simulation_running:
+                self.logger.info("仿真已启动")
+                return True
+            time.sleep(0.1)
+
+        self.logger.error(f"等待仿真启动超时（{timeout}秒）")
+        return False
+
+    def get_test_result(self, result_type: str = "xml") -> Optional[str]:
+        """
+        获取测试结果
+
+        Args:
+            result_type: 结果类型，"xml" 或 "html"
+
+        Returns:
+            结果文件路径，失败返回None
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法获取测试结果")
+            return None
+
+        try:
+            result_var = f"TestSystem.Result_{result_type.upper()}"
+            result = self.read_system_var(result_var)
+            if result:
+                self.logger.info(f"获取测试结果成功: {result}")
+            return result
+        except Exception as e:
+            self.logger.error(f"获取测试结果异常: {str(e)}")
+            return None
+
+    def get_test_case_count(self) -> Tuple[int, int]:
+        """
+        获取测试用例统计
+
+        Returns:
+            (通过数, 失败数)
+        """
+        try:
+            passed = self.read_system_var("TestSystem.TestCasePassCount") or "0"
+            failed = self.read_system_var("TestSystem.TestCaseFailCount") or "0"
+            return int(passed), int(failed)
+        except Exception as e:
+            self.logger.warning(f"获取测试用例统计失败: {str(e)}")
+            return 0, 0
+
+    def set_status_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
+        """
+        设置状态回调函数
+
+        Args:
+            callback: 回调函数，签名: callback(status: str, data: Dict)
+        """
+        self._status_callback = callback
+        if callback and not self._monitor_thread:
+            self._stop_monitor.clear()
+            self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            self._monitor_thread.start()
+
+    def _monitor_loop(self):
+        """状态监控循环"""
+        while not self._stop_monitor.is_set():
+            try:
+                if self.connected:
+                    # 获取当前仿真状态
+                    sim_status = self.read_system_var("TestSystem.SimulationStatus")
+                    if sim_status:
+                        if self._status_callback:
+                            self._status_callback("simulation_status", {"status": sim_status})
+
+                    # 获取测试进度
+                    if self.simulation_running:
+                        test_status = self.read_system_var("TestSystem.TestStatus")
+                        if test_status and self._status_callback:
+                            self._status_callback("test_status", {"status": test_status})
+            except Exception as e:
+                self.logger.debug(f"状态监控异常: {str(e)}")
+
+            self._stop_monitor.wait(0.5)
+
+    def reset_test_system(self) -> bool:
+        """
+        重置测试系统
+
+        Returns:
+            重置成功返回True，否则返回False
+        """
+        self.logger.info("重置测试系统...")
+        try:
+            # 停止当前测试
+            self.stop_test()
+            time.sleep(0.5)
+            # 重置测试系统变量
+            self.write_system_var("TestSystem.Controller", "0")
+            self.write_system_var("TestSystem.SelectCases", "")
+            self.write_system_var("TestSystem.Reset", "1")
+            time.sleep(0.5)
+            self.write_system_var("TestSystem.Reset", "0")
+            self.logger.info("测试系统已重置")
+            return True
+        except Exception as e:
+            self.logger.error(f"重置测试系统异常: {str(e)}")
+            return False
+
     @property
     def is_connected(self) -> bool:
         """检查是否已连接"""

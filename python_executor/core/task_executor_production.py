@@ -99,6 +99,7 @@ class TaskExecutorProduction:
         Args:
             message_sender: 消息发送函数
         """
+        self.logger = logger  # 实例logger，用于实例方法
         self.message_sender = message_sender
         self.current_task: Optional[Task] = None
         self.current_collector: Optional[ResultCollector] = None
@@ -122,7 +123,7 @@ class TaskExecutorProduction:
         # 上报客户端
         self.report_client = ReportClient(config_manager)
 
-        logger.info("任务执行器（生产环境版）初始化完成")
+        self.logger.info("任务执行器（生产环境版）初始化完成")
     
     def start(self):
         """启动执行器"""
@@ -313,19 +314,27 @@ class TaskExecutorProduction:
                     logger.info(f"配置准备完成: cfg={cfg_path}, ini={ini_path}")
 
             # 3. 尝试从用例映射获取配置路径
+            # 检查是否是TSMaster用例（TSMaster使用ini_config，不需要cfg_path）
+            is_tsmaster_case = False
             if not cfg_path and task.test_items:
                 mapping_manager = get_case_mapping_manager()
                 for test_item in task.test_items:
                     case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None)
                     if case_no:
                         mapping = mapping_manager.get_mapping(case_no)
-                        if mapping and mapping.enabled and mapping.script_path:
-                            cfg_path = mapping.script_path
-                            logger.info(f"从用例映射获取配置路径: case_no={case_no}, cfg_path={cfg_path}")
-                            break
+                        if mapping and mapping.enabled:
+                            # 检查category是否是tsmaster
+                            if mapping.category and mapping.category.lower() == 'tsmaster':
+                                is_tsmaster_case = True
+                                logger.info(f"检测到TSMaster用例: case_no={case_no}, 使用ini_config执行")
+                                break
+                            elif mapping.script_path:
+                                cfg_path = mapping.script_path
+                                logger.info(f"从用例映射获取配置路径: case_no={case_no}, cfg_path={cfg_path}")
+                                break
 
-            # 4. 如果仍然没有配置路径，报错
-            if not cfg_path:
+            # 4. 如果仍然没有配置路径，检查是否是TSMaster用例
+            if not cfg_path and not is_tsmaster_case:
                 raise TaskException("未指定配置文件路径(configPath/configName)，也未找到用例映射，无法执行任务")
 
             # 根据工具类型选择控制器（使用适配器工厂）
@@ -354,10 +363,15 @@ class TaskExecutorProduction:
             self._connect_tool_with_retry(task)
             self._current_metrics.record_step('connect_tool', time.time() - step_start)
 
-            # 加载配置文件
+            # 加载配置文件（TSMaster用例不需要加载.cfg文件）
             step_start = time.time()
-            self._load_configuration_by_path(cfg_path)
-            current_cfg_path = cfg_path  # 记录当前加载的配置路径
+            tool_type_for_load = task.tool_type.lower() if task.tool_type else ""
+            if tool_type_for_load != TestToolType.TSMASTER.value and cfg_path:
+                self._load_configuration_by_path(cfg_path)
+                current_cfg_path = cfg_path  # 记录当前加载的配置路径
+            else:
+                current_cfg_path = ""
+                logger.info("TSMaster用例跳过配置文件加载")
             self._current_metrics.record_step('load_config', time.time() - step_start)
 
             # 启动测量/仿真（对于TSMaster使用完整的测试执行流程）
@@ -594,6 +608,7 @@ class TaskExecutorProduction:
         """
         Build TSMaster test case selection string from task.test_items.
 
+        从用例映射的ini_config获取TSMaster用例选择字符串
         Format: "TG1_TC1=1,TG1_TC2=1" or similar
 
         Args:
@@ -605,18 +620,20 @@ class TaskExecutorProduction:
         if not task.test_items:
             return ""
 
+        mapping_manager = get_case_mapping_manager()
         cases = []
-        for item in task.test_items:
-            # Try to get case identifier from various sources
-            case_id = (
-                getattr(item, 'caseNo', None) or
-                getattr(item, 'case_no', None) or
-                getattr(item, 'name', None)
-            )
-            if case_id:
-                # Format as "case_id=1" for selection
-                cases.append(f"{case_id}=1")
 
+        for item in task.test_items:
+            case_no = getattr(item, 'caseNo', None)
+            if case_no:
+                mapping = mapping_manager.get_mapping(case_no)
+                if mapping and mapping.ini_config:
+                    # ini_config 直接存储 TSMaster 用例选择字符串
+                    # 如 "TG1_TC1=1" 或 "TG1_TC1=1,TG1_TC2=1"
+                    cases.append(mapping.ini_config)
+
+        # 拼接多个 ini_config
+        # 例如：["TG1_TC1=1,TG1_TC2=1", "TG1_TC3=1"] -> "TG1_TC1=1,TG1_TC2=1,TG1_TC3=1"
         return ",".join(cases) if cases else ""
 
     def _execute_test_items(self, task: Task) -> list:
@@ -973,12 +990,12 @@ class TaskExecutorProduction:
                     failed_result = TestResult(
                         name=item_name,
                         type=item_type,
-                        verdict="BLOCK",
+                        verdict="FAIL",
                         error=error_message,
                         details={
                             "case_no": case_no,
-                            "status": "blocked",
-                            "reason": "任务执行失败，用例未能执行"
+                            "status": "failed",
+                            "reason": error_message
                         }
                     )
                     if self.current_collector:

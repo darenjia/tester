@@ -41,8 +41,9 @@ def list_case_mappings():
         manager = get_manager()
 
         category = request.args.get('category')
-        enabled_str = request.args.get('enabled', 'true').lower()
-        enabled_only = enabled_str != 'false'
+        enabled_param = request.args.get('enabled')
+        # No enabled param means show all (no filtering), otherwise filter by enabled status
+        enabled_only = enabled_param is not None and enabled_param.lower() != 'false'
         search = request.args.get('search')
         tags_str = request.args.get('tags')
         tags = tags_str.split(',') if tags_str else None
@@ -1084,19 +1085,41 @@ def start_case_test(case_no: str):
         if not mapping.enabled:
             return jsonify({"success": False, "message": f"用例未启用: {case_no}"}), 400
 
-        if not mapping.script_path:
-            return jsonify({"success": False, "message": f"用例未配置脚本路径: {case_no}"}), 400
+        # 根据category确定toolType
+        category = mapping.category.lower() if mapping.category else 'canoe'
+        tool_type_map = {
+            'canoe': 'CANoe',
+            'tsmaster': 'TSMaster',
+            'ttworkbench': 'TTworkbench',
+            'system': 'System'
+        }
+        tool_type = tool_type_map.get(category, 'CANoe')
 
-        # 验证配置文件路径有效性
-        if not mapping.script_path or not str(mapping.script_path).strip():
-            return jsonify({"success": False, "message": f"用例配置路径无效: {case_no}"}), 400
+        # TSMaster用例不需要script_path，使用ini_config
+        if category == 'tsmaster':
+            logger.info(f"[start_case_test] TSMaster用例不需要脚本路径: case_no={case_no}")
+            script_path = ''
+            config_name = ''
+            base_config_dir = ''
+        else:
+            # CANoe/其他类别需要script_path
+            if not mapping.script_path:
+                return jsonify({"success": False, "message": f"用例未配置脚本路径: {case_no}"}), 400
 
-        # 验证配置文件存在
-        if not os.path.exists(mapping.script_path):
-            logger.warning(f"[start_case_test] 配置文件不存在: {mapping.script_path}")
-            return jsonify({"success": False, "message": f"配置文件不存在: {mapping.script_path}"}), 400
+            # 验证配置文件路径有效性
+            if not mapping.script_path or not str(mapping.script_path).strip():
+                return jsonify({"success": False, "message": f"用例配置路径无效: {case_no}"}), 400
 
-        logger.info(f"[start_case_test] 用例映射信息: case_no={mapping.case_no}, script_path={mapping.script_path}, ini_config={mapping.ini_config}")
+            # 验证配置文件存在
+            if not os.path.exists(mapping.script_path):
+                logger.warning(f"[start_case_test] 配置文件不存在: {mapping.script_path}")
+                return jsonify({"success": False, "message": f"配置文件不存在: {mapping.script_path}"}), 400
+
+            script_path = mapping.script_path
+            config_name = os.path.basename(script_path).replace('.cfg', '')
+            base_config_dir = os.path.dirname(script_path)
+
+        logger.info(f"[start_case_test] 用例映射信息: case_no={mapping.case_no}, category={category}, tool_type={tool_type}, script_path={script_path}, ini_config={mapping.ini_config}")
 
         import uuid
         test_id = f"test_{uuid.uuid4().hex[:8]}"
@@ -1116,15 +1139,12 @@ def start_case_test(case_no: str):
         from api.task_executor import execute_task_async, _get_executor
         from models.task import Task
 
-        config_name = os.path.basename(mapping.script_path).replace('.cfg', '')
-        base_config_dir = os.path.dirname(mapping.script_path)
-
         task_data = {
             'taskNo': test_id,
             'projectNo': 'TEST',
             'taskName': f'单用例测试-{case_no}',
-            'toolType': 'CANoe',
-            'configPath': mapping.script_path,
+            'toolType': tool_type,
+            'configPath': script_path,
             'configName': config_name,
             'caseList': [
                 {
@@ -1136,6 +1156,9 @@ def start_case_test(case_no: str):
             'baseConfigDir': base_config_dir,
             'timeout': 300
         }
+        # TSMaster使用ini_config
+        if category == 'tsmaster' and mapping.ini_config:
+            task_data['iniConfig'] = mapping.ini_config
         logger.info(f"[start_case_test] 任务数据: {task_data}")
 
         # 检查执行器状态

@@ -193,7 +193,7 @@ class TaskQueue:
                 self._queue.clear()
 
                 now = datetime.now()
-                retention_days = 7
+                retention_days = 30
 
                 for task_id, task_data in data.get('tasks', {}).items():
                     try:
@@ -336,25 +336,40 @@ class TaskQueue:
             是否添加成功
         """
         with self._lock:
-            # 确保任务有有效的ID
-            if task.id is None:
-                task.id = str(uuid.uuid4())
-                logger.info(f"为任务生成新ID: {task.id}")
+            # 获取任务ID（兼容executor_task.Task和models.task.Task两种格式）
+            task_id = getattr(task, 'id', None) or getattr(task, 'task_id', None)
 
-            if task.id in self._task_map:
+            # 确保任务有有效的ID
+            if task_id is None:
+                task_id = str(uuid.uuid4())
+                # 尝试设置到task对象上（如果对象支持）
+                if hasattr(task, 'id') and getattr(task, 'id', None) is None:
+                    task.id = task_id
+                elif hasattr(task, 'task_id'):
+                    task.task_id = task_id
+                logger.info(f"为任务生成新ID: {task_id}")
+            else:
+                # 如果task对象用的是task_id但没有id属性，将task_id同步到id
+                if not hasattr(task, 'id') or getattr(task, 'id', None) is None:
+                    if hasattr(task, 'id'):
+                        task.id = task_id
+
+            if task_id in self._task_map:
                 if not overwrite:
                     return False
 
                 # 覆盖模式：移除旧任务
-                old_task = self._task_map[task.id]
+                old_task = self._task_map[task_id]
                 if old_task in self._queue:
                     self._queue.remove(old_task)
-                logger.info(f"覆盖已存在的任务: {task.id}")
+                logger.info(f"覆盖已存在的任务: {task_id}")
 
-            # 按优先级插入队列
+            # 按优先级插入队列（兼容没有priority属性的任务）
             inserted = False
+            task_priority = getattr(task, 'priority', 0)
             for i, existing_task in enumerate(self._queue):
-                if task.priority > existing_task.priority:
+                existing_priority = getattr(existing_task, 'priority', 0)
+                if task_priority > existing_priority:
                     self._queue.insert(i, task)
                     inserted = True
                     break
@@ -362,7 +377,7 @@ class TaskQueue:
             if not inserted:
                 self._queue.append(task)
 
-            self._task_map[task.id] = task
+            self._task_map[task_id] = task
 
         self._save()
         return True
@@ -441,10 +456,10 @@ class TaskQueue:
     def get_tasks_by_status(self, status: str) -> List[Task]:
         """
         获取指定状态的所有任务
-        
+
         Args:
             status: 任务状态
-            
+
         Returns:
             任务列表
         """
