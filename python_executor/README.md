@@ -113,13 +113,22 @@ python app.py
 
 ## 可观测性
 
+内部执行链路目前已经收成：
+
+- WebSocket / 平台任务先进入入口层
+- 入口层通过 `TaskCompiler` 编译成内部 `ExecutionPlan`
+- `TaskExecutorProduction` 只消费内部执行计划
+- 外部 API / 队列展示模型继续独立保留
+
 当前任务执行生命周期会按以下阶段流转：
 
 - `received`
 - `validated`
+- `compiled`
 - `queued`
 - `preparing`
 - `executing`
+- `collecting`
 - `reporting`
 - `finished`
 

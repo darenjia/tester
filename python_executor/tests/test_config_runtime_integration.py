@@ -414,6 +414,10 @@ def test_readme_mentions_only_config_json():
     assert "config.json" in readme
     assert "executor_config.json" not in readme
     assert "received" in readme
+    assert "compiled" in readme
+    assert "collecting" in readme
+    assert "TaskCompiler" in readme
+    assert "ExecutionPlan" in readme
     assert "/health" in readme
     assert "/metrics" in readme
 
