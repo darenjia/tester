@@ -12,7 +12,7 @@ python_executor/
 ├── config/
 │   ├── settings.py          # 配置文件管理
 │   ├── config_manager.py    # 配置热更新管理
-│   └── executor_config.json # 自定义配置文件（可选）
+│   └── unified_config.py    # 统一配置实现（读取根目录 config.json）
 ├── core/
 │   ├── task_executor.py           # 任务执行核心引擎（标准版）
 │   ├── task_executor_production.py # 任务执行引擎（生产环境版）
@@ -82,13 +82,22 @@ python app.py
 ```
 
 ### 配置文件
-创建 `config/executor_config.json` 自定义配置：
+项目统一使用根目录下的 `config.json` 作为唯一配置入口：
 ```json
 {
-    "websocket_port": 8180,
-    "log_level": "INFO",
-    "task_timeout": 3600,
-    "canoe_timeout": 30
+    "websocket": {
+        "port": 8180,
+        "host": "0.0.0.0"
+    },
+    "logging": {
+        "level": "INFO"
+    },
+    "task": {
+        "timeout": 3600
+    },
+    "canoe": {
+        "timeout": 30
+    }
 }
 ```
 
@@ -101,6 +110,24 @@ python app.py
 - **HEARTBEAT**：心跳检测
 
 执行器会自动处理任务执行，并实时上报状态和结果。
+
+## 可观测性
+
+当前任务执行生命周期会按以下阶段流转：
+
+- `received`
+- `validated`
+- `queued`
+- `preparing`
+- `executing`
+- `reporting`
+- `finished`
+
+监控接口说明：
+
+- `/health`：返回服务健康状态和业务健康摘要，例如当前排队数、活跃任务数、最近失败任务数
+- `/status`：返回运行状态、当前任务信息和业务摘要
+- `/metrics`：返回原始指标、性能报告和业务执行摘要
 
 ## 开发文档
 

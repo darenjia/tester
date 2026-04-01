@@ -16,8 +16,7 @@ from utils.retry import retry_with_config, RetryConfig, CircuitBreaker
 from utils.validators import InputValidator, ValidationError
 from utils.metrics import TaskMetrics, performance_monitor, record_metric
 from utils.report_client import ReportClient
-from config.settings import settings
-from config.config_manager import config_manager
+from config.settings import get_config as get_runtime_config
 from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
 from models.result import CaseResult, ExecutionResult
 from models.executor_task import task_queue as global_task_queue, TaskStatus as ExecutorTaskStatus
@@ -25,9 +24,32 @@ from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
 from core.adapters import create_adapter_with_wrapper, TestToolType
 from core.case_mapping_manager import get_case_mapping_manager
+from core.execution_observability import (
+    ExecutionLifecycleStage,
+    get_execution_observability_manager,
+)
 from core.status_monitor import get_status_monitor
 
 logger = get_logger("task_executor_production")
+
+
+def _get_runtime_config_manager():
+    """Return the active facade-backed config manager."""
+    return get_runtime_config()
+
+
+def _ensure_observability_context(task: Task):
+    """Ensure direct executor/reporting calls still have an observability context."""
+    observability_manager = get_execution_observability_manager()
+    try:
+        observability_manager.get_snapshot(task.task_id)
+    except KeyError:
+        observability_manager.create_context(
+            task_no=task.task_id,
+            device_id=getattr(task, "deviceId", None) or getattr(task, "device_id", "") or "",
+            tool_type=getattr(task, "toolType", None) or getattr(task, "tool_type", "") or "",
+        )
+    return observability_manager
 
 # 任务执行熔断器
 TASK_CIRCUIT_BREAKER = CircuitBreaker(
@@ -122,7 +144,7 @@ class TaskExecutorProduction:
         self.config_manager: Optional[TestConfigManager] = None
 
         # 上报客户端
-        self.report_client = ReportClient(config_manager)
+        self.report_client = ReportClient()
 
         self.logger.info("任务执行器（生产环境版）初始化完成")
     
@@ -266,10 +288,17 @@ class TaskExecutorProduction:
         # 初始化性能指标
         self._current_metrics = TaskMetrics(task.task_id)
         self._task_queue.mark_processing(task.task_id, task)
+        observability_manager = _ensure_observability_context(task)
 
         try:
             logger.info(f"开始执行任务: {task.task_id}")
             self._current_metrics.record_step('start', 0)
+            observability_manager.transition(task.task_id, ExecutionLifecycleStage.PREPARING)
+            record_metric(
+                'task.preparing',
+                1,
+                {'task_no': task.task_id, 'tool_type': task.tool_type or ''},
+            )
 
             # 初始化结果收集器
             self.current_collector = ResultCollector(task.task_id)
@@ -291,7 +320,10 @@ class TaskExecutorProduction:
             elif task.config_name or task.base_config_dir:
                 self.current_collector.add_log("INFO", "正在准备测试配置...")
 
-                base_dir = task.base_config_dir or settings.config_base_dir
+                base_dir = task.base_config_dir or _get_runtime_config_manager().get(
+                    'config_base_dir',
+                    r'D:\TAMS\DTTC_CONFIG',
+                )
                 logger.info(f"[_execute_task_production] base_dir={base_dir}, config_name={task.config_name}")
                 self.config_manager = TestConfigManager(base_config_dir=base_dir)
 
@@ -378,6 +410,12 @@ class TaskExecutorProduction:
             # 启动测量/仿真（对于TSMaster使用完整的测试执行流程）
             step_start = time.time()
             tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+            observability_manager.transition(task.task_id, ExecutionLifecycleStage.EXECUTING)
+            record_metric(
+                'task.executing',
+                1,
+                {'task_no': task.task_id, 'tool_type': task.tool_type or ''},
+            )
             if tool_type_lower == TestToolType.TSMASTER.value:
                 # TSMaster 使用 RPC 批量执行，已在 _start_test_execution 中完成所有用例执行
                 # 不需要再调用 _execute_test_items（会导致双重执行）
@@ -459,8 +497,9 @@ class TaskExecutorProduction:
     
     def _connect_tool_with_retry(self, task: Task):
         """带重试的连接工具"""
-        max_retries = config_manager.get('canoe.max_retries', 3)
-        retry_delay = config_manager.get('canoe.retry_delay', 2.0)
+        runtime_config = _get_runtime_config_manager()
+        max_retries = runtime_config.get('canoe.max_retries', 3)
+        retry_delay = runtime_config.get('canoe.retry_delay', 2.0)
         
         for attempt in range(max_retries):
             try:
@@ -826,7 +865,10 @@ class TaskExecutorProduction:
         self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
 
         # 初始化配置管理器（用于生成ini）
-        base_dir = task.base_config_dir or settings.config_base_dir
+        base_dir = task.base_config_dir or _get_runtime_config_manager().get(
+            'config_base_dir',
+            r'D:\TAMS\DTTC_CONFIG',
+        )
         logger.info(f"[_execute_test_items_with_config] base_dir={base_dir}")
         test_config_manager = TestConfigManager(base_config_dir=base_dir)
 
@@ -1041,6 +1083,13 @@ class TaskExecutorProduction:
     def _complete_task(self, task: Task, results: list):
         """完成任务"""
         duration = time.time() - self._start_time
+        observability_manager = _ensure_observability_context(task)
+        observability_manager.transition(task.task_id, ExecutionLifecycleStage.REPORTING)
+        record_metric(
+            'task.reporting',
+            1,
+            {'task_no': task.task_id, 'tool_type': task.tool_type or ''},
+        )
 
         logger.info(f"任务执行完成: {task.task_id}, 耗时: {duration:.1f}秒")
 
@@ -1060,6 +1109,18 @@ class TaskExecutorProduction:
     def _fail_task(self, task: Task, error_message: str):
         """任务失败"""
         logger.error(f"任务失败: {task.task_id}, 错误: {error_message}")
+        observability_manager = get_execution_observability_manager()
+        observability_manager.fail(
+            task.task_id,
+            error_code="TASK_FAILED",
+            error_message=error_message,
+            retryable=False,
+        )
+        record_metric(
+            'task.failed',
+            1,
+            {'task_no': task.task_id, 'stage': observability_manager.get_snapshot(task.task_id).get('failed_stage') or ''},
+        )
 
         # 为所有未执行的测试项生成失败结果
         if task.test_items:
@@ -1359,13 +1420,35 @@ class TaskExecutorProduction:
 
             if success:
                 logger.info(f"[_report_to_remote] 任务结果上报成功: {task.task_id}")
+                record_metric('task.report.success', 1, {'task_no': task.task_id})
             else:
                 logger.warning(f"[_report_to_remote] 任务结果上报失败: {task.task_id}")
+                record_metric('task.report.failure', 1, {'task_no': task.task_id})
                 # 上报失败时持久化以便后续重试
                 self._persist_failed_report(report_data, task)
 
+            _ensure_observability_context(task).finish(
+                task.task_id,
+                report_status='success' if success else 'failed',
+            )
+            record_metric(
+                'task.finished',
+                1,
+                {'task_no': task.task_id, 'status': 'success' if success else 'failed'},
+            )
+
         except Exception as e:
             logger.error(f"[_report_to_remote] 远端上报任务结果时出错: {e}", exc_info=True)
+            record_metric('task.report.failure', 1, {'task_no': task.task_id})
+            _ensure_observability_context(task).finish(
+                task.task_id,
+                report_status='failed',
+            )
+            record_metric(
+                'task.finished',
+                1,
+                {'task_no': task.task_id, 'status': 'failed'},
+            )
             # 异常时也持久化
             if 'report_data' in locals():
                 self._persist_failed_report(report_data, task)
@@ -1420,73 +1503,18 @@ class TaskExecutorProduction:
         Returns:
             文件URL，上传失败返回None
         """
-        import os
-        import requests
-
         logger.info(f"[_upload_report_file] 开始处理文件: {file_path}")
 
-        file_upload_url = "http://10.124.11.142:8204/upload"
-
-        # 检查文件是否存在（使用线程超时保护）
-        try:
-            if not os.path.exists(file_path):
-                logger.error(f"[_upload_report_file] 文件不存在: {file_path}")
-                return None
-        except Exception as e:
-            logger.error(f"[_upload_report_file] 检查文件存在性失败: {e}")
+        report_client = getattr(self, 'report_client', None)
+        if report_client is None:
+            logger.error("[_upload_report_file] ReportClient 未初始化")
             return None
 
+        if hasattr(report_client, 'reload_config'):
+            report_client.reload_config()
+
         try:
-            file_name = os.path.basename(file_path)
-
-            # 检查文件是否可读（添加超时保护）
-            try:
-                file_size = os.path.getsize(file_path)
-            except Exception as e:
-                logger.error(f"[_upload_report_file] 获取文件大小失败: {e}")
-                return None
-
-            logger.info(f"[_upload_report_file] 开始上传文件: {file_name} ({file_size} bytes)")
-
-            # 读取文件内容到内存，避免文件句柄长时间占用
-            try:
-                with open(file_path, 'rb') as f:
-                    file_content = f.read()
-            except Exception as e:
-                logger.error(f"[_upload_report_file] 读取文件失败: {e}")
-                return None
-
-            # 上传文件内容（设置较短超时）
-            try:
-                response = requests.post(
-                    file_upload_url,
-                    files={'file': (file_name, file_content)},
-                    timeout=30
-                )
-            except requests.exceptions.Timeout:
-                logger.error(f"[_upload_report_file] 文件上传请求超时: {file_path}")
-                return None
-            except requests.exceptions.ConnectionError as e:
-                logger.error(f"[_upload_report_file] 连接文件服务器失败: {e}")
-                return None
-
-            logger.info(f"[_upload_report_file] 响应状态码: {response.status_code}")
-
-            if response.status_code == 200:
-                try:
-                    response_json = response.json()
-                    if response_json.get('code') == 200 and 'data' in response_json:
-                        file_url = response_json['data'].get('url')
-                        if file_url:
-                            logger.info(f"[_upload_report_file] 文件上传成功: {file_name} -> {file_url}")
-                            return file_url
-                except ValueError:
-                    # 响应不是JSON格式，尝试直接获取URL
-                    if response.text:
-                        logger.info(f"[_upload_report_file] 文件上传响应: {response.text[:200]}")
-            logger.error(f"[_upload_report_file] 文件上传失败: {file_name}, response: {response.text[:200] if response.text else 'empty'}")
-            return None
-
+            return report_client.upload_report_file(file_path)
         except Exception as e:
             logger.error(f"[_upload_report_file] 文件上传异常: {e}", exc_info=True)
             return None
@@ -1501,36 +1529,16 @@ class TaskExecutorProduction:
         Returns:
             是否成功
         """
-        import requests
+        report_client = getattr(self, 'report_client', None)
+        if report_client is None:
+            logger.error("[_do_report_direct] ReportClient 未初始化")
+            return False
 
-        # 上报URL
-        result_api_url = "http://10.124.11.142:8315/api/python/report"
+        if hasattr(report_client, 'reload_config'):
+            report_client.reload_config()
 
         try:
-            logger.info(f"[_do_report_direct] 发送上报请求: {result_api_url}")
-
-            response = requests.post(
-                result_api_url,
-                json=report_data,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-
-            logger.info(f"[_do_report_direct] 响应状态码: {response.status_code}")
-            logger.info(f"[_do_report_direct] 响应内容: {response.text[:500] if len(response.text) > 500 else response.text}")
-
-            if response.status_code == 200:
-                return True
-            else:
-                logger.error(f"[_do_report_direct] 上报失败: {response.status_code} - {response.text}")
-                return False
-
-        except requests.exceptions.Timeout:
-            logger.error(f"[_do_report_direct] 上报超时")
-            return False
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"[_do_report_direct] 连接失败: {e}")
-            return False
+            return report_client.report_payload(report_data)
         except Exception as e:
             logger.error(f"[_do_report_direct] 上报异常: {e}")
             return False

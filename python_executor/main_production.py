@@ -18,15 +18,22 @@ from functools import wraps
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
-from config.settings import settings
-from config.config_manager import config_manager
+from config.settings import get_config as get_runtime_config
 from utils.logger import get_logger, setup_logging
 from utils.exceptions import ExecutorException
-from utils.metrics import performance_monitor, metric_collector
+from utils.metrics import (
+    build_business_metrics_summary,
+    metric_collector,
+    performance_monitor,
+    record_metric,
+)
 from utils.validators import InputValidator, ValidationError
-from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus, task_queue
 from models.task import Task as ExecTask, TaskStatus as ExecTaskStatus, Case
 from models.result import Message, StatusUpdate, LogEntry
+from core.execution_observability import (
+    ExecutionLifecycleStage,
+    get_execution_observability_manager,
+)
 from core.task_executor_production import TaskExecutorProduction
 from core.status_monitor import get_status_monitor, ConnectionStatus
 
@@ -47,6 +54,21 @@ print("正在设置日志...")
 setup_logging()
 logger = get_logger()
 print("日志设置完成")
+
+
+def _get_config_manager():
+    """Return the active facade-backed config manager."""
+    return get_runtime_config()
+
+
+class _ConfigManagerProxy:
+    """Compatibility proxy that forwards to the active config manager."""
+
+    def __getattr__(self, name):
+        return getattr(_get_config_manager(), name)
+
+
+config_manager = _ConfigManagerProxy()
 
 class PythonExecutorProduction:
     """Python执行器主类 - 生产环境版本"""
@@ -80,7 +102,7 @@ class PythonExecutorProduction:
         
         # 启动配置监控
         config_manager.start_watcher(interval=5.0)
-        
+
         # 启动性能监控
         if config_manager.get('performance.monitor_enabled', True):
             performance_monitor.start(interval=config_manager.get('performance.monitor_interval', 60.0))
@@ -128,12 +150,21 @@ class PythonExecutorProduction:
         @self.app.route('/health')
         def health_check():
             """健康检查"""
+            business_summary = get_execution_observability_manager().get_business_summary()
+            config_valid = len(config_manager.validate_config()) == 0
+            business_healthy = business_summary.get('recent_failed_count', 0) == 0
             health_result = {
-                'status': 'healthy',
+                'status': 'healthy' if config_valid and business_healthy else 'degraded',
                 'timestamp': datetime.now().isoformat(),
                 'clients': len(self.clients),
                 'current_task': None,
-                'config_valid': len(config_manager.validate_config()) == 0
+                'config_valid': config_valid,
+                'business_health': {
+                    'healthy': business_healthy,
+                    'queued_count': business_summary.get('queued_count', 0),
+                    'active_count': business_summary.get('active_count', 0),
+                    'recent_failed_count': business_summary.get('recent_failed_count', 0),
+                },
             }
             
             try:
@@ -152,7 +183,8 @@ class PythonExecutorProduction:
                 'running': self.running,
                 'uptime': time.time() - getattr(self, 'start_time', time.time()),
                 'current_task': None,
-                'metrics': None
+                'metrics': None,
+                'business_summary': {},
             }
             
             try:
@@ -165,6 +197,13 @@ class PythonExecutorProduction:
                 status_result['metrics'] = performance_monitor.get_metrics_report()
             except Exception as e:
                 logger.warning(f"获取性能指标失败: {e}")
+
+            try:
+                status_result['business_summary'] = (
+                    get_execution_observability_manager().get_business_summary()
+                )
+            except Exception as e:
+                logger.warning(f"获取业务状态摘要失败: {e}")
             
             return status_result
         
@@ -174,7 +213,8 @@ class PythonExecutorProduction:
             metrics_result = {
                 'timestamp': datetime.now().isoformat(),
                 'metrics': {},
-                'performance': None
+                'performance': None,
+                'business_summary': {},
             }
             
             try:
@@ -186,6 +226,14 @@ class PythonExecutorProduction:
                 metrics_result['performance'] = performance_monitor.get_metrics_report()
             except Exception as e:
                 logger.warning(f"获取性能报告失败: {e}")
+
+            try:
+                observability_summary = get_execution_observability_manager().get_business_summary()
+                metrics_result['business_summary'] = build_business_metrics_summary(
+                    observability_summary
+                )
+            except Exception as e:
+                logger.warning(f"获取业务指标摘要失败: {e}")
             
             return metrics_result
         
@@ -335,32 +383,26 @@ class PythonExecutorProduction:
                 'deviceId': message.deviceId
             })
 
+            observability_manager = get_execution_observability_manager()
+            tool_type_hint = task_data.get("toolType") or ""
+            execution_context = observability_manager.create_context(
+                task_no=message.taskNo,
+                device_id=message.deviceId or "",
+                tool_type=str(tool_type_hint).lower(),
+            )
+            record_metric("task.received", 1, {"task_no": message.taskNo})
+
             # 验证输入
             validated_data = InputValidator.validate_task_data(task_data)
+            observability_manager.transition(message.taskNo, ExecutionLifecycleStage.VALIDATED)
+            record_metric("task.validated", 1, {"task_no": message.taskNo})
 
             # 从映射库丰富任务数据（优先使用映射库中的配置）
             from core.case_mapping_manager import get_case_mapping_manager
             mapping_manager = get_case_mapping_manager()
 
             # 确定tool_type
-            tool_type = validated_data.get('toolType')
-            if not tool_type:
-                tool_types = set()
-                for item in validated_data.get('testItems', []):
-                    case_no = item.get('case_no') or item.get('caseNo')
-                    if case_no:
-                        mapping = mapping_manager.get_mapping(case_no)
-                        if mapping and mapping.category:
-                            tool_types.add(mapping.category.lower())
-
-                if len(tool_types) == 1:
-                    tool_type = list(tool_types)[0]
-                    validated_data['toolType'] = tool_type
-                    logger.info(f"从映射库确定toolType: {tool_type}")
-                elif len(tool_types) > 1:
-                    tool_type = list(tool_types)[0]
-                    validated_data['toolType'] = tool_type
-                    logger.warning(f"多种tool_type: {tool_types}，使用第一个: {tool_type}")
+            self._resolve_dispatch_tool_type(validated_data, mapping_manager)
 
             # 获取configPath（如果请求中没有指定）
             config_path = validated_data.get('configPath')
@@ -415,18 +457,6 @@ class PythonExecutorProduction:
                 timeout=validated_data.get('timeout', 3600)
             )
 
-            # 同时创建 ExecutorTask (executor_task.py) 用于队列管理
-            executor_task = ExecutorTask(
-                id=validated_data.get('taskNo'),
-                name=validated_data.get('taskName') or validated_data.get('taskNo', '未命名任务'),
-                task_type=validated_data.get('toolType', 'default'),
-                params=validated_data,
-                timeout=validated_data.get('timeout', 3600)
-            )
-
-            # 添加到全局任务队列
-            task_queue.add(executor_task)
-
             # 初始化任务执行器（如果还没初始化）
             if not self.task_executor:
                 self.task_executor = TaskExecutorProduction(
@@ -438,6 +468,10 @@ class PythonExecutorProduction:
             success = self.task_executor.execute_task(exec_task)
 
             if success:
+                if not execution_context.tool_type:
+                    execution_context.tool_type = validated_data.get("toolType") or ""
+                observability_manager.transition(message.taskNo, ExecutionLifecycleStage.QUEUED)
+                record_metric("task.queued", 1, {"task_no": message.taskNo})
                 logger.info(f"任务已加入队列: {exec_task.task_id}")
                 emit('task_response', {
                     'taskNo': exec_task.task_id,
@@ -455,17 +489,75 @@ class PythonExecutorProduction:
                 })
                 
         except ValidationError as e:
+            try:
+                observability_manager = get_execution_observability_manager()
+                if message.taskNo in observability_manager._contexts:
+                    observability_manager.fail(
+                        message.taskNo,
+                        error_code="TASK_VALIDATION_FAILED",
+                        error_message=str(e),
+                        retryable=False,
+                    )
+                    record_metric(
+                        "task.failed",
+                        1,
+                        {"task_no": message.taskNo, "stage": "validated"},
+                    )
+            except Exception:
+                logger.warning("记录任务校验失败观测信息失败", exc_info=True)
             logger.error(f"任务数据验证失败: {e}")
             emit('error', {
                 'error': f"任务数据验证失败: {e}",
                 'timestamp': int(time.time() * 1000)
             })
         except Exception as e:
+            try:
+                observability_manager = get_execution_observability_manager()
+                if message.taskNo in observability_manager._contexts:
+                    observability_manager.fail(
+                        message.taskNo,
+                        error_code="TASK_DISPATCH_FAILED",
+                        error_message=str(e),
+                        retryable=False,
+                    )
+                    record_metric(
+                        "task.failed",
+                        1,
+                        {"task_no": message.taskNo, "stage": "received"},
+                    )
+            except Exception:
+                logger.warning("记录任务下发失败观测信息失败", exc_info=True)
             logger.error(f"处理任务下发失败: {e}")
             emit('error', {
                 'error': f"任务下发失败: {e}",
                 'timestamp': int(time.time() * 1000)
             })
+
+    def _resolve_dispatch_tool_type(self, validated_data: Dict[str, Any], mapping_manager) -> None:
+        """根据请求或映射库确定任务工具类型。"""
+        tool_type = validated_data.get('toolType')
+        if tool_type:
+            validated_data['toolType'] = tool_type.lower()
+            return
+
+        tool_types = set()
+        for item in validated_data.get('testItems', []):
+            case_no = item.get('case_no') or item.get('caseNo')
+            if case_no:
+                mapping = mapping_manager.get_mapping(case_no)
+                if mapping and mapping.category:
+                    tool_types.add(mapping.category.lower())
+
+        if len(tool_types) == 1:
+            tool_type = next(iter(tool_types))
+            validated_data['toolType'] = tool_type
+            logger.info(f"从映射库确定toolType: {tool_type}")
+            return
+
+        if len(tool_types) > 1:
+            raise ValidationError(
+                f"任务包含多个工具类型，无法下发: {', '.join(sorted(tool_types))}"
+            )
     
     def _handle_task_cancel(self, message: Message, client_sid: str):
         """处理任务取消"""

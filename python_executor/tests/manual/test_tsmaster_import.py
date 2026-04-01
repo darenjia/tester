@@ -4,6 +4,10 @@ TSMasterAPI 导入验证测试
 import os
 import sys
 
+import pytest
+
+pytestmark = pytest.mark.skip(reason="manual script; run directly instead of under pytest")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 

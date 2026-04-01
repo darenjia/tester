@@ -80,6 +80,11 @@ class MetricCollector:
             'median': statistics.median(values),
             'stdev': statistics.stdev(values) if len(values) > 1 else 0
         }
+
+    def get_metric_count(self, metric_name: str) -> int:
+        """获取指定指标当前已记录的点数。"""
+        with self._lock:
+            return len(self.metrics.get(metric_name, []))
     
     def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
         """获取所有指标信息"""
@@ -275,6 +280,17 @@ metric_collector = MetricCollector()
 def record_metric(metric_name: str, value: float, labels: Dict[str, str] = None):
     """记录指标的全局函数"""
     metric_collector.record(metric_name, value, labels)
+
+
+def build_business_metrics_summary(observability_summary: Dict[str, Any]) -> Dict[str, Any]:
+    """构建业务指标摘要，供 /metrics 等接口直接返回。"""
+    return {
+        "queued_count": observability_summary.get("queued_count", 0),
+        "active_count": observability_summary.get("active_count", 0),
+        "recent_failed_count": observability_summary.get("recent_failed_count", 0),
+        "report_success_count": metric_collector.get_metric_count("task.report.success"),
+        "report_failure_count": metric_collector.get_metric_count("task.report.failure"),
+    }
 
 def get_metric_stats(metric_name: str) -> Dict[str, float]:
     """获取指标统计的全局函数"""

@@ -25,6 +25,7 @@ from .com_wrapper import CANoeCOMWrapper, DeviceInfo, CANoeError
 
 class TestStatus(Enum):
     """测试状态"""
+    __test__ = False
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
@@ -36,6 +37,7 @@ class TestStatus(Enum):
 
 class TestCaseType(Enum):
     """测试用例类型"""
+    __test__ = False
     EXPLICIT = "explicit"  # 显性用例
     IMPLICIT = "implicit"  # 隐性用例
 
@@ -50,6 +52,7 @@ class TestVerdict(Enum):
     - 2: FAIL - 失败
     - 3: INCONCLUSIVE - 不确定
     """
+    __test__ = False
     NONE = 0
     PASS = 1
     FAIL = 2
@@ -94,6 +97,7 @@ class TestVerdict(Enum):
 @dataclass
 class TestCaseResult:
     """测试用例结果"""
+    __test__ = False
     name: str
     case_type: TestCaseType
     status: TestStatus
@@ -120,6 +124,7 @@ class TestCaseResult:
 @dataclass
 class TestExecutionResult:
     """测试执行结果"""
+    __test__ = False
     status: TestStatus
     device_info: DeviceInfo = field(default_factory=DeviceInfo)
     explicit_results: List[TestCaseResult] = field(default_factory=list)

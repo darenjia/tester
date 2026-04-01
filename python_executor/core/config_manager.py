@@ -28,6 +28,7 @@ class TestConfigManager:
     用于准备和管理测试配置文件（cfg和ini）
     支持配置缓存，提高加载效率
     """
+    __test__ = False
 
     def __init__(self, base_config_dir: str = None, use_cache: bool = True):
         """
