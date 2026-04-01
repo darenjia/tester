@@ -112,8 +112,14 @@
 <script>
     // 加载配置
     async function loadConfig() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
         try {
-            const response = await fetch('/api/config');
+            const response = await fetch('/api/config', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             const result = await response.json();
             
             if (result.success) {
@@ -134,15 +140,26 @@
             }
             return result;
         } catch (error) {
-            console.error('加载配置失败:', error);
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                console.warn('加载配置超时');
+            } else {
+                console.error('加载配置失败:', error);
+            }
             throw error;
         }
     }
     
     // 更新仪表盘数据
     async function updateDashboard() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
         try {
-            const response = await fetch('/api/status');
+            const response = await fetch('/api/status', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             const result = await response.json();
 
             if (result.success) {
@@ -182,7 +199,12 @@
             }
             return result;
         } catch (error) {
-            console.error('更新仪表盘失败:', error);
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                console.warn('更新仪表盘超时');
+            } else {
+                console.error('更新仪表盘失败:', error);
+            }
             // 如果 API 请求失败，保持之前的 HTTP 状态
             // 因为页面能加载说明 HTTP 服务是正常的
         }
@@ -437,8 +459,14 @@
     
     // 获取Dashboard状态（包含缓存和上报状态）
     async function loadDashboardStatus() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
         try {
-            const response = await fetch('/api/dashboard/status');
+            const response = await fetch('/api/dashboard/status', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             const result = await response.json();
 
             if (result.success) {
@@ -450,22 +478,40 @@
                 }
             }
 
-            // 获取上报队列状态
-            try {
-                const queueResponse = await fetch('/api/report-retry/status');
-                const queueResult = await queueResponse.json();
-                if (queueResult.success) {
-                    // 将队列状态附加到report数据
-                    updateReportStatus({
-                        enabled: result.data?.report?.enabled ?? true,
-                        queue_status: queueResult.data
-                    });
-                }
-            } catch (e) {
+            // 获取上报队列状态（独立请求，也有超时保护）
+            loadRetryQueueStatus();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                console.warn('获取Dashboard状态超时');
+            } else {
+                console.error('加载Dashboard状态失败:', error);
+            }
+        }
+    }
+
+    // 单独获取重试队列状态（避免一个请求失败影响另一个）
+    async function loadRetryQueueStatus() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        try {
+            const queueResponse = await fetch('/api/report-retry/status', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            const queueResult = await queueResponse.json();
+            if (queueResult.success) {
+                updateReportStatus({
+                    enabled: true,
+                    queue_status: queueResult.data
+                });
+            }
+        } catch (e) {
+            clearTimeout(timeoutId);
+            if (e.name !== 'AbortError') {
                 console.warn('获取上报队列状态失败:', e);
             }
-        } catch (error) {
-            console.error('加载Dashboard状态失败:', error);
         }
     }
     

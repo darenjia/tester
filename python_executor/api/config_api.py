@@ -499,8 +499,7 @@ def update_category_ini_config_rules():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
 
         # 更新配置
-        config_manager.set('category_ini_config_rules', data)
-        config_manager.save()
+        config_manager.set('category_ini_config_rules', data, persist=True)
 
         return jsonify({
             "success": True,

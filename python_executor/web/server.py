@@ -393,7 +393,7 @@ def register_routes(app: Flask):
             # 获取上报状态
             try:
                 report_client = get_report_client()
-                report_client.reload_config()
+                # report_client.reload_config()  # 注释掉：每次dashboard/status请求都会重新加载配置，造成性能问题
                 report_enabled = config.get('report_server.enabled', False)
                 report_status = {
                     'enabled': report_enabled,
@@ -497,4 +497,5 @@ def register_routes(app: Flask):
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    # use_reloader=False 禁用自动重载，避免 Windows 上的 socket 错误
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)

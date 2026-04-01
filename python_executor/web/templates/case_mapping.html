@@ -1403,6 +1403,7 @@
     function showImportModal() {
         document.getElementById('excel-import-overlay').style.display = 'flex';
         resetExcelImportState();
+        loadIniConfigRules();  // 加载最新的规则配置
     }
 
     function resetExcelImportState() {
@@ -1879,6 +1880,23 @@
     }
 
     let currentRulesConfig = {};
+    let selectedRuleCategory = '';
+
+    // 预设规则定义
+    const PRESET_RULES = {
+        'canoe': {
+            pattern: '^(.+)$',
+            replacement: '\\1=1',
+            example_input: 'TG1_TC01_SC01',
+            example_output: 'TG1_TC01_SC01=1'
+        },
+        'tsmaster': {
+            pattern: '^CAN_(.+)$',
+            replacement: '\\1=1',
+            example_input: 'CAN_TG1_TC1',
+            example_output: 'TG1_TC1=1'
+        }
+    };
 
     async function loadIniConfigRules() {
         try {
@@ -1894,25 +1912,118 @@
     }
 
     function displayRulesTable() {
-        const tbody = document.getElementById('rules-table-body');
-        if (!tbody) return;
-
-        let html = '';
-        const examples = {
-            'canoe': 'TG1_TC01_SC01 → TG1_TC01_SC01=1',
-            'tsmaster': 'CAN_TG1_TC1 → TG1_TC1=1'
-        };
-
-        for (const [category, rule] of Object.entries(currentRulesConfig)) {
-            const example = examples[category] || '-';
-            html += `<tr style="border-bottom: 1px solid #e5e7eb;">
-                <td style="padding: 8px;">${category}</td>
-                <td style="padding: 8px; font-family: monospace; font-size: 11px;">${rule.pattern || ''}</td>
-                <td style="padding: 8px; font-family: monospace; font-size: 11px;">${rule.replacement || ''}</td>
-                <td style="padding: 8px; font-size: 11px; color: #6b7280;">${example}</td>
-            </tr>`;
+        // 初始化预设选择器
+        const presetSelect = document.getElementById('rules-preset-select');
+        if (presetSelect) {
+            // 保留预设选项，清空自定义输入
+            presetSelect.value = '';
+            document.getElementById('rule-pattern-input').value = '';
+            document.getElementById('rule-replacement-input').value = '';
+            document.getElementById('rule-example-text').textContent = '-';
         }
-        tbody.innerHTML = html || '<tr><td colspan="4" style="padding: 8px; text-align: center; color: #9ca3af;">暂无规则配置</td></tr>';
+    }
+
+    function onPresetChange() {
+        const presetSelect = document.getElementById('rules-preset-select');
+        const patternInput = document.getElementById('rule-pattern-input');
+        const replacementInput = document.getElementById('rule-replacement-input');
+        const exampleText = document.getElementById('rule-example-text');
+
+        selectedRuleCategory = presetSelect.value;
+
+        if (selectedRuleCategory && PRESET_RULES[selectedRuleCategory]) {
+            const preset = PRESET_RULES[selectedRuleCategory];
+            patternInput.value = preset.pattern;
+            replacementInput.value = preset.replacement;
+            exampleText.textContent = `${preset.example_input} → ${preset.example_output}`;
+        } else {
+            patternInput.value = '';
+            replacementInput.value = '';
+            exampleText.textContent = '-';
+        }
+    }
+
+    function applyRuleToPreview() {
+        const pattern = document.getElementById('rule-pattern-input').value.trim();
+        const replacement = document.getElementById('rule-replacement-input').value.trim();
+
+        if (!pattern) {
+            showMessage('请输入正则匹配模式', 'warning');
+            return;
+        }
+
+        // 验证正则是否有效
+        try {
+            new RegExp(pattern);
+        } catch (e) {
+            showMessage('正则表达式无效: ' + e.message, 'warning');
+            return;
+        }
+
+        // 测试正则替换效果
+        const testCases = ['TG1_TC01_SC01', 'CAN_TG1_TC1', 'TEST123'];
+        let testResult = '';
+        try {
+            const regex = new RegExp(pattern);
+            testResult = testCases.map(tc => {
+                if (regex.test(tc)) {
+                    const match = tc.match(regex);
+                    // 模拟 Python re.sub 的反向引用
+                    let result = replacement;
+                    for (let i = 0; i < match.length; i++) {
+                        result = result.replace(new RegExp('\\$' + i, 'g'), match[i] || '');
+                    }
+                    return `${tc} → ${result}`;
+                }
+                return `${tc} → (不匹配)`;
+            }).join('\n');
+        } catch (e) {
+            testResult = '正则测试失败: ' + e.message;
+        }
+
+        // 更新 currentRulesConfig 中的对应规则
+        // 注意: JavaScript 使用 $1, Python 使用 \1，需要转换
+        const replacementForBackend = replacement.replace(/\$(\d+)/g, '\\$1');
+        if (selectedRuleCategory) {
+            if (!currentRulesConfig[selectedRuleCategory]) {
+                currentRulesConfig[selectedRuleCategory] = {};
+            }
+            currentRulesConfig[selectedRuleCategory].pattern = pattern;
+            currentRulesConfig[selectedRuleCategory].replacement = replacementForBackend;
+        } else {
+            // 如果没有选择分类，创建自定义规则
+            currentRulesConfig['custom'] = { pattern, replacement: replacementForBackend };
+            selectedRuleCategory = 'custom';
+        }
+
+        // 更新示例显示
+        document.getElementById('rule-example-text').innerHTML = `<pre style="margin: 4px 0; font-size: 11px; white-space: pre-wrap;">${testResult}</pre>`;
+
+        showMessage('规则已应用，保存中...', 'info');
+
+        // 同时更新后端规则配置
+        saveRulesToBackend().then(() => {
+            showMessage('规则已保存，点击"预览"查看导入数据效果', 'success');
+        });
+    }
+
+    async function saveRulesToBackend() {
+        try {
+            const response = await fetch('/api/config/category_ini_config_rules', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentRulesConfig)
+            });
+            const result = await response.json();
+            if (!result.success) {
+                console.error('保存规则到后端失败:', result.message);
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('保存规则到后端失败:', error);
+            return false;
+        }
     }
 
     function toggleRulesEdit() {
@@ -1937,6 +2048,12 @@
         const editArea = document.getElementById('rules-edit-area');
         editArea.style.display = 'none';
         displayArea.style.display = 'block';
+        // 重置预设选择器状态
+        document.getElementById('rules-preset-select').value = '';
+        document.getElementById('rule-pattern-input').value = '';
+        document.getElementById('rule-replacement-input').value = '';
+        document.getElementById('rule-example-text').textContent = '-';
+        selectedRuleCategory = '';
     }
 
     async function saveRulesEdit() {
@@ -2689,7 +2806,7 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                 </div>
 
                 <div id="ini-config-rules-area" style="margin-top: 12px; padding: 12px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <div style="font-weight: 600; font-size: 13px; color: #374151;">
                             <i class="fas fa-code"></i> ini_config 转换规则
                         </div>
@@ -2698,18 +2815,34 @@ TG1_TC05_SC01=1' style="min-height: 100px;"></textarea>
                         </button>
                     </div>
                     <div id="rules-display-area">
-                        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
-                            <thead>
-                                <tr style="background: #f3f4f6;">
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">分类</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">正则模式</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">替换规则</th>
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-weight: 600;">示例</th>
-                                </tr>
-                            </thead>
-                            <tbody id="rules-table-body">
-                            </tbody>
-                        </table>
+                        <div style="display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">选择预设规则</label>
+                                <select id="rules-preset-select" onchange="onPresetChange()" style="width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; background: white;">
+                                    <option value="">-- 选择预设 --</option>
+                                    <option value="canoe">canoe - 保留原名=1</option>
+                                    <option value="tsmaster">tsmaster - 去除CAN_前缀=1</option>
+                                </select>
+                            </div>
+                            <div style="flex: 2;">
+                                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">正则匹配模式</label>
+                                <input type="text" id="rule-pattern-input" placeholder="如: ^(.+)$" style="width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: monospace;">
+                            </div>
+                            <div style="flex: 2;">
+                                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">替换规则</label>
+                                <input type="text" id="rule-replacement-input" placeholder="如: \1=1" style="width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: monospace;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">操作</label>
+                                <button class="btn btn-primary btn-sm" onclick="applyRuleToPreview()" style="padding: 8px 12px;">
+                                    <i class="fas fa-check"></i> 应用
+                                </button>
+                            </div>
+                        </div>
+                        <div id="rule-example-display" style="font-size: 12px; color: #6b7280; padding: 8px 12px; background: #e0e7ff; border-radius: 6px; margin-bottom: 8px;">
+                            示例: <span id="rule-example-text" style="font-family: monospace; color: #4f46e5;">-</span>
+                        </div>
+                        <div style="font-size: 11px; color: #9ca3af;">提示: 选择预设规则后，可根据需要修改正则模式和替换规则，然后点击"应用"生效</div>
                     </div>
                     <div id="rules-edit-area" style="display: none;">
                         <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">编辑规则 JSON，修改后将影响预览结果：</div>

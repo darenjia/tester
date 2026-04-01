@@ -171,17 +171,19 @@ class FailedReportManager:
     def _save(self):
         """保存数据到文件"""
         try:
+            # 先在锁外准备数据，避免长时间持有锁
             with self._data_lock:
                 data = {
                     "reports": {rid: r.to_dict() for rid, r in self.reports.items()},
                     "retry_history": [h.to_dict() for h in self.retry_history[-1000:]],
-                    "statistics": self.statistics,
+                    "statistics": self.statistics.copy(),
                     "version": "1.0",
                     "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
 
-                with open(self.storage_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+            # 释放锁后再写入文件
+            with open(self.storage_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
 
         except Exception as e:
             logger.error(f"保存失败报告数据失败: {e}")
@@ -338,6 +340,9 @@ class FailedReportManager:
         Returns:
             是否还有重试机会
         """
+        needs_save = False
+        should_trigger_callback = False
+
         with self._data_lock:
             if report_id not in self.reports:
                 return False
@@ -367,13 +372,12 @@ class FailedReportManager:
 
             if success:
                 report.status = ReportStatus.SUCCESS.value
-                self._save()
+                needs_save = True
                 return False
             elif report.retry_count >= report.max_retries:
                 report.status = ReportStatus.FAILED.value
-                self._save()
-                # 触发失败回调
-                self._trigger_failure_callbacks(report)
+                needs_save = True
+                should_trigger_callback = True
                 return False
             else:
                 report.status = ReportStatus.PENDING.value
@@ -383,8 +387,18 @@ class FailedReportManager:
                     backoff_factor=self._get_config('report_retry.backoff_factor', 2.0),
                     max_delay=self._get_config('report_retry.max_delay', 3600.0)
                 )
-                self._save()
+                needs_save = True
                 return True
+
+        # 在锁外面保存数据，避免死锁
+        if needs_save:
+            self._save()
+
+        # 触发失败回调（在锁外面）
+        if should_trigger_callback:
+            with self._data_lock:
+                if report_id in self.reports:
+                    self._trigger_failure_callbacks(self.reports[report_id])
 
     def delete_report(self, report_id: str) -> bool:
         """删除报告"""

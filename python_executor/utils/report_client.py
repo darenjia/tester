@@ -86,8 +86,8 @@ class ReportClient:
     @property
     def enabled(self) -> bool:
         """是否启用上报"""
-        # 每次检查前刷新配置
-        self._load_config()
+        # 不再每次检查前刷新配置，避免重复加载造成性能问题
+        # 配置变更时应调用 reload_config()
         return self._enabled and bool(self._api_url)
 
     def reload_config(self):

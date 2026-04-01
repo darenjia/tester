@@ -441,3 +441,86 @@ class AdapterWrapper:
 
         self.logger.info(f"批量执行完成，共执行{len(results)}个结果")
         return results
+
+    # ==================== TSMaster 特定方法 ====================
+
+    def start_test_execution(self, test_cases: Optional[str] = None,
+                              wait_for_complete: bool = True,
+                              timeout: Optional[int] = None) -> bool:
+        """
+        开始测试执行（TSMaster特定）
+
+        Args:
+            test_cases: 测试用例选择字符串
+            wait_for_complete: 是否等待测试完成
+            timeout: 超时时间（秒）
+
+        Returns:
+            启动成功返回True
+        """
+        if hasattr(self.adapter, 'start_test_execution'):
+            return self.adapter.start_test_execution(
+                test_cases=test_cases,
+                wait_for_complete=wait_for_complete,
+                timeout=timeout
+            )
+        self.logger.warning("适配器不支持start_test_execution方法")
+        return False
+
+    def wait_for_test_complete(self, timeout: Optional[int] = None) -> bool:
+        """
+        等待测试完成（TSMaster特定）
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            测试完成返回True，超时返回False
+        """
+        if hasattr(self.adapter, 'wait_for_test_complete'):
+            return self.adapter.wait_for_test_complete(timeout=timeout)
+        self.logger.warning("适配器不支持wait_for_test_complete方法")
+        return False
+
+    def get_test_report_info(self) -> Optional[Dict[str, Any]]:
+        """
+        获取测试报告信息（TSMaster特定）
+
+        Returns:
+            测试报告信息字典，失败返回None
+        """
+        if hasattr(self.adapter, 'get_test_report_info'):
+            return self.adapter.get_test_report_info()
+        self.logger.warning("适配器不支持get_test_report_info方法")
+        return None
+
+    def start_master_form(self, form_name: str = None) -> bool:
+        """
+        启动Master小程序（TSMaster特定）
+
+        Args:
+            form_name: 小程序名称
+
+        Returns:
+            启动成功返回True
+        """
+        if hasattr(self.adapter, 'start_master_form'):
+            return self.adapter.start_master_form(form_name)
+        self.logger.warning("适配器不支持start_master_form方法")
+        return False
+
+    def stop_master_form(self, form_name: str = None) -> bool:
+        """
+        停止Master小程序（TSMaster特定）
+
+        Args:
+            form_name: 小程序名称
+
+        Returns:
+            停止成功返回True
+        """
+        if hasattr(self.adapter, 'stop_master_form'):
+            return self.adapter.stop_master_form(form_name)
+        self.logger.warning("适配器不支持stop_master_form方法")
+        return False
+

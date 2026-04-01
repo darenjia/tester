@@ -110,6 +110,7 @@ class TaskExecutorProduction:
         self._lock = threading.RLock()
         self._task_queue = TaskQueue()
         self._worker_pool = ThreadPoolExecutor(max_workers=1)  # 串行执行
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="report_")  # 异步上报
         self._running = False
         self._worker_thread = None
         self.max_workers = 1  # 最大并发任务数
@@ -378,28 +379,18 @@ class TaskExecutorProduction:
             step_start = time.time()
             tool_type_lower = task.tool_type.lower() if task.tool_type else ""
             if tool_type_lower == TestToolType.TSMASTER.value:
+                # TSMaster 使用 RPC 批量执行，已在 _start_test_execution 中完成所有用例执行
+                # 不需要再调用 _execute_test_items（会导致双重执行）
                 self._start_test_execution(task)
+                # 获取 TSMaster 测试结果
+                results = self._collect_tsmaster_results(task)
             else:
                 self._start_measurement(task)
+                # 执行测试项
+                step_start = time.time()
+                results = self._execute_test_items(task)
+                self._current_metrics.record_step('execute_items', time.time() - step_start)
             self._current_metrics.record_step('start_measurement', time.time() - step_start)
-
-            # 执行测试项
-            step_start = time.time()
-            # 使用原有的执行方式（通过ini文件控制）
-            results = self._execute_test_items(task)
-            self._current_metrics.record_step('execute_items', time.time() - step_start)
-
-            # 对于TSMaster，获取测试报告信息
-            tool_type_lower = task.tool_type.lower() if task.tool_type else ""
-            if tool_type_lower == TestToolType.TSMASTER.value:
-                try:
-                    report_info = self.controller.get_test_report_info()
-                    if report_info:
-                        self.current_collector.add_log("INFO", f"测试报告路径: {report_info.get('report_path', 'N/A')}")
-                        self.current_collector.add_log("INFO", f"测试数据路径: {report_info.get('testdata_path', 'N/A')}")
-                        self.current_collector.add_log("INFO", f"通过: {report_info.get('passed', 0)}, 失败: {report_info.get('failed', 0)}")
-                except Exception as e:
-                    self.logger.warning(f"获取TSMaster报告信息失败: {e}")
 
             # 停止测量/仿真
             step_start = time.time()
@@ -486,7 +477,10 @@ class TaskExecutorProduction:
                     time.sleep(retry_delay)
                 else:
                     raise ToolException(f"连接{task.tool_type}失败，已重试{max_retries}次: {e}")
-    
+
+        # 如果所有重试都返回False而没有异常，说明连接失败但未抛出异常
+        raise ToolException(f"连接{task.tool_type}失败: 适配器返回失败状态")
+
     def _load_configuration(self, task: Task):
         """加载配置文件"""
         logger.info(f"正在加载配置文件: {task.config_path}")
@@ -603,6 +597,96 @@ class TaskExecutorProduction:
 
         except Exception as e:
             raise ToolException(f"TSMaster测试执行失败: {e}")
+
+    def _collect_tsmaster_results(self, task: Task) -> list:
+        """
+        收集 TSMaster 测试结果。
+
+        TSMaster 的测试结果已经在 _start_test_execution 中通过 RPC 批量执行完成，
+        这里从测试报告信息中收集结果，避免双重执行。
+
+        Args:
+            task: Task object
+
+        Returns:
+            list: TestResult 列表
+        """
+        results = []
+        try:
+            report_info = self.controller.get_test_report_info()
+            if report_info:
+                self._current_report_info = report_info
+                self.current_collector.add_log("INFO", f"测试报告路径: {report_info.get('report_path', 'N/A')}")
+                self.current_collector.add_log("INFO", f"测试数据路径: {report_info.get('testdata_path', 'N/A')}")
+                self.current_collector.add_log("INFO", f"通过: {report_info.get('passed', 0)}, 失败: {report_info.get('failed', 0)}")
+
+                # 从报告信息构建结果
+                passed = report_info.get('passed', 0)
+                failed = report_info.get('failed', 0)
+                total = passed + failed
+
+                if total > 0:
+                    # 遍历 task.test_items 构建结果
+                    for test_item in task.test_items:
+                        case_no = getattr(test_item, 'caseNo', None) or getattr(test_item, 'case_no', None)
+                        item_name = test_item.name
+
+                        # 尝试从 report_info 的详细结果中获取 verdict
+                        verdict = "UNKNOWN"
+                        if report_info.get('details'):
+                            for detail in report_info.get('details', []):
+                                if detail.get('name') == item_name or detail.get('case_no') == case_no:
+                                    verdict = detail.get('verdict', 'PASS' if detail.get('passed') else 'FAIL')
+                                    break
+
+                        result = TestResult(
+                            name=item_name,
+                            type=getattr(test_item, 'type', None) or 'test_module',
+                            verdict=verdict,
+                            details={
+                                'case_no': case_no,
+                                'report_info': report_info
+                            }
+                        )
+                        results.append(result)
+                        self.current_collector.add_test_result(result)
+                else:
+                    # 没有测试结果，生成未知状态
+                    self.logger.warning("TSMaster 测试报告无详细结果")
+                    for test_item in task.test_items:
+                        result = TestResult(
+                            name=test_item.name,
+                            type=getattr(test_item, 'type', None) or 'test_module',
+                            verdict="UNKNOWN",
+                            details={'report_info': report_info}
+                        )
+                        results.append(result)
+                        self.current_collector.add_test_result(result)
+            else:
+                self.logger.warning("获取 TSMaster 报告信息为空")
+                # 生成空结果
+                for test_item in task.test_items:
+                    result = TestResult(
+                        name=test_item.name,
+                        type=getattr(test_item, 'type', None) or 'test_module',
+                        error="无法获取测试报告信息"
+                    )
+                    results.append(result)
+                    self.current_collector.add_test_result(result)
+
+        except Exception as e:
+            self.logger.error(f"收集 TSMaster 测试结果失败: {e}")
+            # 出错时生成错误结果
+            for test_item in task.test_items:
+                result = TestResult(
+                    name=test_item.name,
+                    type=getattr(test_item, 'type', None) or 'test_module',
+                    error=f"结果收集失败: {e}"
+                )
+                results.append(result)
+                self.current_collector.add_test_result(result)
+
+        return results
 
     def _build_tsmaster_test_cases_string(self, task: Task) -> str:
         """
@@ -966,8 +1050,9 @@ class TaskExecutorProduction:
         # 上报最终结果到WebSocket客户端
         self._report_final_result(task.task_id, task_result)
 
-        # 上报到远端服务器
-        self._report_to_remote(task, task_result)
+        # 上报到远端服务器（包含报告文件上传）- 异步执行避免阻塞
+        report_file_path = getattr(self, '_current_report_info', None).get('report_path') if hasattr(self, '_current_report_info') and self._current_report_info else None
+        self._executor.submit(self._report_to_remote, task, task_result, report_file_path)
 
         # 更新状态
         self._update_task_status(task.task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
@@ -1228,7 +1313,7 @@ class TaskExecutorProduction:
             task_result: 任务结果对象
             report_file_path: 报告文件路径（可选）
         """
-        logger.info(f"[_report_to_remote] 开始上报任务结果: taskNo={task.task_id}")
+        logger.info(f"[_report_to_remote] 开始上报任务结果: taskNo={task.task_id}, report_file_path={report_file_path}")
 
         try:
             # 构建 TDM2.0 格式的上报数据
@@ -1252,6 +1337,20 @@ class TaskExecutorProduction:
                 report_data["startTime"] = task_result.startTime.isoformat()
             if task_result.endTime:
                 report_data["endTime"] = task_result.endTime.isoformat()
+
+            # 如果有报告文件，先上传文件获取URL
+            report_url = None
+            if report_file_path:
+                report_url = self._upload_report_file(report_file_path)
+                if report_url:
+                    logger.info(f"[_report_to_remote] 报告文件上传成功: {report_file_path} -> {report_url}")
+                    # 将报告URL填充到caseList的reAddress字段
+                    if "caseList" in report_data and report_data["caseList"]:
+                        for case in report_data["caseList"]:
+                            if not case.get("reAddress"):
+                                case["reAddress"] = report_url
+                else:
+                    logger.warning(f"[_report_to_remote] 报告文件上传失败: {report_file_path}")
 
             logger.info(f"[_report_to_remote] 上报数据: taskNo={report_data.get('taskNo')}, caseList={len(report_data.get('caseList', []))}")
 
@@ -1310,6 +1409,87 @@ class TaskExecutorProduction:
 
         except Exception as e:
             logger.error(f"持久化失败报告时出错: {e}")
+
+    def _upload_report_file(self, file_path: str) -> Optional[str]:
+        """
+        上传报告文件到文件服务器
+
+        Args:
+            file_path: 报告文件路径
+
+        Returns:
+            文件URL，上传失败返回None
+        """
+        import os
+        import requests
+
+        logger.info(f"[_upload_report_file] 开始处理文件: {file_path}")
+
+        file_upload_url = "http://10.124.11.142:8204/upload"
+
+        # 检查文件是否存在（使用线程超时保护）
+        try:
+            if not os.path.exists(file_path):
+                logger.error(f"[_upload_report_file] 文件不存在: {file_path}")
+                return None
+        except Exception as e:
+            logger.error(f"[_upload_report_file] 检查文件存在性失败: {e}")
+            return None
+
+        try:
+            file_name = os.path.basename(file_path)
+
+            # 检查文件是否可读（添加超时保护）
+            try:
+                file_size = os.path.getsize(file_path)
+            except Exception as e:
+                logger.error(f"[_upload_report_file] 获取文件大小失败: {e}")
+                return None
+
+            logger.info(f"[_upload_report_file] 开始上传文件: {file_name} ({file_size} bytes)")
+
+            # 读取文件内容到内存，避免文件句柄长时间占用
+            try:
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+            except Exception as e:
+                logger.error(f"[_upload_report_file] 读取文件失败: {e}")
+                return None
+
+            # 上传文件内容（设置较短超时）
+            try:
+                response = requests.post(
+                    file_upload_url,
+                    files={'file': (file_name, file_content)},
+                    timeout=30
+                )
+            except requests.exceptions.Timeout:
+                logger.error(f"[_upload_report_file] 文件上传请求超时: {file_path}")
+                return None
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"[_upload_report_file] 连接文件服务器失败: {e}")
+                return None
+
+            logger.info(f"[_upload_report_file] 响应状态码: {response.status_code}")
+
+            if response.status_code == 200:
+                try:
+                    response_json = response.json()
+                    if response_json.get('code') == 200 and 'data' in response_json:
+                        file_url = response_json['data'].get('url')
+                        if file_url:
+                            logger.info(f"[_upload_report_file] 文件上传成功: {file_name} -> {file_url}")
+                            return file_url
+                except ValueError:
+                    # 响应不是JSON格式，尝试直接获取URL
+                    if response.text:
+                        logger.info(f"[_upload_report_file] 文件上传响应: {response.text[:200]}")
+            logger.error(f"[_upload_report_file] 文件上传失败: {file_name}, response: {response.text[:200] if response.text else 'empty'}")
+            return None
+
+        except Exception as e:
+            logger.error(f"[_upload_report_file] 文件上传异常: {e}", exc_info=True)
+            return None
 
     def _do_report_direct(self, report_data: Dict[str, Any]) -> bool:
         """

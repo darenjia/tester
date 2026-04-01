@@ -156,12 +156,13 @@ class ReportRetryScheduler:
         else:
             logger.warning(f"报告 {report.report_id} (task={report.task_no}) 重试失败，将在稍后重试 (第{report.retry_count}次)")
 
-    def _send_report(self, report) -> tuple:
+    def _send_report(self, report, timeout: float = 10.0) -> tuple:
         """
         发送报告到远程服务器
 
         Args:
             report: FailedReport 实例
+            timeout: 单次请求超时时间（秒）
 
         Returns:
             (success: bool, error_message: str or None)
@@ -170,7 +171,8 @@ class ReportRetryScheduler:
             response = self.report_client._make_request(
                 method="POST",
                 url=self.report_client._result_api_url,
-                json=report.report_data
+                json=report.report_data,
+                timeout=timeout
             )
 
             if response is not None:
@@ -194,60 +196,119 @@ class ReportRetryScheduler:
 
     def retry_now(self, report_id: str) -> bool:
         """
-        立即重试指定报告
+        立即重试指定报告（异步执行，不阻塞调用者）
 
         Args:
             report_id: 报告ID
 
         Returns:
-            是否成功
+            是否成功触发重试
         """
         report = self.report_manager.get_report(report_id)
         if not report:
             logger.warning(f"报告不存在: {report_id}")
             return False
 
-        # 重置以便立即重试
-        self.report_manager.reset_report_for_retry(report_id)
-
-        # 执行重试
-        self._retry_report(self.report_manager.get_report(report_id))
-
+        # 在后台线程执行重试，避免阻塞主线程
+        thread = threading.Thread(
+            target=self._retry_report_async,
+            args=(report_id,),
+            daemon=True,
+            name=f"RetryReport-{report_id[:8]}"
+        )
+        thread.start()
         return True
+
+    def _retry_report_async(self, report_id: str):
+        """异步执行重试（在后台线程中运行）"""
+        try:
+            # 重置以便立即重试
+            self.report_manager.reset_report_for_retry(report_id)
+            refreshed_report = self.report_manager.get_report(report_id)
+
+            if not refreshed_report:
+                logger.warning(f"重试时报告不存在: {report_id}")
+                return
+
+            # 执行重试
+            self._retry_report(refreshed_report)
+        except Exception as e:
+            logger.error(f"异步重试报告 {report_id} 时出错: {e}")
 
     def retry_all_pending(self) -> dict:
         """
-        重试所有待重试的报告
+        重试所有待重试的报告（异步执行，不阻塞调用者）
 
         Returns:
-            统计结果
+            统计结果（立即返回，实际重试在后台异步执行）
         """
-        stats = {"success": 0, "failed": 0, "total": 0}
-
         pending = self.report_manager.get_pending_reports(limit=1000)
-        stats["total"] = len(pending)
+        total = len(pending)
 
-        for report in pending:
-            # 重置以便立即重试
-            self.report_manager.reset_report_for_retry(report.report_id)
-            refreshed_report = self.report_manager.get_report(report.report_id)
+        if total == 0:
+            return {"success": 0, "failed": 0, "total": 0, "message": "没有待重试的报告"}
 
-            # 更新状态为重试中
-            self.report_manager.update_report_status(refreshed_report.report_id, "retrying")
+        logger.info(f"开始异步批量重试 {total} 个报告")
 
-            # 尝试发送
-            success, error = self._send_report(refreshed_report)
+        # 在后台线程执行批量重试
+        thread = threading.Thread(
+            target=self._retry_all_pending_async,
+            args=(total,),
+            daemon=True,
+            name="RetryAllPending"
+        )
+        thread.start()
 
-            # 更新重试状态
-            self.report_manager.increment_retry(refreshed_report.report_id, success, error)
+        # 立即返回，不阻塞调用者
+        return {
+            "success": 0,
+            "failed": 0,
+            "total": total,
+            "message": f"已启动后台重试任务，共 {total} 个报告"
+        }
 
-            if success:
-                stats["success"] += 1
-            else:
-                stats["failed"] += 1
+    def _retry_all_pending_async(self, total: int):
+        """异步执行批量重试（在后台线程中运行）"""
+        stats = {"success": 0, "failed": 0, "total": total}
 
-        logger.info(f"批量重试完成: {stats}")
-        return stats
+        try:
+            pending = self.report_manager.get_pending_reports(limit=1000)
+
+            for report in pending:
+                if not self._running:
+                    logger.info("批量重试被中断")
+                    break
+
+                try:
+                    # 重置以便立即重试
+                    self.report_manager.reset_report_for_retry(report.report_id)
+                    refreshed_report = self.report_manager.get_report(report.report_id)
+
+                    if not refreshed_report:
+                        continue
+
+                    # 更新状态为重试中
+                    self.report_manager.update_report_status(refreshed_report.report_id, "retrying")
+
+                    # 尝试发送
+                    success, error = self._send_report(refreshed_report)
+
+                    # 更新重试状态
+                    self.report_manager.increment_retry(refreshed_report.report_id, success, error)
+
+                    if success:
+                        stats["success"] += 1
+                    else:
+                        stats["failed"] += 1
+
+                except Exception as e:
+                    logger.error(f"重试报告 {report.report_id} 时出错: {e}")
+                    stats["failed"] += 1
+
+        except Exception as e:
+            logger.error(f"批量重试异常: {e}")
+        finally:
+            logger.info(f"批量重试完成: {stats}")
 
 
 # 单例实例
