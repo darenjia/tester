@@ -151,11 +151,6 @@ class TSMasterAdapter(BaseTestAdapter):
     def _on_status_change(self, status: str, data: Dict[str, Any]):
         """RPC状态变化回调"""
         self.logger.debug(f"RPC状态变化: {status} -> {data}")
-        if status == "simulation_status":
-            sim_status = data.get("status", "")
-            if sim_status == "running" and not self._rpc_client.simulation_running:
-                self.logger.info("检测到仿真启动")
-                self._rpc_client.simulation_running = True
     
     def _connect_via_traditional(self) -> bool:
         """通过传统模式连接"""
@@ -500,6 +495,128 @@ class TSMasterAdapter(BaseTestAdapter):
             self._set_error(f"测试执行启动失败: {str(e)}")
             return False
 
+    def run_test_with_master_form(self, test_cases: Optional[str] = None,
+                                  wait_for_complete: bool = True,
+                                  timeout: Optional[int] = None) -> bool:
+        """
+        使用Master小程序执行完整测试流程
+
+        这是TSMaster推荐的标准测试执行流程，与tsmaster_example.py中的流程一致：
+
+        1. 启动Master小程序
+        2. 等待Master稳定
+        3. 初始化设备 (Master.Init)
+        4. 开启自动报告 (Master.AutoReport)
+        5. 强制编译测试用例 (TestSystem.GenCode)
+        6. 选择测试用例 (TestSystem.SelectCases)
+        7. 开始测试 (TestSystem.Controller)
+        8. 等待测试完成
+        9. 生成报告 (Master.GenReport)
+
+        Args:
+            test_cases: 测试用例选择字符串，格式如 "TG1_TC1=1,TG1_TC2=1"
+            wait_for_complete: 是否等待测试完成
+            timeout: 执行超时时间（秒）
+
+        Returns:
+            执行成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法执行测试")
+            return False
+
+        if not self._using_rpc or not self._rpc_client:
+            self._set_error("Master小程序模式仅支持RPC模式")
+            return False
+
+        timeout = timeout or self.operation_timeout
+
+        try:
+            self.logger.info("=== 开始Master小程序测试流程 ===")
+
+            # Step 1: 启动Master小程序（如果未启动）
+            if not self._master_form_started:
+                self.logger.info(f"启动Master小程序: {self.master_form_name}")
+                if not self.start_master_form(self.master_form_name):
+                    self._set_error("Master小程序启动失败")
+                    return False
+                # 等待Master稳定
+                time.sleep(2)
+
+            # Step 2: 初始化Master设备
+            self.logger.info("初始化Master设备...")
+            if not self._rpc_client.initialize_master(timeout=5):
+                self._set_error("Master设备初始化失败")
+                return False
+
+            # Step 3: 开启自动报告
+            self.logger.info("开启自动报告...")
+            self._rpc_client.enable_auto_report(True)
+
+            # Step 4: 强制编译测试用例（防呆关键步骤！）
+            self.logger.info("编译测试用例...")
+            if not self._rpc_client.compile_test_cases(timeout=10):
+                self._set_error("测试用例编译失败")
+                return False
+
+            # Step 5: 选择测试用例
+            if test_cases:
+                self.logger.info(f"选择测试用例: {test_cases}")
+                self._rpc_client.select_test_cases(test_cases)
+            else:
+                self.logger.info("未指定测试用例，将执行所有选中的用例")
+
+            # Step 6: 开始测试
+            self.logger.info("开始测试...")
+            if not self._rpc_client.start_test():
+                self._set_error("启动测试失败")
+                return False
+
+            # Step 7: 等待测试完成
+            if wait_for_complete:
+                self.logger.info(f"等待测试完成（超时: {timeout}秒）...")
+                if not self._wait_for_test_complete_by_status(timeout):
+                    self.logger.warning("等待测试完成超时")
+
+            self.logger.info("=== Master小程序测试流程完成 ===")
+            return True
+
+        except Exception as e:
+            self._set_error(f"Master小程序测试流程异常: {str(e)}")
+            return False
+
+    def _wait_for_test_complete_by_status(self, timeout: int) -> bool:
+        """
+        通过TestSystem.RunningStatus等待测试完成
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            测试完成返回True，超时返回False
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                if self._using_rpc and self._rpc_client:
+                    # 优先使用 RunningStatus 判断
+                    running_status = self._rpc_client.read_system_var("TestSystem.RunningStatus")
+                    if running_status == "0":
+                        self.logger.info("测试执行完成 (RunningStatus=0)")
+                        return True
+                    # 同时检查 Controller 作为备选
+                    controller = self._rpc_client.read_system_var("TestSystem.Controller")
+                    if controller == "0":
+                        self.logger.info("测试执行完成 (Controller=0)")
+                        return True
+            except Exception as e:
+                self.logger.debug(f"检查测试状态异常: {str(e)}")
+
+            time.sleep(0.5)
+
+        return False
+
     def _wait_for_test_complete(self, timeout: int) -> bool:
         """
         等待测试完成
@@ -515,6 +632,12 @@ class TSMasterAdapter(BaseTestAdapter):
         while time.time() - start_time < timeout:
             try:
                 if self._using_rpc and self._rpc_client:
+                    # 优先使用 RunningStatus 判断
+                    running_status = self._rpc_client.read_system_var("TestSystem.RunningStatus")
+                    if running_status == "0":
+                        self.logger.info("测试执行完成")
+                        return True
+                    # 同时检查 Controller 作为备选
                     controller = self._rpc_client.read_system_var("TestSystem.Controller")
                     if controller == "0":
                         self.logger.info("测试执行完成")
@@ -593,6 +716,41 @@ class TSMasterAdapter(BaseTestAdapter):
             self._set_error(f"停止测试执行失败: {str(e)}")
             return False
 
+    def generate_test_report(self, timeout: int = 10) -> bool:
+        """
+        生成测试报告
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            生成成功返回True，否则返回False
+        """
+        if not self.is_connected:
+            self._set_error("TSMaster未连接，无法生成报告")
+            return False
+
+        try:
+            self.logger.info("正在生成测试报告...")
+
+            if self._using_rpc and self._rpc_client:
+                success = self._rpc_client.generate_report(timeout)
+            else:
+                success = self._write_system_var("Master.GenReport", "1")
+                if success:
+                    time.sleep(1)
+
+            if success:
+                self.logger.info("测试报告生成完成")
+            else:
+                self._set_error("测试报告生成失败")
+
+            return success
+
+        except Exception as e:
+            self._set_error(f"生成测试报告失败: {str(e)}")
+            return False
+
     def get_test_results(self, result_type: str = "xml") -> Optional[Dict[str, Any]]:
         """
         获取测试结果
@@ -647,6 +805,11 @@ class TSMasterAdapter(BaseTestAdapter):
 
         try:
             self.logger.info("获取测试报告信息")
+
+            # 如果使用Master小程序，先触发报告生成
+            if self._using_rpc and self._rpc_client and self._master_form_started:
+                # 生成报告（这会更新Master.ReportPath等变量）
+                self._rpc_client.generate_report(timeout=10)
 
             if self._using_rpc and self._rpc_client:
                 report_path = self._rpc_client.get_report_path()
