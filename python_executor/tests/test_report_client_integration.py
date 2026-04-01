@@ -45,6 +45,23 @@ def test_report_client_loads_configured_endpoints():
     assert client._file_upload_url == "http://upload.example.com/files"
 
 
+def test_report_client_enabled_uses_result_api_url_when_direct_api_is_configured():
+    client = ReportClient(
+        FakeConfigManager(
+            {
+                "report_server.enabled": True,
+                "report_server.host": "",
+                "report_server.port": "",
+                "report_server.path": "",
+                "report.result_api_url": "http://report.example.com/direct-report",
+                "report.file_upload_url": "http://upload.example.com/fallback",
+            }
+        )
+    )
+
+    assert client.enabled is True
+
+
 def test_report_client_upload_and_direct_report_use_configured_endpoints(tmp_path, monkeypatch):
     client = ReportClient(build_report_config())
     captured_calls = []

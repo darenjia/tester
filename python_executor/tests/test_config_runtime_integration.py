@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import io
 import json
 from pathlib import Path
 
@@ -197,6 +198,36 @@ def test_config_api_rejects_invalid_non_http_config(runtime_modules):
     payload = response.get_json()
     assert payload["success"] is False
     assert "logging.level" in payload["errors"][0]
+
+
+def test_config_api_file_import_honors_merge_false(runtime_modules):
+    api_config_module = runtime_modules["api_config_module"]
+    active_manager = unified_config.get_config_manager()
+    active_manager.set("logging.level", "DEBUG", persist=True)
+
+    app = Flask(__name__)
+    app.register_blueprint(api_config_module.config_bp)
+    client = app.test_client()
+
+    response = client.post(
+        "/api/config/import",
+        data={
+            "merge": "false",
+            "file": (
+                io.BytesIO(
+                    json.dumps({"config": {"websocket": {"port": 9309}}}).encode("utf-8")
+                ),
+                "config.json",
+            ),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert unified_config.get_config_manager().get("websocket.port") == 9309
+    assert unified_config.get_config_manager().get("logging.level") == "INFO"
 
 
 def test_main_production_config_route_uses_active_unified_config_manager(

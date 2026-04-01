@@ -67,6 +67,16 @@ def _import_config_snapshot(config: dict[str, Any], *, merge: bool) -> dict[str,
     return config_manager.get_all()
 
 
+def _coerce_merge_flag(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(value)
+
+
 @config_bp.route('/config/http', methods=['GET'])
 def get_http_config():
     """
@@ -286,6 +296,7 @@ def import_config():
             file = request.files['file']
             if file.filename == '':
                 return jsonify({"success": False, "message": "未选择文件"}), 400
+            merge = _coerce_merge_flag(request.form.get("merge"), default=True)
             
             import json
             import tempfile
@@ -319,7 +330,7 @@ def import_config():
             if not data or "config" not in data:
                 return jsonify({"success": False, "message": "请求体必须包含config字段"}), 400
             
-            merge = data.get("merge", True)
+            merge = _coerce_merge_flag(data.get("merge"), default=True)
             config = data["config"]
             
             # 验证配置

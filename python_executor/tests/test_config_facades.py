@@ -42,3 +42,16 @@ def test_legacy_helpers_forward_to_unified_instance(facade_modules):
     assert settings_module.get_config() is manager_module.config_manager
     assert settings_module.settings.get("websocket.port") == 9300
     assert manager_module.get_config("websocket.port") == 9300
+
+
+def test_facade_exports_follow_replaced_unified_instance(facade_modules, tmp_path: Path):
+    settings_module, manager_module = facade_modules
+    new_config_file = tmp_path / "config-b.json"
+    new_config_file.write_text('{"http": {"port": 9999}}', encoding="utf-8")
+
+    new_manager = settings_module.get_config(str(new_config_file))
+
+    assert settings_module.settings is new_manager
+    assert manager_module.config_manager is new_manager
+    assert settings_module.settings.get("http.port") == 9999
+    assert manager_module.get_config("http.port") == 9999
