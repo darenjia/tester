@@ -28,7 +28,7 @@ from utils.metrics import (
     record_metric,
 )
 from utils.validators import InputValidator, ValidationError
-from models.task import Task as ExecTask, TaskStatus as ExecTaskStatus, Case
+from core.task_compiler import TaskCompiler, TaskCompileError
 from models.result import Message, StatusUpdate, LogEntry
 from core.execution_observability import (
     ExecutionLifecycleStage,
@@ -397,65 +397,13 @@ class PythonExecutorProduction:
             observability_manager.transition(message.taskNo, ExecutionLifecycleStage.VALIDATED)
             record_metric("task.validated", 1, {"task_no": message.taskNo})
 
-            # 从映射库丰富任务数据（优先使用映射库中的配置）
+            # 从映射库编译执行计划
             from core.case_mapping_manager import get_case_mapping_manager
             mapping_manager = get_case_mapping_manager()
-
-            # 确定tool_type
-            self._resolve_dispatch_tool_type(validated_data, mapping_manager)
-
-            # 获取configPath（如果请求中没有指定）
-            config_path = validated_data.get('configPath')
-            if not config_path:
-                for item in validated_data.get('testItems', []):
-                    case_no = item.get('case_no') or item.get('caseNo')
-                    if case_no:
-                        mapping = mapping_manager.get_mapping(case_no)
-                        if mapping and mapping.enabled and mapping.script_path:
-                            config_path = mapping.script_path
-                            validated_data['configPath'] = config_path
-                            logger.info(f"从映射库获取configPath: case_no={case_no}, path={config_path}")
-                            break
-
-            # 创建 models/task.py 的 Task 对象 (用于 execute_task)
-            # 构建 caseList（从映射库丰富用例信息）
-            case_list = []
-            test_items = validated_data.get('testItems', [])
-            for item in test_items:
-                case_no = item.get('case_no') or item.get('caseNo') or item.get('name', '')
-
-                # 尝试从映射库获取更多信息
-                mapping = mapping_manager.get_mapping(case_no) if case_no else None
-
-                case = Case(
-                    caseName=item.get('name', '') or (mapping.case_name if mapping else ''),
-                    caseType=item.get('type', 'test_module'),
-                    caseNo=case_no,
-                    dtcInfo=item.get('dtc_info') or item.get('dtcInfo'),
-                    params=item.get('params', {}),
-                    repeat=item.get('repeat', 1)
-                )
-
-                # 如果有映射，丰富其他字段
-                if mapping:
-                    if mapping.ini_config:
-                        case.params = {**case.params, 'iniConfig': mapping.ini_config}
-                    if mapping.para_config:
-                        case.params = {**case.params, 'paraConfig': mapping.para_config}
-
-                case_list.append(case)
-
-            # 创建 ExecTask (models/task.py) 用于任务执行
-            exec_task = ExecTask(
-                projectNo=validated_data.get('projectNo', ''),
-                taskNo=validated_data.get('taskNo'),
-                taskName=validated_data.get('taskName', ''),
-                caseList=case_list,
-                deviceId=validated_data.get('deviceId'),
-                toolType=validated_data.get('toolType'),
-                configPath=validated_data.get('configPath'),
-                timeout=validated_data.get('timeout', 3600)
-            )
+            compiler = TaskCompiler(mapping_manager=mapping_manager)
+            execution_plan = compiler.compile_payload(validated_data)
+            observability_manager.transition(message.taskNo, ExecutionLifecycleStage.COMPILED)
+            record_metric("task.compiled", 1, {"task_no": message.taskNo})
 
             # 初始化任务执行器（如果还没初始化）
             if not self.task_executor:
@@ -464,25 +412,36 @@ class PythonExecutorProduction:
                 )
                 self.task_executor.start()
 
-            # 执行任务 (使用 ExecTask)
-            success = self.task_executor.execute_task(exec_task)
+            # 执行任务 (使用 ExecutionPlan)
+            success = self.task_executor.execute_plan(execution_plan)
 
             if success:
                 if not execution_context.tool_type:
-                    execution_context.tool_type = validated_data.get("toolType") or ""
+                    execution_context.tool_type = execution_plan.tool_type or ""
                 observability_manager.transition(message.taskNo, ExecutionLifecycleStage.QUEUED)
                 record_metric("task.queued", 1, {"task_no": message.taskNo})
-                logger.info(f"任务已加入队列: {exec_task.task_id}")
+                logger.info(f"任务已加入队列: {execution_plan.task_no}")
                 emit('task_response', {
-                    'taskNo': exec_task.task_id,
+                    'taskNo': execution_plan.task_no,
                     'status': 'queued',
                     'message': '任务已加入队列',
                     'timestamp': int(time.time() * 1000)
                 })
             else:
-                logger.warning(f"任务加入队列失败: {exec_task.task_id}")
+                observability_manager.fail(
+                    message.taskNo,
+                    error_code="TASK_QUEUE_REJECTED",
+                    error_message="任务加入队列失败",
+                    retryable=False,
+                )
+                record_metric(
+                    "task.failed",
+                    1,
+                    {"task_no": message.taskNo, "stage": "compiled"},
+                )
+                logger.warning(f"任务加入队列失败: {execution_plan.task_no}")
                 emit('task_response', {
-                    'taskNo': exec_task.task_id,
+                    'taskNo': execution_plan.task_no,
                     'status': 'rejected',
                     'message': '任务加入队列失败',
                     'timestamp': int(time.time() * 1000)
@@ -510,6 +469,28 @@ class PythonExecutorProduction:
                 'error': f"任务数据验证失败: {e}",
                 'timestamp': int(time.time() * 1000)
             })
+        except TaskCompileError as e:
+            try:
+                observability_manager = get_execution_observability_manager()
+                if message.taskNo in observability_manager._contexts:
+                    observability_manager.fail(
+                        message.taskNo,
+                        error_code="TASK_COMPILE_FAILED",
+                        error_message=str(e),
+                        retryable=False,
+                    )
+                    record_metric(
+                        "task.failed",
+                        1,
+                        {"task_no": message.taskNo, "stage": "validated"},
+                    )
+            except Exception:
+                logger.warning("记录任务编译失败观测信息失败", exc_info=True)
+            logger.error(f"任务编译失败: {e}")
+            emit('error', {
+                'error': f"任务编译失败: {e}",
+                'timestamp': int(time.time() * 1000)
+            })
         except Exception as e:
             try:
                 observability_manager = get_execution_observability_manager()
@@ -533,32 +514,6 @@ class PythonExecutorProduction:
                 'timestamp': int(time.time() * 1000)
             })
 
-    def _resolve_dispatch_tool_type(self, validated_data: Dict[str, Any], mapping_manager) -> None:
-        """根据请求或映射库确定任务工具类型。"""
-        tool_type = validated_data.get('toolType')
-        if tool_type:
-            validated_data['toolType'] = tool_type.lower()
-            return
-
-        tool_types = set()
-        for item in validated_data.get('testItems', []):
-            case_no = item.get('case_no') or item.get('caseNo')
-            if case_no:
-                mapping = mapping_manager.get_mapping(case_no)
-                if mapping and mapping.category:
-                    tool_types.add(mapping.category.lower())
-
-        if len(tool_types) == 1:
-            tool_type = next(iter(tool_types))
-            validated_data['toolType'] = tool_type
-            logger.info(f"从映射库确定toolType: {tool_type}")
-            return
-
-        if len(tool_types) > 1:
-            raise ValidationError(
-                f"任务包含多个工具类型，无法下发: {', '.join(sorted(tool_types))}"
-            )
-    
     def _handle_task_cancel(self, message: Message, client_sid: str):
         """处理任务取消"""
         try:

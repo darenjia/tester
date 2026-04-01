@@ -130,3 +130,37 @@ def test_executor_remote_report_uses_report_client_and_persists_failures(monkeyp
     assert report_calls[1][1]["caseList"][0]["reAddress"] == "http://files.example.com/failure-report.html"
     assert persisted["report_data"]["taskNo"] == "TASK-9"
     assert persisted["task"] is task
+
+
+def test_persist_failed_report_uses_task_identity_for_execution_plan(monkeypatch):
+    from core.execution_plan import ExecutionPlan, PlannedCase
+
+    executor = TaskExecutorProduction(message_sender=lambda _: None)
+    persisted = {}
+
+    class _FakeFailedReportManager:
+        def add_failed_report(self, report_data, task_info, max_retries, priority):
+            persisted["report_data"] = report_data
+            persisted["task_info"] = task_info
+            persisted["max_retries"] = max_retries
+            persisted["priority"] = priority
+            return "report-1"
+
+    monkeypatch.setattr(
+        "core.failed_report_manager.get_failed_report_manager",
+        lambda config_manager: _FakeFailedReportManager(),
+    )
+
+    plan = ExecutionPlan(
+        task_no="TASK-PERSIST",
+        project_no="PROJECT-PERSIST",
+        task_name="Persist Task",
+        device_id="DEVICE-PERSIST",
+        tool_type="canoe",
+        cases=[PlannedCase(case_no="CASE-PERSIST", case_name="Case Persist", case_type="test_module")],
+    )
+
+    executor._persist_failed_report({"taskNo": "TASK-PERSIST", "status": "failed"}, plan)
+
+    assert persisted["task_info"]["taskNo"] == "TASK-PERSIST"
+    assert persisted["task_info"]["projectNo"] == "PROJECT-PERSIST"

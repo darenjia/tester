@@ -26,6 +26,19 @@ def test_lifecycle_transitions_update_snapshot_and_stage_history():
     assert snapshot["stage_history"] == ["received", "validated", "queued"]
 
 
+def test_lifecycle_supports_compiled_and_collecting_stages():
+    manager = ExecutionObservabilityManager()
+
+    manager.create_context(task_no="TASK-L", device_id="DEVICE-L", tool_type="canoe")
+    manager.transition("TASK-L", ExecutionLifecycleStage.COMPILED)
+    manager.transition("TASK-L", ExecutionLifecycleStage.QUEUED)
+    manager.transition("TASK-L", ExecutionLifecycleStage.COLLECTING)
+
+    snapshot = manager.get_snapshot("TASK-L")
+
+    assert snapshot["stage_history"] == ["received", "compiled", "queued", "collecting"]
+
+
 def test_fail_marks_stage_error_and_retryability():
     manager = ExecutionObservabilityManager()
 

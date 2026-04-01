@@ -11,9 +11,11 @@ from typing import Any
 class ExecutionLifecycleStage(str, Enum):
     RECEIVED = "received"
     VALIDATED = "validated"
+    COMPILED = "compiled"
     QUEUED = "queued"
     PREPARING = "preparing"
     EXECUTING = "executing"
+    COLLECTING = "collecting"
     REPORTING = "reporting"
     FINISHED = "finished"
 

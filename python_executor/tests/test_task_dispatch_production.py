@@ -49,7 +49,7 @@ class _FakeExecutor:
     def start(self):
         self.started = True
 
-    def execute_task(self, task):
+    def execute_plan(self, task):
         self.executed_tasks.append(task)
         executor_task_module.task_queue.add(task)
         return True
@@ -118,8 +118,9 @@ def test_single_tool_dispatch_uses_executor_owned_queue_write(dispatcher, monkey
     dispatcher.executor._handle_task_dispatch(message, "sid-1")
 
     assert len(dispatcher.task_queue_calls) == 1
-    assert dispatcher.task_queue_calls[0].toolType == "canoe"
+    assert dispatcher.task_queue_calls[0].tool_type == "canoe"
     assert len(dispatcher.executor.task_executor.executed_tasks) == 1
+    assert dispatcher.executor.task_executor.executed_tasks[0].tool_type == "canoe"
     event, payload = dispatcher.emitted[0]
     assert event == "task_response"
     assert payload["taskNo"] == "task-1"
@@ -127,9 +128,10 @@ def test_single_tool_dispatch_uses_executor_owned_queue_write(dispatcher, monkey
     assert payload["message"] == "任务已加入队列"
 
     snapshot = get_execution_observability_manager().get_snapshot("task-1")
-    assert snapshot["stage_history"][:3] == [
+    assert snapshot["stage_history"][:4] == [
         ExecutionLifecycleStage.RECEIVED.value,
         ExecutionLifecycleStage.VALIDATED.value,
+        ExecutionLifecycleStage.COMPILED.value,
         ExecutionLifecycleStage.QUEUED.value,
     ]
     assert snapshot["tool_type"] == "canoe"
@@ -168,4 +170,39 @@ def test_mixed_tool_dispatch_is_rejected_before_execution(dispatcher):
     snapshot = get_execution_observability_manager().get_snapshot("task-2")
     assert snapshot["current_stage"] == ExecutionLifecycleStage.FINISHED.value
     assert snapshot["failed_stage"] == ExecutionLifecycleStage.VALIDATED.value
-    assert snapshot["error_code"] == "TASK_VALIDATION_FAILED"
+    assert snapshot["error_code"] == "TASK_COMPILE_FAILED"
+
+
+def test_rejected_enqueue_marks_observability_finished(dispatcher, monkeypatch):
+    dispatcher.fake_manager._mappings = {
+        "case-3": _FakeMapping(category="CANOE", case_name="case-3"),
+    }
+
+    class _RejectingExecutor(_FakeExecutor):
+        def execute_plan(self, task):
+            self.executed_tasks.append(task)
+            return False
+
+    monkeypatch.setattr(main_production, "TaskExecutorProduction", _RejectingExecutor)
+
+    message = Message(
+        type="TASK_DISPATCH",
+        taskNo="task-3",
+        deviceId="device-3",
+        payload={
+            "testItems": [
+                {"case_no": "case-3", "name": "case-3"},
+            ],
+            "timeout": 60,
+        },
+    )
+
+    dispatcher.executor._handle_task_dispatch(message, "sid-3")
+
+    event, payload = dispatcher.emitted[0]
+    assert event == "task_response"
+    assert payload["status"] == "rejected"
+
+    snapshot = get_execution_observability_manager().get_snapshot("task-3")
+    assert snapshot["current_stage"] == ExecutionLifecycleStage.FINISHED.value
+    assert snapshot["error_code"] == "TASK_QUEUE_REJECTED"
