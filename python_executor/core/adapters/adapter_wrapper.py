@@ -26,7 +26,8 @@ class AdapterWrapper:
             adapter: 适配器实例
         """
         self.adapter = adapter
-        self.logger = logging.getLogger(self.__class__.__name__)
+        from utils.logger import get_logger
+        self.logger = get_logger(f"adapters.AdapterWrapper")
         self.last_error: Optional[str] = None
 
     @property

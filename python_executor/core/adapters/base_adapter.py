@@ -43,7 +43,8 @@ class BaseTestAdapter(ABC):
         """
         self.config = config or {}
         self.status = AdapterStatus.IDLE
-        self.logger = logging.getLogger(self.__class__.__name__)
+        from utils.logger import get_logger
+        self.logger = get_logger(f"adapters.{self.__class__.__name__}")
         self._last_error: Optional[str] = None
         
     @property

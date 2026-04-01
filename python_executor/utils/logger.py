@@ -190,14 +190,22 @@ logger_manager = LoggerManager()
 
 def get_logger(name: str = None) -> logging.Logger:
     """获取日志记录器
-    
+
     Args:
         name: 日志记录器名称（可选）
-        
+
     Returns:
         logging.Logger: 日志记录器实例
     """
-    return logger_manager.get_logger()
+    logger = logger_manager.get_logger()
+    # 如果尚未初始化日志系统，添加基础配置防止日志丢失
+    if not logger.handlers and not logger_manager._setup_done:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+    return logger
 
 
 def setup_logging(log_dir: str = 'logs', level: str = 'INFO'):
