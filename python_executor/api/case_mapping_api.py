@@ -1208,21 +1208,99 @@ def get_case_test_status(case_no: str):
     }
     """
     try:
+        from models.executor_task import task_queue as global_task_queue
+        from core.execution_observability import get_execution_observability_manager
+
         test_id = request.args.get('test_id')
+        observability_manager = get_execution_observability_manager()
+
+        def add_observability_context(test_id: str, info: dict) -> dict:
+            """Add observability context (trace_id, attempt_id, error_category) to info dict."""
+            try:
+                snapshot = observability_manager.get_snapshot(test_id)
+                info['trace_id'] = snapshot.get('trace_id')
+                info['attempt_id'] = snapshot.get('attempt_id')
+                info['error_category'] = snapshot.get('error_category')
+            except (KeyError, Exception):
+                # Observability context not available (brief window or context pruned)
+                info['trace_id'] = None
+                info['attempt_id'] = None
+                info['error_category'] = None
+            return info
 
         if test_id:
-            if test_id not in _test_execution_store:
+            # Primary: read from authoritative task_queue
+            task = global_task_queue.get_task(test_id)
+            if task:
+                test_info = {
+                    'test_id': task.id,
+                    'case_no': case_no,
+                    'status': task.status,
+                    'progress': 100 if task.is_completed() else (50 if task.is_running() else 0),
+                    'logs': [],
+                    'result': task.result,
+                    'start_time': None
+                }
+                if task.started_at:
+                    try:
+                        from datetime import datetime
+                        test_info['start_time'] = datetime.fromisoformat(task.started_at).timestamp()
+                    except (ValueError, TypeError):
+                        pass
+                test_info = add_observability_context(test_id, test_info)
+            elif test_id in _test_execution_store:
+                # Fallback: brief window before task_queue registration
+                test_info = _test_execution_store[test_id]
+                # Note: Observability context may not be available in _test_execution_store
+                # as it represents pre-submission state. Fields will be None.
+                test_info = add_observability_context(test_id, test_info)
+            else:
                 return jsonify({"success": False, "message": f"测试不存在: {test_id}"}), 404
-            test_info = _test_execution_store[test_id]
         else:
+            # Find most recent test for case_no
+            # Query from task_queue (authoritative)
+            all_tasks = global_task_queue.get_all_tasks()
             test_info = None
-            for tid, info in _test_execution_store.items():
-                if info['case_no'] == case_no:
-                    if test_info is None or info['start_time'] > test_info['start_time']:
-                        test_info = info
+            latest_start = None
+
+            for task in all_tasks:
+                # Check if this task is for the given case_no
+                params = getattr(task, 'params', {}) or {}
+                case_list = params.get('caseList', []) or params.get('caseList', [])
+                if case_no in [c.get('caseNo') or c.get('case_no') for c in case_list if isinstance(c, dict)]:
+                    task_start = None
+                    if task.started_at:
+                        try:
+                            from datetime import datetime
+                            task_start = datetime.fromisoformat(task.started_at).timestamp()
+                        except (ValueError, TypeError):
+                            pass
+                    if test_info is None or (task_start and task_start > latest_start):
+                        test_info = {
+                            'test_id': task.id,
+                            'case_no': case_no,
+                            'status': task.status,
+                            'progress': 100 if task.is_completed() else (50 if task.is_running() else 0),
+                            'logs': [],
+                            'result': task.result,
+                            'start_time': task_start
+                        }
+                        latest_start = task_start
+
+            if test_info is None:
+                # Fallback to _test_execution_store for brief submission window
+                for tid, info in _test_execution_store.items():
+                    if info.get('case_no') == case_no:
+                        if test_info is None or info['start_time'] > test_info['start_time']:
+                            test_info = info
+                            # Note: Observability context may not be available in _test_execution_store
+                            # as it represents pre-submission state. Fields will be None.
 
             if test_info is None:
                 return jsonify({"success": False, "message": f"未找到用例 {case_no} 的测试记录"}), 404
+
+            # Add observability context after final test_info is determined
+            test_info = add_observability_context(test_info['test_id'], test_info)
 
         return jsonify({
             "success": True,
