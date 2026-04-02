@@ -824,6 +824,24 @@
                 </div>
             </div>
 
+            <div class="runtime-grid">
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-route"></i> 可观测链路</h3>
+                        <span class="inline-note">trace_id / attempt_id / error_category</span>
+                    </div>
+                    <div class="runtime-services" id="runtime-observability-grid"></div>
+                </div>
+
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-file-circle-exclamation"></i> failed-report-traceability</h3>
+                        <span class="inline-note">失败上报与运行链路关联</span>
+                    </div>
+                    <div class="ops-list" id="failed-report-traceability"></div>
+                </div>
+            </div>
+
             <div class="runtime-guidance">
                 <div class="ops-panel">
                     <h3><i class="fas fa-rocket"></i> 发布前建议</h3>
@@ -955,6 +973,14 @@ document.addEventListener('DOMContentLoaded', function() {
         message: '正在加载软件 readiness...',
         variant: 'compact'
     });
+    setPanelState('runtime-observability-grid', 'loading', {
+        message: '正在加载可观测链路...',
+        variant: 'compact'
+    });
+    setPanelState('failed-report-traceability', 'loading', {
+        message: '正在加载失败上报关联...',
+        variant: 'compact'
+    });
     loadRuntimeOperations();
     initTabs();
     loadCategories();
@@ -1005,6 +1031,8 @@ async function loadRuntimeOperations() {
         clearPanelState('preflight-list');
         clearPanelState('runtime-services-grid');
         clearPanelState('runtime-software-grid');
+        clearPanelState('runtime-observability-grid');
+        clearPanelState('failed-report-traceability');
     } catch (error) {
         console.error('加载运行诊断失败:', error);
         document.getElementById('runtime-overall-status').innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>加载失败</span>';
@@ -1020,6 +1048,14 @@ async function loadRuntimeOperations() {
         });
         setPanelState('runtime-software-grid', 'error', {
             message: '软件 readiness 数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('runtime-observability-grid', 'error', {
+            message: '可观测链路数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('failed-report-traceability', 'error', {
+            message: '失败上报链路数据加载失败。',
             retryJs: 'loadRuntimeOperations()'
         });
     }
@@ -1070,6 +1106,8 @@ function renderRuntimeOverview(preflight, diagnose, serviceSummary) {
     renderPreflightItems(preflight.items || []);
     renderRuntimeServices(diagnose.services || {});
     renderRuntimeSoftware(diagnose.software || {});
+    renderRuntimeObservability(diagnose.observability || {});
+    renderFailedReportTraceability(diagnose.failed_report_traceability || {});
 }
 
 function renderPreflightItems(items) {
@@ -1124,6 +1162,50 @@ function renderRuntimeSoftware(software) {
                 <span class="status-chip ${normalizeStatusClass(info.ready ? 'ready' : info.status || 'unknown')}">${info.ready ? '就绪' : labelForRuntimeStatus(info.status || 'unknown')}</span>
             </div>
             <div class="runtime-service-meta">${escapeHtml(info.status_display || info.status || (info.ready ? 'ready' : 'unknown'))}</div>
+        </div>
+    `).join('');
+}
+
+function renderRuntimeObservability(observability) {
+    const container = document.getElementById('runtime-observability-grid');
+    const currentTasks = observability.current_tasks || [];
+    if (!currentTasks.length) {
+        container.innerHTML = '<div class="inline-note">暂无运行中的可观测链路上下文。</div>';
+        return;
+    }
+
+    container.innerHTML = currentTasks.map(task => `
+        <div class="runtime-service-card">
+            <div class="runtime-service-header">
+                <span class="runtime-service-name">${escapeHtml(task.task_no || '--')}</span>
+                <span class="status-chip ${normalizeStatusClass(task.current_stage || task.stage || 'unknown')}">${escapeHtml(task.current_stage || task.stage || 'unknown')}</span>
+            </div>
+            <div class="runtime-service-meta">
+                trace_id=${escapeHtml(task.trace_id || '--')}<br>
+                attempt_id=${escapeHtml(task.attempt_id || task.attempt || '--')}<br>
+                error_category=${escapeHtml(task.error_category || '--')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderFailedReportTraceability(summary) {
+    const container = document.getElementById('failed-report-traceability');
+    const items = summary.recent || [];
+    if (!items.length) {
+        container.innerHTML = '<div class="inline-note">暂无失败上报关联链路。</div>';
+        return;
+    }
+
+    container.innerHTML = items.map(item => `
+        <div class="ops-list-item">
+            <div class="ops-item-main">
+                <div class="ops-item-title">${escapeHtml(item.task_no || item.report_id || '--')}</div>
+                <div class="ops-item-message">
+                    trace_id=${escapeHtml(item.trace_id || '--')} · attempt_id=${escapeHtml(item.attempt_id || '--')} · error_category=${escapeHtml(item.error_category || '--')}
+                </div>
+            </div>
+            <span class="status-chip ${normalizeStatusClass(item.status || 'unknown')}">${escapeHtml(labelForRuntimeStatus(item.status || 'unknown'))}</span>
         </div>
     `).join('');
 }

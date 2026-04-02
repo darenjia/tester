@@ -65,6 +65,8 @@ def test_system_check_page_exposes_runtime_and_detailed_views():
     assert "housekeeping" in html
     assert "preflight-list" in html
     assert "runtime-services-grid" in html
+    assert "可观测链路" in html
+    assert "failed-report-traceability" in html
 
 
 def test_report_status_page_exposes_list_and_detail_views():
@@ -94,6 +96,8 @@ def test_report_detail_page_exposes_report_and_attempt_sections():
     assert "失败报告详情" in html
     assert "attempt-history" in html
     assert "ExecutionOutcome 摘要" in html
+    assert "trace_id" in html
+    assert "error_category" in html
     assert "report-detail-root" in html
     assert "data-ui-state" in html
 
@@ -143,6 +147,8 @@ def test_task_detail_page_exposes_standalone_runtime_sections():
     assert "执行时间线" in html
     assert "测试结果" in html
     assert "诊断上下文" in html
+    assert "attempt_id" in html
+    assert "trace_id" in html
     assert "task-detail-root" in html
     assert "data-ui-state" in html
 

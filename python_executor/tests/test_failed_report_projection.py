@@ -89,6 +89,8 @@ def test_failed_report_manager_persists_structured_metadata_and_initial_attempt(
     assert projection["task_no"] == "TASK-100"
     assert projection["metadata"]["toolType"] == "canoe"
     assert projection["latest_attempt"]["attempt_number"] == 1
+    assert projection["trace_id"] is None
+    assert projection["attempt_id"] == report.attempts[0].attempt_id
 
 
 def test_failed_report_manager_appends_retry_attempts_with_shared_metadata(tmp_path):
@@ -122,6 +124,43 @@ def test_failed_report_manager_appends_retry_attempts_with_shared_metadata(tmp_p
     assert report.attempts[-1].error_message == "retry failed"
     assert report.attempts[-1].payload_hash == report.metadata["payload_hash"]
     assert report.to_projection()["attempt_count"] == 2
+
+
+def test_failed_report_projection_exposes_observability_metadata(tmp_path):
+    manager = FailedReportManager(
+        storage_path=str(tmp_path / "failed_reports.json"),
+        config_manager=FakeConfigManager(
+            {
+                "report_retry.base_delay": 1,
+                "report_retry.backoff_factor": 2,
+                "report_retry.max_delay": 60,
+            }
+        ),
+    )
+
+    report_id = manager.add_failed_report(
+        report_data={
+            "taskNo": "TASK-OBS",
+            "status": "failed",
+            "trace_id": "trace-obs-1",
+            "attempt_id": "attempt-obs-1",
+            "error_category": "execution_failure",
+        },
+        task_info={"taskNo": "TASK-OBS", "projectNo": "PROJECT-OBS", "deviceId": "DEVICE-OBS"},
+        failure_reason="execution failed",
+        metadata={
+            "trace_id": "trace-obs-1",
+            "attempt_id": "attempt-obs-1",
+            "error_category": "execution_failure",
+        },
+    )
+
+    report = manager.get_report(report_id)
+    projection = report.to_projection()
+
+    assert projection["trace_id"] == "trace-obs-1"
+    assert projection["attempt_id"] == "attempt-obs-1"
+    assert projection["error_category"] == "execution_failure"
 
 
 def test_report_retry_api_uses_report_projections_for_list_and_detail(monkeypatch):

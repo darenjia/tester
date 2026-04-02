@@ -39,6 +39,9 @@ class _FakeFailedReportManager:
         self.cleaned_days = days
         return 2
 
+    def get_trace_context_summary(self, limit: int = 20):
+        return {"recent": [], "recent_trace_ids": [], "total_reports": self._stats.get("total", 0)}
+
 
 class _FakeStatusMonitor:
     def __init__(self, software_status: dict | None = None):
@@ -76,6 +79,28 @@ class _FakeScheduler:
 class _FakeTaskQueue:
     def get_stats(self):
         return {"pending": 2, "running": 1, "failed": 0}
+
+
+class _FakeObservabilityManager:
+    def __init__(self):
+        self.read_count = 0
+        self.mutated = False
+
+    def get_business_summary(self):
+        self.read_count += 1
+        return {
+            "queued_count": 1,
+            "active_count": 1,
+            "recent_failed_count": 1,
+            "current_tasks": [
+                {
+                    "task_no": "TASK-OBS",
+                    "trace_id": "trace-runtime-1",
+                    "attempt": 2,
+                    "error_code": "TASK_FAILED",
+                }
+            ],
+        }
 
 
 def test_preflight_checker_reports_warning_when_failed_reports_exist(tmp_path: Path):
@@ -251,6 +276,30 @@ def test_runtime_diagnose_service_does_not_bootstrap_global_executor(monkeypatch
 
     assert calls["count"] == 0
     assert snapshot["services"]["executor"]["status"] == "not_initialized"
+
+
+def test_runtime_diagnose_service_exposes_observability_context_read_only():
+    from core.runtime_operations import RuntimeDiagnoseService
+
+    observability_manager = _FakeObservabilityManager()
+    service = RuntimeDiagnoseService(
+        config_manager=_FakeConfigManager(config={"http": {"port": 8180}}),
+        task_executor=_FakeTaskExecutor(),
+        task_scheduler=_FakeScheduler(),
+        task_queue=_FakeTaskQueue(),
+        status_monitor=_FakeStatusMonitor(),
+        failed_report_manager=_FakeFailedReportManager(
+            {"pending": 0, "failed": 0, "success": 0, "retrying": 0, "total": 0}
+        ),
+        business_metrics_provider=lambda: {"queued_count": 0, "recent_failed_count": 0},
+        observability_manager=observability_manager,
+    )
+
+    snapshot = service.build_snapshot()
+
+    assert observability_manager.read_count == 1
+    assert snapshot["observability"]["current_tasks"][0]["trace_id"] == "trace-runtime-1"
+    assert snapshot["observability"]["current_tasks"][0]["attempt"] == 2
 
 
 def test_runtime_operations_api_exposes_preflight_and_diagnose(tmp_path: Path):

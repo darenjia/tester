@@ -234,6 +234,10 @@
         const taskInfo = report.task_info || {};
         const attempts = report.attempts || [];
         const latestAttempt = attempts.length ? attempts[attempts.length - 1] : null;
+        const traceId = report.trace_id || metadata.trace_id || metadata.traceId || latestAttempt?.trace_id || '--';
+        const attemptId = report.attempt_id || metadata.attempt_id || metadata.attemptId || latestAttempt?.attempt_id || '--';
+        const errorCategory = report.error_category || metadata.error_category || metadata.errorCategory || latestAttempt?.error_category || '--';
+        const reportErrorCategory = report.report_error_category || metadata.report_error_category || metadata.reportErrorCategory || '--';
 
         document.getElementById('report-detail-root').innerHTML = `
             <div class="hero">
@@ -300,6 +304,10 @@
                             ${infoCard('payload_hash', metadata.payload_hash || '--')}
                             ${infoCard('source', metadata.report_source || metadata.source || '--')}
                             ${infoCard('priority', report.priority ?? '--')}
+                            ${infoCard('trace_id', traceId)}
+                            ${infoCard('attempt_id', attemptId)}
+                            ${infoCard('error_category', errorCategory)}
+                            ${infoCard('report_error_category', reportErrorCategory)}
                         </div>
                     </div>
                 </div>
@@ -339,7 +347,9 @@
                         <th>次数</th>
                         <th>时间</th>
                         <th>状态</th>
+                        <th>trace_id</th>
                         <th>endpoint</th>
+                        <th>error_category</th>
                         <th>错误</th>
                     </tr>
                 </thead>
@@ -349,7 +359,9 @@
                             <td>${item.attempt_number || '--'}</td>
                             <td>${escapeHtml(item.attempted_at || '--')}</td>
                             <td><span class="status-badge ${statusClass(item.status)}">${escapeHtml(getStatusText(item.status))}</span></td>
+                            <td>${escapeHtml(item.trace_id || '--')}</td>
                             <td>${escapeHtml(item.endpoint || '--')}</td>
+                            <td>${escapeHtml(item.error_category || '--')}</td>
                             <td>${escapeHtml(item.error_message || '--')}</td>
                         </tr>
                     `).join('')}

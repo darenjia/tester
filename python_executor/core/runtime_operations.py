@@ -272,6 +272,7 @@ class RuntimeDiagnoseService:
         status_monitor=None,
         failed_report_manager=None,
         business_metrics_provider: Callable[[], dict[str, Any]] | None = None,
+        observability_manager=None,
     ):
         self.config_manager = config_manager or get_runtime_config()
         self.task_executor = task_executor
@@ -279,9 +280,10 @@ class RuntimeDiagnoseService:
         self.task_queue = task_queue_instance or task_queue or globals()["task_queue"]
         self.status_monitor = status_monitor or get_status_monitor()
         self.failed_report_manager = failed_report_manager or get_failed_report_manager(self.config_manager)
+        self.observability_manager = observability_manager or get_execution_observability_manager()
         self.business_metrics_provider = (
             business_metrics_provider
-            or (lambda: build_business_metrics_summary(get_execution_observability_manager().get_business_summary()))
+            or (lambda: build_business_metrics_summary(self.observability_manager.get_business_summary()))
         )
 
     def build_snapshot(self) -> dict[str, Any]:
@@ -294,6 +296,8 @@ class RuntimeDiagnoseService:
         failed_reports = self.failed_report_manager.get_statistics()
         software = self.status_monitor.get_software_status()
         business_metrics = self.business_metrics_provider()
+        observability = self.observability_manager.get_business_summary()
+        failed_report_traceability = self.failed_report_manager.get_trace_context_summary()
 
         status = RUNTIME_STATUS_READY
         ready_tools = [name for name, item in software.items() if item.get("ready")]
@@ -317,6 +321,8 @@ class RuntimeDiagnoseService:
             "failed_reports": failed_reports,
             "software": software,
             "business_metrics": business_metrics,
+            "observability": observability,
+            "failed_report_traceability": failed_report_traceability,
             "status_monitor": self.status_monitor.get_all_status(),
         }
 
