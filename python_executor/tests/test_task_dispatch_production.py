@@ -206,3 +206,24 @@ def test_rejected_enqueue_marks_observability_finished(dispatcher, monkeypatch):
     snapshot = get_execution_observability_manager().get_snapshot("task-3")
     assert snapshot["current_stage"] == ExecutionLifecycleStage.FINISHED.value
     assert snapshot["error_code"] == "TASK_QUEUE_REJECTED"
+
+
+def test_task_cancel_passes_requested_task_no(dispatcher):
+    cancelled = []
+
+    class _CancelableExecutor:
+        def cancel_task(self, task_no=None):
+            cancelled.append(task_no)
+            return True
+
+    dispatcher.executor.task_executor = _CancelableExecutor()
+
+    message = Message(type="TASK_CANCEL", taskNo="task-cancel", deviceId="device-cancel", payload={})
+
+    dispatcher.executor._handle_task_cancel(message, "sid-cancel")
+
+    assert cancelled == ["task-cancel"]
+    event, payload = dispatcher.emitted[0]
+    assert event == "cancel_response"
+    assert payload["taskNo"] == "task-cancel"
+    assert payload["status"] == "cancelled"

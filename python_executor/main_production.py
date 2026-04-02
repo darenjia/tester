@@ -520,7 +520,7 @@ class PythonExecutorProduction:
             logger.info(f"收到任务取消: {message.taskNo}")
             
             if self.task_executor:
-                success = self.task_executor.cancel_task()
+                success = self.task_executor.cancel_task(message.taskNo)
                 if success:
                     logger.info(f"任务取消成功: {message.taskNo}")
                     emit('cancel_response', {
