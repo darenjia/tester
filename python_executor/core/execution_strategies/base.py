@@ -14,5 +14,12 @@ class ExecutionStrategy(ABC):
         """Validate required capabilities before execution."""
 
     @abstractmethod
-    def run(self, plan: Any, adapter: Any, executor: Any = None, config_path: str | None = None) -> Any:
+    def run(
+        self,
+        plan: Any,
+        adapter: Any,
+        collector: Any = None,
+        executor: Any = None,
+        config_path: str | None = None,
+    ) -> Any:
         """Execute a plan using the provided adapter."""

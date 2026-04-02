@@ -18,7 +18,9 @@ from .capabilities import (
     MeasurementCapability,
     ProjectControlCapability,
     RPCExecutionCapability,
+    TSMasterExecutionCapability,
 )
+from core.case_mapping_manager import get_case_mapping_manager
 
 # 尝试导入TSMaster RPC API
 try:
@@ -106,6 +108,19 @@ class TSMasterAdapter(BaseTestAdapter):
 
     def _register_capabilities(self) -> None:
         self.register_capability(
+            "tsmaster_execution",
+            TSMasterExecutionCapability(
+                build_case_selection=self.build_case_selection,
+                start_execution=lambda selected_cases: self.start_test_execution(
+                    test_cases=selected_cases,
+                    wait_for_complete=False,
+                    timeout=self.operation_timeout,
+                ),
+                wait_for_completion=self.wait_for_test_complete,
+                get_report_info=self.get_test_report_info,
+            ),
+        )
+        self.register_capability(
             "configuration",
             ConfigurationCapability(load=self.load_configuration),
         )
@@ -132,7 +147,7 @@ class TSMasterAdapter(BaseTestAdapter):
             "artifact",
             ArtifactCapability(collect=self.get_test_report_info),
         )
-    
+
     def connect(self) -> bool:
         """
         连接TSMaster应用
@@ -895,6 +910,29 @@ class TSMasterAdapter(BaseTestAdapter):
         except Exception as e:
             self._set_error(f"获取测试报告信息失败: {str(e)}")
             return None
+
+    def build_case_selection(self, plan) -> str:
+        """
+        Build a TSMaster test case selection string from plan cases.
+
+        The returned string follows the conventional "CASE_A=1,CASE_B=1" form.
+        """
+        mapping_manager = get_case_mapping_manager()
+        selection_parts: List[str] = []
+
+        plan_cases = getattr(plan, "cases", None) or getattr(plan, "test_items", None) or []
+        for case in plan_cases:
+            case_no = getattr(case, "case_no", None) or getattr(case, "caseNo", None)
+            if not case_no:
+                continue
+
+            mapping = mapping_manager.get_mapping(case_no)
+            if mapping and getattr(mapping, "ini_config", None):
+                selection_parts.append(mapping.ini_config)
+            else:
+                selection_parts.append(f"{case_no}=1")
+
+        return ",".join(selection_parts)
 
     def get_test_statistics(self) -> Dict[str, int]:
         """

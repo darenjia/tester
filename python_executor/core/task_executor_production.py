@@ -710,7 +710,7 @@ class TaskExecutorProduction:
         # 如果所有重试都返回False而没有异常，说明连接失败但未抛出异常
         raise ToolException(f"连接{tool_type}失败: 适配器返回失败状态")
 
-    def _complete_task(self, task: Task, results: list):
+    def _complete_task(self, task: Task, results: list | ExecutionOutcome):
         """完成任务"""
         task_id = self._task_id(task)
         tool_type = self._task_tool_type(task)
@@ -726,8 +726,10 @@ class TaskExecutorProduction:
 
         logger.info(f"任务执行完成: {task_id}, 耗时: {duration:.1f}秒")
 
-        # 完成结果收集
-        task_result = self.current_collector.finalize(TaskStatus.COMPLETED.value)
+        if isinstance(results, ExecutionOutcome):
+            task_result = results
+        else:
+            task_result = self.current_collector.finalize(TaskStatus.COMPLETED.value)
 
         # 上报最终结果到WebSocket客户端
         self._report_final_result(task_id, task_result)
@@ -736,8 +738,24 @@ class TaskExecutorProduction:
         report_file_path = getattr(self, '_current_report_info', None).get('report_path') if hasattr(self, '_current_report_info') and self._current_report_info else None
         self._executor.submit(self._report_to_remote, task, task_result, report_file_path)
 
-        # 更新状态
-        self._update_task_status(task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
+        final_status = getattr(task_result, "status", TaskStatus.COMPLETED.value)
+        if final_status == TaskStatus.COMPLETED.value:
+            self._update_task_status(task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
+            return
+
+        error_message = getattr(task_result, "errorMessage", None) or "任务执行失败"
+        observability_manager.fail(
+            task_id,
+            error_code="TASK_TIMEOUT" if final_status == "timeout" else "TASK_FAILED",
+            error_message=error_message,
+            retryable=False,
+        )
+        record_metric(
+            'task.failed',
+            1,
+            {'task_no': task_id, 'stage': observability_manager.get_snapshot(task_id).get('failed_stage') or ''},
+        )
+        self._update_task_status(task_id, TaskStatus.FAILED, error_message)
     
     def _fail_task(self, task: Task, error_message: str):
         """任务失败"""

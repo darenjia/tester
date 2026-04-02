@@ -1,5 +1,7 @@
 """Tests for adapter capability registration and lookup."""
 
+from types import SimpleNamespace
+
 from core.adapters.base_adapter import BaseTestAdapter, TestToolType
 from core.adapters.canoe import CANoeAdapter
 from core.adapters.ttworkbench_adapter import TTworkbenchAdapter
@@ -157,3 +159,38 @@ def test_tsmaster_adapter_no_longer_exposes_removed_legacy_execution_helpers():
     assert not hasattr(adapter, "_execute_message_send")
     assert not hasattr(adapter, "_execute_test_sequence")
     assert not hasattr(adapter, "_execute_system_api")
+
+
+def test_tsmaster_adapter_registers_dedicated_execution_capability():
+    adapter = TSMasterAdapter({})
+
+    assert adapter.has_capability("tsmaster_execution") is True
+
+
+def test_tsmaster_execution_capability_exposes_runtime_methods():
+    adapter = TSMasterAdapter({})
+    capability = adapter.get_capability("tsmaster_execution")
+
+    assert capability is not None
+    assert hasattr(capability, "build_case_selection")
+    assert hasattr(capability, "start_execution")
+    assert hasattr(capability, "wait_for_completion")
+    assert hasattr(capability, "get_report_info")
+
+
+def test_tsmaster_build_case_selection_falls_back_when_mapping_is_missing(monkeypatch):
+    adapter = TSMasterAdapter({})
+    monkeypatch.setattr(
+        "core.adapters.tsmaster_adapter.get_case_mapping_manager",
+        lambda: type(
+            "_MappingManager",
+            (),
+            {"get_mapping": staticmethod(lambda case_no: None)},
+        )(),
+    )
+
+    selection = adapter.build_case_selection(
+        SimpleNamespace(test_items=[SimpleNamespace(case_no="CASE-001"), SimpleNamespace(caseNo="CASE-002")])
+    )
+
+    assert selection == "CASE-001=1,CASE-002=1"

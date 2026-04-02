@@ -38,6 +38,14 @@ class RPCExecutionCapability:
 
 
 @dataclass(frozen=True)
+class TSMasterExecutionCapability:
+    build_case_selection: Any
+    start_execution: Any
+    wait_for_completion: Any
+    get_report_info: Any
+
+
+@dataclass(frozen=True)
 class ProjectControlCapability:
     start_form: Any
     stop_form: Any

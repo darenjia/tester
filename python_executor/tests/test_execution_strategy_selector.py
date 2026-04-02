@@ -15,10 +15,11 @@ def test_selector_returns_canoe_strategy():
 
 
 def test_selector_returns_tsmaster_strategy():
+    from core.execution_plan import ExecutionPlan
     from core.execution_strategies.selector import ExecutionStrategySelector
 
     selector = ExecutionStrategySelector()
-    plan = SimpleNamespace(tool_type="tsmaster")
+    plan = ExecutionPlan(task_no="TASK-001", tool_type="tsmaster")
 
     strategy = selector.select(plan)
 
