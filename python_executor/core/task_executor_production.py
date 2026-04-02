@@ -17,21 +17,21 @@ from utils.validators import InputValidator, ValidationError
 from utils.metrics import TaskMetrics, performance_monitor, record_metric
 from utils.report_client import ReportClient
 from config.settings import get_config as get_runtime_config
-from models.task import Task, TaskStatus, TestToolType, TestResult, TestItemType, TaskResult
+from models.task import Task, TaskStatus, TestToolType, TestResult, TaskResult
 from models.result import CaseResult, ExecutionResult
 from models.executor_task import task_queue as global_task_queue, TaskStatus as ExecutorTaskStatus
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
-from core.adapters import create_adapter_with_wrapper, TestToolType
+from core.adapters import create_adapter, TestToolType
 from core.case_mapping_manager import get_case_mapping_manager
 from core.execution_plan import ExecutionPlan, PlannedCase
+from core.execution_strategies.selector import ExecutionStrategySelector
 from core.execution_observability import (
     ExecutionLifecycleStage,
     get_execution_observability_manager,
 )
 from core.status_monitor import get_status_monitor
 from core.task_compiler import TaskCompiler, TaskCompileError
-
 logger = get_logger("task_executor_production")
 
 
@@ -172,6 +172,7 @@ class TaskExecutorProduction:
 
         # 上报客户端
         self.report_client = ReportClient()
+        self._strategy_selector = ExecutionStrategySelector()
 
         self.logger.info("任务执行器（生产环境版）初始化完成")
 
@@ -261,6 +262,28 @@ class TaskExecutorProduction:
             "dtcInfo": self._case_dtc_info(case),
             "params": self._case_params(case),
         }
+
+    def _controller_last_error(self) -> str:
+        controller = self.controller
+        if controller is None:
+            return "未知错误"
+        if hasattr(controller, "last_error") and getattr(controller, "last_error"):
+            return getattr(controller, "last_error")
+        if hasattr(controller, "error_message") and getattr(controller, "error_message"):
+            return getattr(controller, "error_message")
+        return "未知错误"
+
+    def _controller_execute_test_module(self, module_name: str, timeout: int | None = None) -> Dict[str, Any]:
+        test_module_capability = None
+        if hasattr(self.controller, "get_capability"):
+            test_module_capability = self.controller.get_capability("test_module")
+        if test_module_capability is not None:
+            return test_module_capability.execute_module(module_name, timeout=timeout)
+        if hasattr(self.controller, "execute_test_module_direct"):
+            return self.controller.execute_test_module_direct(module_name, timeout)
+        if hasattr(self.controller, "run_test_module"):
+            return self.controller.run_test_module(module_name)
+        raise ToolException("当前适配器不支持TestModule执行")
     
     def start(self):
         """启动执行器"""
@@ -348,6 +371,17 @@ class TaskExecutorProduction:
             logger.error(f"execute_task 异常: {e}")
             return False
 
+        try:
+            strategy = self._strategy_selector.select(plan)
+            adapter = create_adapter(self._task_tool_type(plan), singleton=False)
+            ok, error = strategy.prepare(plan, adapter)
+            if not ok:
+                logger.error(f"策略预检查失败: {error}")
+                return False
+        except Exception as e:
+            logger.error(f"策略选择/预检查失败: {e}")
+            return False
+
         # 添加到内部执行队列
         if self._task_queue.put(plan):
             # 同时添加到全局队列供API查询（将TDMTask转换为内部Task格式）
@@ -385,6 +419,20 @@ class TaskExecutorProduction:
 
     def execute_plan(self, plan: ExecutionPlan) -> bool:
         return self.execute_task(plan)
+
+    def _run_strategy_execution(self, task: ExecutionPlan, adapter: BaseException | Any, config_path: str | None):
+        task_id = self._task_id(task)
+        tool_type = self._task_tool_type(task)
+        observability_manager = _ensure_observability_context(task)
+        observability_manager.transition(task_id, ExecutionLifecycleStage.EXECUTING)
+        record_metric(
+            'task.executing',
+            1,
+            {'task_no': task_id, 'tool_type': tool_type or ''},
+        )
+
+        strategy = self._strategy_selector.select(task)
+        return strategy.run(task, adapter=adapter, executor=self, config_path=config_path)
 
     def _build_execution_plan_from_queue_task(self, task) -> ExecutionPlan:
         params = getattr(task, 'params', {}) if hasattr(task, 'params') else {}
@@ -544,8 +592,9 @@ class TaskExecutorProduction:
                 else:
                     raise TaskException(f"不支持的测试工具类型: {tool_type}")
                 
-                # 使用适配器工厂创建控制器（带包装器，兼容原有接口）
-                self.controller = create_adapter_with_wrapper(adapter_type)
+                # 使用适配器工厂创建原生适配器，由 strategy/capability 驱动主路径
+                raw_adapter = create_adapter(adapter_type, singleton=False)
+                self.controller = raw_adapter
                 logger.info(f"已创建适配器: {adapter_type.value}")
             except Exception as e:
                 raise TaskException(f"创建适配器失败: {e}")
@@ -557,44 +606,10 @@ class TaskExecutorProduction:
             self._connect_tool_with_retry(task)
             self._current_metrics.record_step('connect_tool', time.time() - step_start)
 
-            # 加载配置文件（TSMaster用例不需要加载.cfg文件）
             step_start = time.time()
-            tool_type_for_load = tool_type.lower() if tool_type else ""
-            if tool_type_for_load != TestToolType.TSMASTER.value and cfg_path:
-                self._load_configuration_by_path(cfg_path)
-                current_cfg_path = cfg_path  # 记录当前加载的配置路径
-            else:
-                current_cfg_path = ""
-                logger.info("TSMaster用例跳过配置文件加载")
-            self._current_metrics.record_step('load_config', time.time() - step_start)
-
-            # 启动测量/仿真（对于TSMaster使用完整的测试执行流程）
-            step_start = time.time()
-            tool_type_lower = tool_type.lower() if tool_type else ""
-            observability_manager.transition(task_id, ExecutionLifecycleStage.EXECUTING)
-            record_metric(
-                'task.executing',
-                1,
-                {'task_no': task_id, 'tool_type': tool_type or ''},
-            )
-            if tool_type_lower == TestToolType.TSMASTER.value:
-                # TSMaster 使用 RPC 批量执行，已在 _start_test_execution 中完成所有用例执行
-                # 不需要再调用 _execute_test_items（会导致双重执行）
-                self._start_test_execution(task)
-                # 获取 TSMaster 测试结果
-                results = self._collect_tsmaster_results(task)
-            else:
-                self._start_measurement(task)
-                # 执行测试项
-                step_start = time.time()
-                results = self._execute_test_items(task)
-                self._current_metrics.record_step('execute_items', time.time() - step_start)
-            self._current_metrics.record_step('start_measurement', time.time() - step_start)
-
-            # 停止测量/仿真
-            step_start = time.time()
-            self._stop_measurement(task)
-            self._current_metrics.record_step('stop_measurement', time.time() - step_start)
+            current_cfg_path = cfg_path or ""
+            results = self._run_strategy_execution(task, adapter=self.controller, config_path=current_cfg_path)
+            self._current_metrics.record_step('strategy_execute', time.time() - step_start)
             
             # 完成任务
             self._complete_task(task, results)
@@ -682,575 +697,6 @@ class TaskExecutorProduction:
         # 如果所有重试都返回False而没有异常，说明连接失败但未抛出异常
         raise ToolException(f"连接{tool_type}失败: 适配器返回失败状态")
 
-    def _load_configuration(self, task: Task | ExecutionPlan):
-        """加载配置文件"""
-        config_path = self._task_config_path(task)
-        logger.info(f"正在加载配置文件: {config_path}")
-        self.current_collector.add_log("INFO", f"正在加载配置文件: {config_path}")
-
-        try:
-            result = self.controller.open_configuration(config_path)
-            if result:
-                logger.info("配置文件加载成功")
-                self.current_collector.add_log("INFO", "配置文件加载成功")
-            else:
-                # 获取更详细的错误信息
-                error_msg = "未知错误"
-                if hasattr(self.controller, 'adapter') and hasattr(self.controller.adapter, 'last_error'):
-                    error_msg = self.controller.adapter.last_error or error_msg
-                elif hasattr(self.controller, 'last_error'):
-                    error_msg = self.controller.last_error or error_msg
-                raise ToolException(f"配置文件加载失败: {error_msg}")
-        except ToolException:
-            raise
-        except Exception as e:
-            raise ToolException(f"配置文件加载失败: {e}")
-
-    def _load_configuration_by_path(self, config_path: str):
-        """通过路径加载配置文件"""
-        logger.info(f"正在加载配置文件: {config_path}")
-        self.current_collector.add_log("INFO", f"正在加载配置文件: {config_path}")
-
-        try:
-            result = self.controller.open_configuration(config_path)
-            if result:
-                logger.info("配置文件加载成功")
-                self.current_collector.add_log("INFO", "配置文件加载成功")
-            else:
-                # 获取更详细的错误信息
-                error_msg = "未知错误"
-                if hasattr(self.controller, 'adapter') and hasattr(self.controller.adapter, 'last_error'):
-                    error_msg = self.controller.adapter.last_error or error_msg
-                elif hasattr(self.controller, 'last_error'):
-                    error_msg = self.controller.last_error or error_msg
-                raise ToolException(f"配置文件加载失败: {error_msg}")
-        except ToolException:
-            raise
-        except Exception as e:
-            raise ToolException(f"配置文件加载失败: {e}")
-    
-    def _start_measurement(self, task: Task | ExecutionPlan):
-        """启动测量/仿真"""
-        logger.info("正在启动测量/仿真...")
-        self.current_collector.add_log("INFO", "正在启动测量/仿真")
-
-        try:
-            tool_type = self._task_tool_type(task)
-            tool_type_lower = tool_type.lower() if tool_type else ""
-            if tool_type_lower == TestToolType.CANOE.value:
-                success = self.controller.start_measurement()
-            else:
-                success = self.controller.start_simulation()
-            
-            if success:
-                logger.info("测量/仿真启动成功")
-                self.current_collector.add_log("INFO", "测量/仿真启动成功")
-            else:
-                raise ToolException("测量/仿真启动失败")
-                
-        except Exception as e:
-            raise ToolException(f"启动测量/仿真失败: {e}")
-
-    def _start_test_execution(self, task: Task | ExecutionPlan):
-        """
-        Start TSMaster test execution with full RPC flow.
-
-        Follows the reference example flow:
-        1. Build test case selection string from task.test_items
-        2. Call adapter.start_test_execution(test_cases, wait_for_complete=False)
-        3. Wait for test completion with adapter.wait_for_test_complete()
-
-        Args:
-            task: Task object with test_items containing case info
-        """
-        tool_type = self._task_tool_type(task)
-        tool_type_lower = tool_type.lower() if tool_type else ""
-
-        if tool_type_lower != TestToolType.TSMASTER.value:
-            # Fall back to regular start_measurement for non-TSMaster
-            self._start_measurement(task)
-            return
-
-        self.logger.info("使用TSMaster测试执行流程")
-
-        try:
-            # Build test case selection string from test_items
-            test_cases = self._build_tsmaster_test_cases_string(task)
-
-            if test_cases:
-                self.logger.info(f"执行TSMaster测试用例: {test_cases}")
-                self.current_collector.add_log("INFO", f"选择测试用例: {test_cases}")
-
-                # Call adapter's start_test_execution with test cases
-                success = self.controller.start_test_execution(
-                    test_cases=test_cases,
-                    wait_for_complete=False,  # We wait separately
-                    timeout=self._task_timeout(task)
-                )
-
-                if not success:
-                    raise ToolException("TSMaster测试执行启动失败")
-
-                # Wait for test to complete
-                self.logger.info("等待TSMaster测试执行完成...")
-                if not self.controller.wait_for_test_complete(timeout=self._task_timeout(task)):
-                    self.logger.warning("TSMaster测试执行超时")
-            else:
-                self.logger.info("无测试用例，启动仿真")
-                self._start_measurement(task)
-
-        except Exception as e:
-            raise ToolException(f"TSMaster测试执行失败: {e}")
-
-    def _collect_tsmaster_results(self, task: Task | ExecutionPlan) -> list:
-        """
-        收集 TSMaster 测试结果。
-
-        TSMaster 的测试结果已经在 _start_test_execution 中通过 RPC 批量执行完成，
-        这里从测试报告信息中收集结果，避免双重执行。
-
-        Args:
-            task: Task object
-
-        Returns:
-            list: TestResult 列表
-        """
-        results = []
-        try:
-            report_info = self.controller.get_test_report_info()
-            if report_info:
-                self._current_report_info = report_info
-                self.current_collector.add_log("INFO", f"测试报告路径: {report_info.get('report_path', 'N/A')}")
-                self.current_collector.add_log("INFO", f"测试数据路径: {report_info.get('testdata_path', 'N/A')}")
-                self.current_collector.add_log("INFO", f"通过: {report_info.get('passed', 0)}, 失败: {report_info.get('failed', 0)}")
-
-                # 从报告信息构建结果
-                passed = report_info.get('passed', 0)
-                failed = report_info.get('failed', 0)
-                total = passed + failed
-
-                if total > 0:
-                    # 遍历 task.test_items 构建结果
-                    for test_item in self._task_cases(task):
-                        case_no = self._case_no(test_item)
-                        item_name = self._case_name(test_item)
-
-                        # 尝试从 report_info 的详细结果中获取 verdict
-                        verdict = "UNKNOWN"
-                        if report_info.get('details'):
-                            for detail in report_info.get('details', []):
-                                if detail.get('name') == item_name or detail.get('case_no') == case_no:
-                                    verdict = detail.get('verdict', 'PASS' if detail.get('passed') else 'FAIL')
-                                    break
-
-                        result = TestResult(
-                            name=item_name,
-                            type=self._case_type(test_item) or 'test_module',
-                            verdict=verdict,
-                            details={
-                                'case_no': case_no,
-                                'report_info': report_info
-                            }
-                        )
-                        results.append(result)
-                        self.current_collector.add_test_result(result)
-                else:
-                    # 没有测试结果，生成未知状态
-                    self.logger.warning("TSMaster 测试报告无详细结果")
-                    for test_item in self._task_cases(task):
-                        result = TestResult(
-                            name=self._case_name(test_item),
-                            type=self._case_type(test_item) or 'test_module',
-                            verdict="UNKNOWN",
-                            details={'report_info': report_info}
-                        )
-                        results.append(result)
-                        self.current_collector.add_test_result(result)
-            else:
-                self.logger.warning("获取 TSMaster 报告信息为空")
-                # 生成空结果
-                for test_item in self._task_cases(task):
-                    result = TestResult(
-                        name=self._case_name(test_item),
-                        type=self._case_type(test_item) or 'test_module',
-                        error="无法获取测试报告信息"
-                    )
-                    results.append(result)
-                    self.current_collector.add_test_result(result)
-
-        except Exception as e:
-            self.logger.error(f"收集 TSMaster 测试结果失败: {e}")
-            # 出错时生成错误结果
-            for test_item in self._task_cases(task):
-                result = TestResult(
-                    name=self._case_name(test_item),
-                    type=self._case_type(test_item) or 'test_module',
-                    error=f"结果收集失败: {e}"
-                )
-                results.append(result)
-                self.current_collector.add_test_result(result)
-
-        return results
-
-    def _build_tsmaster_test_cases_string(self, task: Task | ExecutionPlan) -> str:
-        """
-        Build TSMaster test case selection string from task.test_items.
-
-        从用例映射的ini_config获取TSMaster用例选择字符串
-        Format: "TG1_TC1=1,TG1_TC2=1" or similar
-
-        Args:
-            task: Task object
-
-        Returns:
-            Test case selection string, empty string if no valid cases
-        """
-        task_cases = self._task_cases(task)
-        if not task_cases:
-            return ""
-
-        mapping_manager = get_case_mapping_manager()
-        cases = []
-
-        for item in task_cases:
-            case_no = self._case_no(item)
-            if case_no:
-                mapping = mapping_manager.get_mapping(case_no)
-                if mapping and mapping.ini_config:
-                    # ini_config 直接存储 TSMaster 用例选择字符串
-                    # 如 "TG1_TC1=1" 或 "TG1_TC1=1,TG1_TC2=1"
-                    cases.append(mapping.ini_config)
-
-        # 拼接多个 ini_config
-        # 例如：["TG1_TC1=1,TG1_TC2=1", "TG1_TC3=1"] -> "TG1_TC1=1,TG1_TC2=1,TG1_TC3=1"
-        return ",".join(cases) if cases else ""
-
-    def _execute_test_items(self, task: Task | ExecutionPlan) -> list:
-        """执行测试项"""
-        results = []
-        task_cases = self._task_cases(task)
-        task_id = self._task_id(task)
-        total_items = len(task_cases)
-        
-        logger.info(f"开始执行{total_items}个测试项")
-        self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
-        
-        for i, test_item in enumerate(task_cases, 1):
-            # 检查是否被取消
-            if self._stop_event.is_set():
-                logger.info("任务被取消")
-                self.current_collector.add_log("INFO", "任务被取消")
-                break
-            
-            progress = int((i / total_items) * 100)
-            logger.info(f"执行测试项 {i}/{total_items}: {self._case_name(test_item)}")
-            
-            # 更新进度
-            self._update_task_status(
-                task_id, 
-                TaskStatus.RUNNING, 
-                f"执行测试项 {i}/{total_items}: {self._case_name(test_item)}",
-                progress
-            )
-            
-            # 执行测试项
-            result = self._execute_single_item(test_item)
-            results.append(result)
-            
-            # 收集结果
-            self.current_collector.add_test_result(result)
-            
-            # 上报进度
-            self._report_progress(task_id, test_item, result)
-            
-            # 短暂延时
-            time.sleep(0.5)
-
-        return results
-
-    def _find_cfg_in_directory(self, directory: str, case_id: str = None) -> Optional[str]:
-        """
-        在目录中查找.cfg文件
-
-        Args:
-            directory: 目录路径
-            case_id: 用例ID（可选，用于匹配文件名）
-
-        Returns:
-            .cfg文件路径，未找到返回None
-        """
-        if not os.path.isdir(directory):
-            return None
-
-        # 获取目录下所有.cfg文件
-        cfg_files = [f for f in os.listdir(directory) if f.endswith('.cfg')]
-
-        if not cfg_files:
-            logger.warning(f"目录中未找到.cfg文件: {directory}")
-            return None
-
-        # 如果提供了case_id，尝试匹配
-        if case_id:
-            # 尝试精确匹配 case_id.cfg
-            for cfg_file in cfg_files:
-                if cfg_file.replace('.cfg', '') == case_id:
-                    return os.path.join(directory, cfg_file)
-
-            # 尝试模糊匹配（case_id作为前缀或后缀）
-            for cfg_file in cfg_files:
-                cfg_name = cfg_file.replace('.cfg', '')
-                if case_id in cfg_name or cfg_name in case_id:
-                    return os.path.join(directory, cfg_file)
-
-        # 如果只有一个.cfg文件，直接返回
-        if len(cfg_files) == 1:
-            return os.path.join(directory, cfg_files[0])
-
-        # 多于一个.cfg文件但没有匹配，返回第一个
-        logger.warning(f"目录中有多个.cfg文件且未匹配到特定的case_id，返回第一个: {cfg_files[0]}")
-        return os.path.join(directory, cfg_files[0])
-
-    def _execute_test_items_with_config(self, task: Task | ExecutionPlan, current_cfg_path: str = None) -> list:
-        """
-        使用配置执行测试项 - 新的配置驱动执行方式
-
-        执行流程：
-        1. 遍历任务中的测试用例
-        2. 对每个用例，根据用例映射获取cfg和ini配置
-        3. 重新加载cfg配置（如有变化）
-        4. 根据用例配置更新ini文件
-        5. 触发测试执行
-        6. 等待并获取结果
-
-        Args:
-            task: 任务对象
-            current_cfg_path: 当前已加载的配置路径
-        """
-        results = []
-        task_cases = self._task_cases(task)
-        task_id = self._task_id(task)
-        total_items = len(task_cases)
-
-        logger.info(f"[_execute_test_items_with_config] 开始执行 {total_items} 个测试项（配置驱动方式）")
-        self.current_collector.add_log("INFO", f"开始执行{total_items}个测试项")
-
-        # 初始化配置管理器（用于生成ini）
-        base_dir = self._task_base_config_dir(task) or _get_runtime_config_manager().get(
-            'config_base_dir',
-            r'D:\TAMS\DTTC_CONFIG',
-        )
-        logger.info(f"[_execute_test_items_with_config] base_dir={base_dir}")
-        test_config_manager = TestConfigManager(base_config_dir=base_dir)
-
-        for i, test_item in enumerate(task_cases, 1):
-            # 检查是否被取消
-            if self._stop_event.is_set():
-                logger.info("任务被取消")
-                self.current_collector.add_log("INFO", "任务被取消")
-                break
-
-            # 通过用例映射查找脚本标识和配置
-            mapping_manager = get_case_mapping_manager()
-            case_no = self._case_no(test_item)
-            logger.info(f"[_execute_test_items_with_config] 第{i}项: test_item.name={self._case_name(test_item)}, case_no={case_no}")
-            logger.info(f"[_execute_test_items_with_config] 从映射管理器获取映射: case_no={case_no}")
-
-            if case_no:
-                mapping = mapping_manager.get_mapping(case_no)
-                logger.info(f"[_execute_test_items_with_config] 获取到的映射: {mapping}")
-                if mapping:
-                    logger.info(f"[_execute_test_items_with_config] 映射详情: case_no={mapping.case_no}, enabled={mapping.enabled}, script_path={mapping.script_path}")
-            else:
-                mapping = None
-                logger.info(f"[_execute_test_items_with_config] case_no为空，跳过映射查找")
-
-            if mapping and mapping.enabled:
-                case_id = mapping.case_no
-                script_path = mapping.script_path
-                ini_config = mapping.ini_config
-                para_config = mapping.para_config
-                logger.info(f"[_execute_test_items_with_config] 用例映射找到: name={self._case_name(test_item)}, case_id={case_id}, script_path={script_path}, ini_config={ini_config[:100] if ini_config else None}...")
-
-                # 如果script_path是目录，在目录中查找.cfg文件
-                if script_path and os.path.isdir(script_path):
-                    script_path = self._find_cfg_in_directory(script_path, case_id)
-                    logger.info(f"[_execute_test_items_with_config] 在目录中找到cfg文件: {script_path}")
-            else:
-                case_id = self._case_name(test_item)
-                script_path = None
-                ini_config = None
-                para_config = None
-                if mapping is None:
-                    logger.info(f"[_execute_test_items_with_config] 未找到用例映射，使用原始名称: {self._case_name(test_item)}")
-                else:
-                    logger.info(f"[_execute_test_items_with_config] 用例未启用: {case_no}")
-
-            progress = int((i / total_items) * 100)
-            logger.info(f"[_execute_test_items_with_config] 执行测试项 {i}/{total_items}: {self._case_name(test_item)} (case_id: {case_id}, script_path: {script_path})")
-
-            # 更新进度
-            self._update_task_status(
-                task_id,
-                TaskStatus.RUNNING,
-                f"执行测试项 {i}/{total_items}: {self._case_name(test_item)}",
-                progress
-            )
-
-            # 如果用例有独立的script_path且与当前加载的不同，需要重新加载配置
-            if script_path and script_path != current_cfg_path:
-                logger.info(f"切换配置: {current_cfg_path} -> {script_path}")
-                self.current_collector.add_log("INFO", f"切换配置: {script_path}")
-
-                # 停止测量
-                self._stop_measurement(task)
-
-                # 断开连接
-                if self.controller:
-                    try:
-                        self.controller.disconnect()
-                    except Exception as e:
-                        logger.warning(f"断开连接失败: {e}")
-
-                # 重新连接
-                self._connect_tool_with_retry(task)
-
-                # 加载新配置
-                self._load_configuration_by_path(script_path)
-
-                # 重新启动测量
-                self._start_measurement(task)
-
-                current_cfg_path = script_path
-
-            # 如果用例有ini配置，生成ini文件
-            if test_config_manager:
-                try:
-                    # 设置当前 cfg 路径，以便 ini 文件写入到正确位置
-                    if script_path:
-                        test_config_manager._current_cfg_path = script_path
-                    elif current_cfg_path:
-                        test_config_manager._current_cfg_path = current_cfg_path
-
-                    # 获取属性参数（优先用例params，其次任务variables）
-                    case_variables = self._case_params(test_item) or self._task_variables(task)
-                    ini_info = test_config_manager._generate_ini_from_case_config(
-                        case_no,
-                        ini_config,
-                        variables=case_variables,
-                        para_config=para_config
-                    )
-                    logger.info(f"为用例 {case_no} 生成ini文件: {ini_info}")
-                    self.current_collector.add_log("INFO", f"用例 {case_no} ini配置已更新")
-                except Exception as e:
-                    logger.error(f"生成ini配置失败: {e}")
-                    self.current_collector.add_log("ERROR", f"生成ini配置失败: {e}")
-
-            # 执行用例
-            if hasattr(self.controller, 'run_test_case_with_config'):
-                result = self.controller.run_test_case_with_config(
-                    test_case_name=case_id,
-                    config={
-                        'dtc_info': self._case_dtc_info(test_item),
-                        'params': self._case_params(test_item),
-                        'repeat': self._case_repeat(test_item)
-                    },
-                    timeout=self._task_timeout(task) // max(len(task_cases), 1)
-                )
-
-                if result.get('success'):
-                    test_result = TestResult(
-                        name=self._case_name(test_item),
-                        type=self._case_type(test_item) or 'test_case',
-                        verdict="PASS" if result.get('result') == 0 else "FAIL",
-                        details=result
-                    )
-                else:
-                    test_result = TestResult(
-                        name=self._case_name(test_item),
-                        type=self._case_type(test_item) or 'test_case',
-                        error=result.get('error', '执行失败'),
-                        details=result
-                    )
-            else:
-                test_result = self._execute_single_item(test_item)
-
-            results.append(test_result)
-            self.current_collector.add_test_result(test_result)
-            self._report_progress(task_id, test_item, test_result)
-
-            time.sleep(0.5)
-
-        return results
-
-    def _execute_single_item(self, test_item) -> TestResult:
-        """执行单个测试项"""
-        try:
-            if test_item.type == TestItemType.SIGNAL_CHECK.value:
-                actual_value = self.controller.get_signal(test_item.signal_name)
-                passed = abs(actual_value - test_item.expected_value) < 0.01 if actual_value is not None else False
-
-                return TestResult(
-                    name=test_item.name,
-                    type=test_item.type,
-                    expected=test_item.expected_value,
-                    actual=actual_value,
-                    passed=passed
-                )
-
-            elif test_item.type == TestItemType.SIGNAL_SET.value:
-                success = self.controller.set_signal(test_item.signal_name, test_item.value)
-
-                return TestResult(
-                    name=test_item.name,
-                    type=test_item.type,
-                    success=success
-                )
-
-            elif test_item.type == TestItemType.TEST_MODULE.value:
-                result = self.controller.run_test_module(test_item.name)
-
-                return TestResult(
-                    name=test_item.name,
-                    type=test_item.type,
-                    verdict=result.get("verdict", "UNKNOWN"),
-                    details=result
-                )
-
-            else:
-                return TestResult(
-                    name=test_item.name,
-                    type=test_item.type,
-                    error=f"未知的测试项类型: {test_item.type}"
-                )
-
-        except Exception as e:
-            logger.error(f"执行测试项失败: {test_item.name}, 错误: {e}")
-            return TestResult(
-                name=test_item.name,
-                type=test_item.type,
-                error=f"执行失败: {e}"
-            )
-    
-    def _stop_measurement(self, task: Task | ExecutionPlan):
-        """停止测量/仿真"""
-        logger.info("正在停止测量/仿真...")
-        self.current_collector.add_log("INFO", "正在停止测量/仿真")
-
-        try:
-            tool_type = self._task_tool_type(task)
-            tool_type_lower = tool_type.lower() if tool_type else ""
-            if tool_type_lower == TestToolType.CANOE.value:
-                self.controller.stop_measurement()
-            else:
-                self.controller.stop_simulation()
-            
-            logger.info("测量/仿真停止成功")
-            self.current_collector.add_log("INFO", "测量/仿真停止成功")
-            
-        except Exception as e:
-            logger.warning(f"停止测量/仿真失败: {e}")
-            self.current_collector.add_log("WARNING", f"停止测量/仿真失败: {e}")
-    
     def _complete_task(self, task: Task, results: list):
         """完成任务"""
         task_id = self._task_id(task)

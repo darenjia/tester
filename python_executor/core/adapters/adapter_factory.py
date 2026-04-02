@@ -1,14 +1,13 @@
 """
 适配器工厂模块
 
-提供适配器创建、单例缓存和包装器构建的唯一真源。
+提供适配器创建、单例缓存的唯一真源。
 """
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
-from .adapter_wrapper import AdapterWrapper
 from .base_adapter import AdapterStatus, BaseTestAdapter, TestToolType
 from .canoe import CANoeAdapter
 from .tsmaster_adapter import TSMasterAdapter
@@ -47,7 +46,7 @@ class AdapterFactory:
         cls,
         tool_type: TestToolType | str,
         config: Optional[dict[str, Any]] = None,
-        singleton: bool = True,
+        singleton: bool = False,
     ) -> BaseTestAdapter:
         normalized_type = cls._normalize_tool_type(tool_type)
         if normalized_type not in cls._registry:
@@ -66,20 +65,9 @@ class AdapterFactory:
         cls,
         tool_type: TestToolType | str,
         config: Optional[dict[str, Any]] = None,
-        singleton: bool = True,
+        singleton: bool = False,
     ) -> BaseTestAdapter:
         return cls.create_adapter(tool_type, config=config, singleton=singleton)
-
-    @classmethod
-    def create_adapter_with_wrapper(
-        cls,
-        tool_type: TestToolType | str,
-        config: Optional[dict[str, Any]] = None,
-        singleton: bool = True,
-    ) -> AdapterWrapper:
-        return AdapterWrapper(
-            cls.create_adapter(tool_type, config=config, singleton=singleton)
-        )
 
     @classmethod
     def register_adapter(cls, tool_type: TestToolType | str, adapter_class: type) -> None:
@@ -134,30 +122,24 @@ class AdapterFactory:
 
 
 def create_adapter(
-    tool_type: TestToolType | str, config: Optional[dict[str, Any]] = None
+    tool_type: TestToolType | str,
+    config: Optional[dict[str, Any]] = None,
+    singleton: bool = False,
 ) -> BaseTestAdapter:
-    return AdapterFactory.create_adapter(tool_type, config=config, singleton=True)
+    return AdapterFactory.create_adapter(tool_type, config=config, singleton=singleton)
 
 
 def get_adapter(
-    tool_type: TestToolType | str, config: Optional[dict[str, Any]] = None
+    tool_type: TestToolType | str,
+    config: Optional[dict[str, Any]] = None,
+    singleton: bool = False,
 ) -> BaseTestAdapter:
-    return AdapterFactory.get_adapter(tool_type, config=config, singleton=True)
-
-
-def create_adapter_with_wrapper(
-    tool_type: TestToolType | str, config: Optional[dict[str, Any]] = None
-) -> AdapterWrapper:
-    return AdapterFactory.create_adapter_with_wrapper(tool_type, config=config, singleton=True)
-
-
+    return AdapterFactory.get_adapter(tool_type, config=config, singleton=singleton)
 __all__ = [
     "AdapterFactory",
     "AdapterStatus",
-    "AdapterWrapper",
     "BaseTestAdapter",
     "TestToolType",
     "create_adapter",
-    "create_adapter_with_wrapper",
     "get_adapter",
 ]

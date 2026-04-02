@@ -13,6 +13,12 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
+from .capabilities import (
+    ArtifactCapability,
+    ConfigurationCapability,
+    MeasurementCapability,
+    TTworkbenchExecutionCapability,
+)
 from ..realtime_logger import TaskLogAdapter
 
 
@@ -82,11 +88,39 @@ class TTworkbenchAdapter(BaseTestAdapter):
         self._execution_log: List[str] = []
         self._realtime_logger: Optional[TaskLogAdapter] = None
         self._enable_realtime_log = True
+        self._register_capabilities()
         
     @property
     def tool_type(self) -> TestToolType:
         """返回测试工具类型"""
         return TestToolType.TTWORKBENCH
+
+    def _register_capabilities(self) -> None:
+        self.register_capability(
+            "configuration",
+            ConfigurationCapability(load=self.load_configuration),
+        )
+        self.register_capability(
+            "measurement",
+            MeasurementCapability(start=self.start_test, stop=self.stop_test),
+        )
+        self.register_capability(
+            "artifact",
+            ArtifactCapability(
+                collect=lambda: {
+                    "report_path": self.report_path,
+                    "log_path": self.log_path,
+                    "last_execution_log": list(self._execution_log),
+                }
+            ),
+        )
+        self.register_capability(
+            "ttworkbench_execution",
+            TTworkbenchExecutionCapability(
+                execute_clf=self.execute_clf_file,
+                execute_batch=self.execute_clf_batch,
+            ),
+        )
     
     def connect(self) -> bool:
         """
@@ -300,9 +334,9 @@ class TTworkbenchAdapter(BaseTestAdapter):
     def start_test(self) -> bool:
         """
         TTworkbench不需要启动操作
-        
-        测试执行在execute_test_item中完成
-        
+
+        实际执行由strategy通过ttworkbench_execution capability驱动。
+
         Returns:
             始终返回True
         """
@@ -322,48 +356,22 @@ class TTworkbenchAdapter(BaseTestAdapter):
     
     def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行单个测试项（clf文件）
-        
-        支持的测试项类型：
-        - clf_test: 执行clf测试文件
-        - batch_test: 批量执行多个clf文件
-        
-        Args:
-            item: 测试项配置字典
-                - type: 测试项类型
-                - name: 测试项名称
-                - clf_file: clf文件路径（clf_test类型）
-                - clf_files: clf文件路径列表（batch_test类型）
-                
-        Returns:
-            测试结果字典
+        legacy兼容接口，新执行链路不再通过adapter层派发高层测试项。
         """
-        item_type = item.get("type")
-        item_name = item.get("name", "unnamed")
-        
-        self.logger.info(f"执行测试项: {item_name} (类型: {item_type})")
-        
-        try:
-            if item_type == "clf_test":
-                return self._execute_clf_test(item)
-            elif item_type == "batch_test":
-                return self._execute_batch_test(item)
-            else:
-                return {
-                    "name": item_name,
-                    "type": item_type,
-                    "status": "error",
-                    "error": f"不支持的测试项类型: {item_type}"
-                }
-                
-        except Exception as e:
-            self.logger.error(f"执行测试项失败: {str(e)}")
-            return {
-                "name": item_name,
-                "type": item_type,
-                "status": "error",
-                "error": str(e)
-            }
+        item_type = item.get("type", "unknown")
+        self.logger.warning(f"execute_test_item 已废弃，当前类型不再由适配器层执行: {item_type}")
+        return {
+            "name": item.get("name", "unnamed"),
+            "type": item_type,
+            "status": "error",
+            "error": f"TTworkbenchAdapter.execute_test_item 已不再支持，请改用 strategy/capability 执行链路: {item_type}",
+        }
+
+    def execute_clf_file(self, clf_file: str, task_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._execute_clf_test({"name": Path(clf_file).stem, "clf_file": clf_file, "task_id": task_id})
+
+    def execute_clf_batch(self, clf_files: List[str], task_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._execute_batch_test({"name": "batch", "clf_files": clf_files, "task_id": task_id})
     
     def _execute_clf_test(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """执行单个clf测试文件"""

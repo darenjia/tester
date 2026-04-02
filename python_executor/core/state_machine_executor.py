@@ -146,6 +146,10 @@ class StateMachineTaskExecutor:
         """
         plan = self._ensure_execution_plan(task)
 
+        if not self._is_supported_tool_type(plan.tool_type):
+            logger.error(f"状态机执行器不支持的工具类型: {plan.tool_type}")
+            return False
+
         # 验证任务数据
         try:
             test_items = []
@@ -178,6 +182,10 @@ class StateMachineTaskExecutor:
 
     def execute_plan(self, plan: ExecutionPlan) -> bool:
         return self.execute_task(plan)
+
+    def _is_supported_tool_type(self, tool_type: str) -> bool:
+        normalized = (tool_type or "").lower()
+        return normalized == TestToolType.CANOE.value
     
     def _execute_with_state_machine(self, task: ExecutionPlan):
         """使用状态机执行任务"""
@@ -270,19 +278,13 @@ class StateMachineTaskExecutor:
                                  task: _StateMachineTaskView, collector: ResultCollector,
                                  metrics: TaskMetrics):
         """注册状态处理器"""
+        tool_type_lower = task.tool_type.lower() if task.tool_type else ""
+        if tool_type_lower != TestToolType.CANOE.value:
+            raise ValueError(f"状态机执行器仅支持 {TestToolType.CANOE.value}: {task.tool_type}")
+
         # 获取测试项列表
         test_items = [item.name for item in task.test_items]
-        
-        # 确定适配器类型
-        tool_type_lower = task.tool_type.lower() if task.tool_type else ""
-        if tool_type_lower == TestToolType.CANOE.value:
-            adapter_type = TestToolType.CANOE
-        elif tool_type_lower == TestToolType.TSMASTER.value:
-            adapter_type = TestToolType.TSMASTER
-        elif tool_type_lower == TestToolType.TTWORKBENCH.value:
-            adapter_type = TestToolType.TTWORKBENCH
-        else:
-            adapter_type = TestToolType.CANOE
+        adapter_type = TestToolType.CANOE
         
         # 注册各状态处理器
         state_machine.register_handler(
