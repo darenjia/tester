@@ -8,7 +8,6 @@ class _FakeAdapter(BaseTestAdapter):
     def __init__(self):
         super().__init__({})
         self.loaded_configs: list[str] = []
-        self.system_vars: dict[tuple[str, str], object] = {}
         self.started_forms: list[str | None] = []
 
     @property
@@ -37,13 +36,6 @@ class _FakeAdapter(BaseTestAdapter):
     def execute_test_module_direct(self, module_name: str, timeout: int = None):
         return {"success": True, "verdict": "Passed", "duration": timeout or 0, "module": module_name}
 
-    def get_system_variable(self, namespace: str, variable: str):
-        return self.system_vars.get((namespace, variable))
-
-    def set_system_variable(self, namespace: str, variable: str, value):
-        self.system_vars[(namespace, variable)] = value
-        return True
-
     def start_test_execution(self, test_cases=None, wait_for_complete=True, timeout=None):
         return True
 
@@ -71,17 +63,15 @@ def test_adapter_wrapper_delegates_common_capabilities():
     assert wrapper.execute_test_module("ModuleB", timeout=12)["duration"] == 12
 
 
-def test_adapter_wrapper_exposes_canoe_case_control():
+def test_adapter_wrapper_removes_canoe_config_driven_facade():
     wrapper = AdapterWrapper(_FakeAdapter())
 
-    assert wrapper.set_test_case_name("CaseA") is True
-    assert wrapper.set_test_variable("startTest", 1) is True
-    assert wrapper.get_test_variable("startTest") == 1
-
-    result = wrapper.run_test_case_with_config("CaseA", config={}, timeout=33)
-
-    assert result["success"] is True
-    assert result["result"] == "PASS"
+    assert not hasattr(wrapper, "set_test_case_name")
+    assert not hasattr(wrapper, "set_test_variable")
+    assert not hasattr(wrapper, "get_test_variable")
+    assert not hasattr(wrapper, "start_test_case")
+    assert not hasattr(wrapper, "check_test_case_complete")
+    assert not hasattr(wrapper, "run_test_case_with_config")
 
 
 def test_adapter_wrapper_exposes_tsmaster_capabilities():
@@ -92,3 +82,11 @@ def test_adapter_wrapper_exposes_tsmaster_capabilities():
     assert wrapper.get_test_report_info()["report_path"].endswith("result.html")
     assert wrapper.start_master_form("MasterForm") is True
     assert wrapper.stop_master_form("MasterForm") is True
+
+
+def test_adapter_wrapper_exposes_capability_lookup():
+    wrapper = AdapterWrapper(_FakeAdapter())
+
+    wrapper.adapter.register_capability("measurement", object())
+
+    assert wrapper.get_capability("measurement") is not None

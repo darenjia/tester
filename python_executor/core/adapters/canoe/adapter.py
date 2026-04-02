@@ -15,6 +15,12 @@ from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 
 from ..base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
+from ..capabilities import (
+    ArtifactCapability,
+    ConfigurationCapability,
+    MeasurementCapability,
+    TestModuleCapability,
+)
 from .com_wrapper import CANoeCOMWrapper, DeviceInfo, CANoeError
 from .test_engine import CANoeTestEngine, TestStatus, TestExecutionResult
 
@@ -27,10 +33,8 @@ class CANoeAdapter(BaseTestAdapter):
     - CANoe应用程序控制（连接/断开）
     - 配置文件加载（.cfg）
     - 测量控制（启动/停止）
-    - 信号读写（CAN/LIN/Ethernet）
-    - 系统变量操作（与CAPL交互）
+    - TestModule 直接执行
     - 设备自检
-    - 显性/隐性用例测试
     - 实时进度和日志回调
     
     Attributes:
@@ -48,9 +52,8 @@ class CANoeAdapter(BaseTestAdapter):
         >>> with adapter:
         ...     adapter.load_configuration("test.cfg")
         ...     result = adapter.execute_test_item({
-        ...         "type": "test_cases",
-        ...         "explicit_cases": ["CASE_001@1"],
-        ...         "implicit_cases": ["CASE_002@1"]
+        ...         "type": "test_module",
+        ...         "name": "SmokeModule"
         ...     })
         ...     print(f"测试结果: {result['status']}")
         >>> 
@@ -58,7 +61,7 @@ class CANoeAdapter(BaseTestAdapter):
         >>> adapter.connect()
         >>> adapter.load_configuration("test.cfg")
         >>> adapter.start_test()
-        >>> value = adapter.get_signal_value("EngineSpeed")
+        >>> adapter.execute_test_module_direct("SmokeModule")
         >>> adapter.stop_test()
         >>> adapter.disconnect()
     """
@@ -75,7 +78,6 @@ class CANoeAdapter(BaseTestAdapter):
                 - open_timeout: 打开配置超时时间（默认30秒）
                 - case_timeout: 单个用例超时时间（默认600秒）
                 - self_check_timeout: 自检超时时间（默认300秒）
-                - namespace: 系统变量命名空间（默认mutualVar）
                 - retry_count: 连接重试次数（默认3次）
                 - retry_interval: 重试间隔（默认2秒）
                 - canoe_version: 期望的CANoe版本（可选）
@@ -109,11 +111,33 @@ class CANoeAdapter(BaseTestAdapter):
         self._current_task: Optional[Dict[str, Any]] = None
         self._last_result: Optional[Dict[str, Any]] = None
         self.error_message: Optional[str] = None
+        self._register_capabilities()
         
     @property
     def tool_type(self) -> TestToolType:
         """返回测试工具类型"""
         return TestToolType.CANOE
+
+    def _register_capabilities(self) -> None:
+        self.register_capability(
+            "configuration",
+            ConfigurationCapability(load=self.load_configuration),
+        )
+        self.register_capability(
+            "measurement",
+            MeasurementCapability(start=self.start_test, stop=self.stop_test),
+        )
+        self.register_capability(
+            "test_module",
+            TestModuleCapability(
+                execute_module=self.execute_test_module_direct,
+                list_modules=self.get_test_modules,
+            ),
+        )
+        self.register_capability(
+            "artifact",
+            ArtifactCapability(collect=lambda: self.get_status().get("last_result")),
+        )
     
     @property
     def canoe_version(self) -> Optional[str]:
@@ -359,80 +383,13 @@ class CANoeAdapter(BaseTestAdapter):
             self._set_error(f"停止测量失败: {str(e)}")
             return False
     
-    def get_signal_value(self, signal_name: str, 
-                        bus: str = "CAN", 
-                        channel: int = 1) -> Optional[float]:
-        """
-        获取信号值
-        
-        Args:
-            signal_name: 信号名称
-            bus: 总线类型（CAN/LIN/Ethernet）
-            channel: 通道号
-            
-        Returns:
-            信号值，失败返回None
-        """
-        return self._canoe_wrapper.get_signal_value(signal_name, bus, channel)
-    
-    def set_signal_value(self, signal_name: str, 
-                        value: float,
-                        bus: str = "CAN", 
-                        channel: int = 1) -> bool:
-        """
-        设置信号值
-        
-        Args:
-            signal_name: 信号名称
-            value: 信号值
-            bus: 总线类型
-            channel: 通道号
-            
-        Returns:
-            设置成功返回True
-        """
-        return self._canoe_wrapper.set_signal_value(signal_name, value, bus, channel)
-    
-    def get_system_variable(self, namespace: str, variable: str) -> Any:
-        """
-        获取系统变量值
-        
-        Args:
-            namespace: 命名空间
-            variable: 变量名
-            
-        Returns:
-            变量值
-        """
-        return self._canoe_wrapper.get_system_variable(namespace, variable)
-    
-    def set_system_variable(self, namespace: str, variable: str, value: Any) -> bool:
-        """
-        设置系统变量值
-        
-        Args:
-            namespace: 命名空间
-            variable: 变量名
-            value: 变量值
-            
-        Returns:
-            设置成功返回True
-        """
-        return self._canoe_wrapper.set_system_variable(namespace, variable, value)
-    
     def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行测试项
         
         支持的测试项类型：
         - self_check: 设备自检
-        - test_cases: 执行测试用例（显性和隐性）
-        - signal_check: 信号检查
-        - signal_set: 信号设置
-        - variable_check: 系统变量检查
-        - variable_set: 系统变量设置
-        - wait_for_variable: 等待变量达到期望值
-        - send_can_message: 发送CAN报文
+        - test_module: 直接执行 TestModule
         
         Args:
             item: 测试项配置字典
@@ -451,21 +408,10 @@ class CANoeAdapter(BaseTestAdapter):
             ...     "timeout": 300
             ... })
             >>> 
-            >>> # 执行测试用例
+            >>> # 直接执行 TestModule
             >>> result = adapter.execute_test_item({
-            ...     "type": "test_cases",
-            ...     "explicit_cases": ["CASE_001@1", "CASE_002@1"],
-            ...     "implicit_cases": ["CASE_003@1"],
-            ...     "dtc_info": {"CASE_001": "P0101"},
-            ...     "case_timeout": 600
-            ... })
-            >>> 
-            >>> # 信号检查
-            >>> result = adapter.execute_test_item({
-            ...     "type": "signal_check",
-            ...     "signal_name": "EngineSpeed",
-            ...     "expected_value": 1500,
-            ...     "tolerance": 50
+            ...     "type": "test_module",
+            ...     "name": "SmokeModule"
             ... })
         """
         item_type = item.get("type")
@@ -477,20 +423,6 @@ class CANoeAdapter(BaseTestAdapter):
         try:
             if item_type == "self_check":
                 result = self._execute_self_check(item)
-            elif item_type == "test_cases":
-                result = self._execute_test_cases(item)
-            elif item_type == "signal_check":
-                result = self._execute_signal_check(item)
-            elif item_type == "signal_set":
-                result = self._execute_signal_set(item)
-            elif item_type == "variable_check":
-                result = self._execute_variable_check(item)
-            elif item_type == "variable_set":
-                result = self._execute_variable_set(item)
-            elif item_type == "wait_for_variable":
-                result = self._execute_wait_for_variable(item)
-            elif item_type == "send_can_message":
-                result = self._execute_send_can_message(item)
             elif item_type == "test_module":
                 result = self._execute_test_module(item)
             else:
@@ -538,185 +470,6 @@ class CANoeAdapter(BaseTestAdapter):
             "end_time": result.end_time
         }
     
-    def _execute_test_cases(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行测试用例"""
-        explicit_cases = item.get("explicit_cases", [])
-        implicit_cases = item.get("implicit_cases", [])
-        dtc_info = item.get("dtc_info", {})
-        case_timeout = item.get("case_timeout", self.case_timeout)
-        
-        if not explicit_cases and not implicit_cases:
-            raise ValueError("test_cases类型需要指定explicit_cases或implicit_cases参数")
-        
-        result = self._test_engine.execute_test_cases(
-            explicit_cases=explicit_cases,
-            implicit_cases=implicit_cases,
-            dtc_info=dtc_info,
-            case_timeout=case_timeout
-        )
-        
-        return {
-            "name": item.get("name", "test_cases"),
-            "type": "test_cases",
-            "status": result.status.value,
-            "total_cases": result.total_cases,
-            "passed_cases": result.passed_cases,
-            "failed_cases": result.failed_cases,
-            "explicit_results": [r.to_dict() for r in result.explicit_results],
-            "implicit_results": [r.to_dict() for r in result.implicit_results],
-            "device_info": result.device_info.to_dict() if result.device_info else {},
-            "errors": result.errors,
-            "start_time": result.start_time,
-            "end_time": result.end_time
-        }
-    
-    def _execute_signal_check(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行信号检查"""
-        signal_name = item.get("signal_name")
-        expected_value = item.get("expected_value")
-        tolerance = item.get("tolerance", 0.01)
-        bus = item.get("bus", "CAN")
-        channel = item.get("channel", 1)
-        
-        if not signal_name:
-            raise ValueError("signal_check类型需要指定signal_name参数")
-        
-        actual_value = self._canoe_wrapper.get_signal_value(signal_name, bus, channel)
-        
-        passed = False
-        if actual_value is not None and expected_value is not None:
-            passed = abs(actual_value - expected_value) <= tolerance
-        
-        return {
-            "name": item.get("name", signal_name),
-            "type": "signal_check",
-            "signal_name": signal_name,
-            "bus": bus,
-            "channel": channel,
-            "expected_value": expected_value,
-            "actual_value": actual_value,
-            "tolerance": tolerance,
-            "passed": passed,
-            "status": "passed" if passed else "failed"
-        }
-    
-    def _execute_signal_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行信号设置"""
-        signal_name = item.get("signal_name")
-        value = item.get("value")
-        bus = item.get("bus", "CAN")
-        channel = item.get("channel", 1)
-        
-        if signal_name is None or value is None:
-            raise ValueError("signal_set类型需要指定signal_name和value参数")
-        
-        success = self._canoe_wrapper.set_signal_value(signal_name, value, bus, channel)
-        
-        return {
-            "name": item.get("name", signal_name),
-            "type": "signal_set",
-            "signal_name": signal_name,
-            "bus": bus,
-            "channel": channel,
-            "value": value,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
-    
-    def _execute_variable_check(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行系统变量检查"""
-        namespace = item.get("namespace", "mutualVar")
-        variable = item.get("variable")
-        expected_value = item.get("expected_value")
-        
-        if not variable:
-            raise ValueError("variable_check类型需要指定variable参数")
-        
-        actual_value = self._canoe_wrapper.get_system_variable(namespace, variable)
-        
-        passed = actual_value == expected_value
-        
-        return {
-            "name": item.get("name", variable),
-            "type": "variable_check",
-            "namespace": namespace,
-            "variable": variable,
-            "expected_value": expected_value,
-            "actual_value": actual_value,
-            "passed": passed,
-            "status": "passed" if passed else "failed"
-        }
-    
-    def _execute_variable_set(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行系统变量设置"""
-        namespace = item.get("namespace", "mutualVar")
-        variable = item.get("variable")
-        value = item.get("value")
-        
-        if not variable or value is None:
-            raise ValueError("variable_set类型需要指定variable和value参数")
-        
-        success = self._canoe_wrapper.set_system_variable(namespace, variable, value)
-        
-        return {
-            "name": item.get("name", variable),
-            "type": "variable_set",
-            "namespace": namespace,
-            "variable": variable,
-            "value": value,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
-    
-    def _execute_wait_for_variable(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行等待变量"""
-        namespace = item.get("namespace", "mutualVar")
-        variable = item.get("variable")
-        expected_value = item.get("expected_value")
-        timeout = item.get("timeout", 30.0)
-        check_interval = item.get("check_interval", 0.5)
-        
-        if not variable or expected_value is None:
-            raise ValueError("wait_for_variable类型需要指定variable和expected_value参数")
-        
-        success = self._canoe_wrapper.wait_for_variable(
-            namespace, variable, expected_value, timeout, check_interval
-        )
-        
-        return {
-            "name": item.get("name", variable),
-            "type": "wait_for_variable",
-            "namespace": namespace,
-            "variable": variable,
-            "expected_value": expected_value,
-            "timeout": timeout,
-            "success": success,
-            "status": "passed" if success else "timeout"
-        }
-    
-    def _execute_send_can_message(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        """执行发送CAN报文"""
-        channel = item.get("channel", 1)
-        msg_id = item.get("msg_id")
-        data = item.get("data", [])
-        msg_type = item.get("msg_type", "standard")
-
-        if msg_id is None:
-            raise ValueError("send_can_message类型需要指定msg_id参数")
-
-        success = self._canoe_wrapper.send_can_message(channel, msg_id, data, msg_type)
-
-        return {
-            "name": item.get("name", f"CAN_MSG_0x{msg_id:03X}"),
-            "type": "send_can_message",
-            "channel": channel,
-            "msg_id": msg_id,
-            "data": data,
-            "msg_type": msg_type,
-            "success": success,
-            "status": "passed" if success else "failed"
-        }
-
     def _execute_test_module(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行测试模块
@@ -890,7 +643,7 @@ if __name__ == "__main__":
             print(f"CANoe版本: {adapter.canoe_version}")
             
             # 加载配置
-            if adapter.load_configuration("D:\TAMS\DTTC_CONFIG\S59\BCANFD\SMFT\FDCANC_E\TestProjectFile\COMTest.cfg"):
+            if adapter.load_configuration(r"D:\TAMS\DTTC_CONFIG\S59\BCANFD\SMFT\FDCANC_E\TestProjectFile\COMTest.cfg"):
                 print("配置加载成功")
                 
                 # 执行信号检查

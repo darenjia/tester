@@ -7,11 +7,9 @@
 from .adapter_factory import (
     AdapterFactory,
     AdapterStatus,
-    AdapterWrapper,
     BaseTestAdapter,
     TestToolType,
     create_adapter,
-    create_adapter_with_wrapper,
     get_adapter,
 )
 from .canoe import CANoeAdapter
@@ -21,13 +19,11 @@ from .ttworkbench_adapter import TTworkbenchAdapter
 __all__ = [
     "AdapterFactory",
     "AdapterStatus",
-    "AdapterWrapper",
     "BaseTestAdapter",
     "CANoeAdapter",
     "TSMasterAdapter",
     "TTworkbenchAdapter",
     "TestToolType",
     "create_adapter",
-    "create_adapter_with_wrapper",
     "get_adapter",
 ]

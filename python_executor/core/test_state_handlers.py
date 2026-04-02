@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from core.state_machine import StateHandler, TestState, StateContext
-from core.adapters import create_adapter_with_wrapper, TestToolType
+from core.adapters import create_adapter, TestToolType
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
 from models.task import Task
@@ -156,7 +156,7 @@ class ConnectingHandler(StateHandler):
         """执行连接"""
         try:
             # 创建适配器
-            self.controller = create_adapter_with_wrapper(TestToolType(self.adapter_type))
+            self.controller = create_adapter(TestToolType(self.adapter_type), singleton=False)
             context.data['controller'] = self.controller
             
             # 连接工具（带重试）
@@ -215,11 +215,11 @@ class RunningHandler(StateHandler):
             config_path = context.data.get('config_path')
             if config_path:
                 logger.info(f"Loading configuration: {config_path}")
-                controller.open_configuration(config_path)
+                controller.load_configuration(config_path)
             
             # 启动测量
             logger.info("Starting measurement...")
-            controller.start_measurement()
+            controller.start_test()
             
             # 执行测试项
             current_index = context.data.get('current_item_index', 0)
@@ -243,7 +243,7 @@ class RunningHandler(StateHandler):
             
             # 停止测量
             logger.info("Stopping measurement...")
-            controller.stop_measurement()
+            controller.stop_test()
             
             return TestState.RESULT_COLLECT
             
@@ -262,13 +262,12 @@ class RunningHandler(StateHandler):
         start_time = time.time()
         
         try:
-            # 这里调用具体的测试执行逻辑
-            # 可以通过配置驱动的方式执行
-            result = controller.run_test_case_with_config(
-                test_case_name=item,
-                config={},
-                timeout=300
-            )
+            if hasattr(controller, "execute_test_module_direct"):
+                result = controller.execute_test_module_direct(item, timeout=300)
+            elif hasattr(controller, "run_test_module"):
+                result = controller.run_test_module(item)
+            else:
+                result = controller.execute_test_item({"type": "test_module", "name": item, "timeout": 300})
             
             return {
                 'item': item,

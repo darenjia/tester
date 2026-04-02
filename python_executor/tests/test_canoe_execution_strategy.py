@@ -1,0 +1,137 @@
+from core.execution_strategies.canoe_strategy import CANoeExecutionStrategy
+
+
+class _DummyAdapter:
+    def __init__(self, capabilities):
+        self._capabilities = capabilities
+
+    def get_capability(self, name, default=None):
+        return self._capabilities.get(name, default)
+
+
+def test_canoe_strategy_requires_testmodule_capability():
+    strategy = CANoeExecutionStrategy()
+    adapter = _DummyAdapter(
+        {
+            "configuration": object(),
+            "measurement": object(),
+        }
+    )
+
+    ok, error = strategy.prepare(plan=None, adapter=adapter)
+
+    assert ok is False
+    assert "test_module" in error.lower()
+
+
+def test_canoe_strategy_prepare_accepts_registered_capabilities():
+    strategy = CANoeExecutionStrategy()
+    adapter = _DummyAdapter(
+        {
+            "configuration": object(),
+            "measurement": object(),
+            "test_module": object(),
+        }
+    )
+
+    ok, error = strategy.prepare(plan=None, adapter=adapter)
+
+    assert ok is True
+    assert error is None
+
+
+def test_canoe_strategy_runs_test_modules_via_capability():
+    strategy = CANoeExecutionStrategy()
+    executed = []
+
+    class _TestModuleCapability:
+        def execute_module(self, module_name, timeout=None):
+            executed.append((module_name, timeout))
+            return {"verdict": "PASS", "details": {"module": module_name}}
+
+    class _Adapter:
+        def get_capability(self, name, default=None):
+            mapping = {
+                "configuration": object(),
+                "measurement": type(
+                    "_Measurement",
+                    (),
+                    {"start": staticmethod(lambda: True), "stop": staticmethod(lambda: True)},
+                )(),
+                "test_module": _TestModuleCapability(),
+            }
+            return mapping.get(name, default)
+
+    class _Collector:
+        def __init__(self):
+            self.results = []
+
+        def add_test_result(self, result):
+            self.results.append(result)
+
+    class _Executor:
+        def __init__(self):
+            self.current_collector = _Collector()
+
+        def _load_configuration_by_path(self, config_path):
+            return None
+
+        def _start_measurement(self, plan):
+            return None
+
+        def _stop_measurement(self, plan):
+            return None
+
+        def _task_timeout(self, plan):
+            return 45
+
+        def _execute_test_items(self, plan):
+            raise AssertionError("test_module path should execute via strategy capability")
+
+    class _Plan:
+        cases = [
+            type("_Case", (), {"case_name": "ModuleA", "case_type": "test_module"})(),
+            type("_Case", (), {"case_name": "ModuleB", "case_type": "test_module"})(),
+        ]
+
+    executor = _Executor()
+
+    results = strategy.run(_Plan(), adapter=_Adapter(), executor=executor, config_path=None)
+
+    assert executed == [("ModuleA", 45), ("ModuleB", 45)]
+    assert len(results) == 2
+    assert results[0].verdict == "PASS"
+    assert len(executor.current_collector.results) == 2
+
+
+def test_canoe_strategy_rejects_non_test_module_cases():
+    strategy = CANoeExecutionStrategy()
+
+    class _Adapter:
+        def get_capability(self, name, default=None):
+            mapping = {
+                "configuration": object(),
+                "measurement": object(),
+                "test_module": object(),
+            }
+            return mapping.get(name, default)
+
+    class _Executor:
+        def _load_configuration_by_path(self, config_path):
+            return None
+
+        def _start_measurement(self, plan):
+            return None
+
+        def _stop_measurement(self, plan):
+            return None
+
+    class _Plan:
+        cases = [type("_Case", (), {"case_name": "SignalCase", "case_type": "signal_check"})()]
+
+    try:
+        strategy.run(_Plan(), adapter=_Adapter(), executor=_Executor(), config_path=None)
+    except RuntimeError as exc:
+        assert "only supports test_module" in str(exc)
+    else:
+        raise AssertionError("non-test_module CANoe cases should be rejected")

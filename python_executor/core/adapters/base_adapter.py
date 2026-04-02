@@ -9,6 +9,8 @@ from enum import Enum, auto
 from typing import Optional, Dict, Any, List
 import logging
 
+from .capabilities import CapabilityRegistryMixin
+
 
 class TestToolType(Enum):
     """测试工具类型枚举"""
@@ -28,7 +30,7 @@ class AdapterStatus(Enum):
     DISCONNECTED = auto()   # 已断开
 
 
-class BaseTestAdapter(ABC):
+class BaseTestAdapter(CapabilityRegistryMixin, ABC):
     """
     测试工具适配器基类
     
@@ -44,6 +46,7 @@ class BaseTestAdapter(ABC):
         """
         self.config = config or {}
         self.status = AdapterStatus.IDLE
+        self._capabilities: Dict[str, Any] = {}
         from utils.logger import get_logger
         self.logger = get_logger(f"adapters.{self.__class__.__name__}")
         self._last_error: Optional[str] = None

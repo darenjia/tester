@@ -128,8 +128,10 @@ python app.py
 适配器边界目前已经收成：
 
 - `core.adapters.adapter_factory` 是唯一工厂真源
-- `core.adapters` 包级导出只是薄转发层
-- `AdapterWrapper` 内部按 `common / canoe / tsmaster` 三层能力拆分
+- `core.adapters` 包级导出只保留 raw adapter 入口
+- `TaskExecutorProduction` 通过 `ExecutionStrategySelector` 选择工具策略
+- CANoe 当前只保留 `test_module` 执行路径
+- `AdapterWrapper` / `create_adapter_with_wrapper` 仅作为显式兼容 API 保留，不再是默认导出入口
 
 当前任务执行生命周期会按以下阶段流转：
 

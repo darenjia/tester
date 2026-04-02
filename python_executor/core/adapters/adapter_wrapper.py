@@ -1,9 +1,8 @@
 """
 适配器包装器
 
-包装适配器类，提供与原有 Controller 类相同的接口，便于迁移。
-内部按能力拆分为通用控制、CANoe 用例执行、TSMaster RPC 控制三层，
-避免继续把所有工具特性堆进一个平面类。
+兼容层只保留仍在主链路中使用的通用方法和 TSMaster 控制方法。
+CANoe 的配置驱动/系统变量 facade 已彻底移除，执行语义交给 strategy + capability。
 """
 from __future__ import annotations
 
@@ -112,136 +111,6 @@ class _CommonAdapterControl(_AdapterCapabilityBase):
         return self.adapter.execute_test_item(item)
 
 
-class _CANoeExecutionControl(_AdapterCapabilityBase):
-    def _get_system_variable(self, var_name: str, namespace: str = "mutualVar"):
-        try:
-            method = getattr(self.adapter, "get_system_variable", None)
-            if callable(method):
-                return method(namespace, var_name)
-        except Exception as exc:
-            self.logger.error(f"获取系统变量失败 [{namespace}.{var_name}]: {exc}")
-        return None
-
-    def _set_system_variable(self, var_name: str, value: Any, namespace: str = "mutualVar") -> bool:
-        try:
-            method = getattr(self.adapter, "set_system_variable", None)
-            if callable(method):
-                return bool(method(namespace, var_name, value))
-        except Exception as exc:
-            self.logger.error(f"设置系统变量失败 [{namespace}.{var_name}]: {exc}")
-        return False
-
-    def set_test_case_name(self, test_case_name: str, namespace: str = "mutualVar") -> bool:
-        result = self._set_system_variable("testScriptName", test_case_name, namespace)
-        if result:
-            self.logger.info(f"设置测试用例名称: {test_case_name}")
-        else:
-            self.logger.error(f"设置测试用例名称失败: {test_case_name}")
-        return result
-
-    def set_test_variable(self, var_name: str, value: Any, namespace: str = "mutualVar") -> bool:
-        result = self._set_system_variable(var_name, value, namespace)
-        if result:
-            self.logger.debug(f"设置变量 {var_name} = {value}")
-        return result
-
-    def get_test_variable(self, var_name: str, namespace: str = "mutualVar") -> Any:
-        value = self._get_system_variable(var_name, namespace)
-        if value is not None:
-            self.logger.debug(f"获取变量 {var_name} = {value}")
-        return value
-
-    def start_test_case(self, namespace: str = "mutualVar") -> bool:
-        try:
-            self.set_test_variable("endTest", 0, namespace)
-            self.set_test_variable("testCaseResultState", 0, namespace)
-            self.logger.debug("已重置 endTest 和 testCaseResultState")
-
-            result = self.set_test_variable("startTest", 1, namespace)
-            if result:
-                self.logger.info("启动测试用例")
-            return result
-        except Exception as exc:
-            self.logger.error(f"启动测试用例失败: {exc}")
-            return False
-
-    def check_test_case_complete(self, namespace: str = "mutualVar") -> tuple[bool, Any]:
-        try:
-            end_test_value = self._get_system_variable("endTest", namespace)
-            if end_test_value is None:
-                return False, None
-
-            if end_test_value == 1:
-                result_state = self._get_system_variable("testCaseResultState", namespace)
-                self._set_system_variable("endTest", 0, namespace)
-                self.logger.info(f"测试用例完成，结果: {result_state}")
-                return True, result_state
-
-            return False, None
-        except Exception as exc:
-            self.logger.error(f"检查测试完成状态失败: {exc}")
-            return False, None
-
-    def run_test_case_with_config(
-        self, test_case_name: str, config: Dict[str, Any], timeout: int = 300
-    ) -> Dict[str, Any]:
-        try:
-            self.logger.info(f"开始执行测试用例: {test_case_name}")
-            result = self.wrapper.common.execute_test_module(test_case_name, timeout)
-
-            if result.get("success") or result.get("verdict") == "Passed":
-                return {
-                    "test_case": test_case_name,
-                    "result": "PASS" if result.get("verdict") == "Passed" else result.get("verdict"),
-                    "duration": result.get("duration", 0),
-                    "success": True,
-                }
-
-            return {
-                "error": result.get("error", "测试失败"),
-                "test_case": test_case_name,
-                "verdict": result.get("verdict"),
-                "duration": result.get("duration", 0),
-                "success": False,
-            }
-        except Exception as exc:
-            self.logger.error(f"执行测试用例失败: {test_case_name}, 错误: {exc}")
-            return {"error": str(exc), "test_case": test_case_name, "success": False}
-
-    def run_test_cases_batch(
-        self, test_cases: List[Dict[str, Any]], timeout_per_case: int = 300
-    ) -> List[Dict[str, Any]]:
-        results = []
-        total = len(test_cases)
-
-        self.logger.info(f"开始批量执行{total}个测试用例")
-
-        for index, test_case in enumerate(test_cases, 1):
-            self.logger.info(f"执行用例 {index}/{total}: {test_case.get('name')}")
-            result = self.run_test_case_with_config(
-                test_case_name=test_case.get("name"),
-                config={"dtc_info": test_case.get("dtc_info"), "params": test_case.get("params", {})},
-                timeout=timeout_per_case,
-            )
-            results.append(result)
-
-            repeat = test_case.get("repeat", 1)
-            for repeat_index in range(1, repeat):
-                self.logger.info(
-                    f"重复执行用例 {test_case.get('name')} - 第{repeat_index + 1}/{repeat}次"
-                )
-                results.append(
-                    self.run_test_case_with_config(
-                        test_case_name=f"{test_case.get('name')}@{repeat_index + 1}",
-                        config={"dtc_info": test_case.get("dtc_info"), "params": test_case.get("params", {})},
-                        timeout=timeout_per_case,
-                    )
-                )
-
-        self.logger.info(f"批量执行完成，共执行{len(results)}个结果")
-        return results
-
-
 class _TSMasterExecutionControl(_AdapterCapabilityBase):
     def start_test_execution(
         self,
@@ -294,8 +163,7 @@ class AdapterWrapper:
     """
     适配器包装器
 
-    将适配器接口包装为与原有 Controller 类相同的接口，便于任务执行器统一调用。
-    内部能力拆分后，旧方法名继续保留为 facade，减少生产链路迁移成本。
+    保留少量兼容接口，新的主执行链路应优先通过 capability 和 strategy 工作。
     """
 
     def __init__(self, adapter: BaseTestAdapter):
@@ -305,8 +173,13 @@ class AdapterWrapper:
         self.logger = get_logger("adapters.AdapterWrapper")
         self.last_error: Optional[str] = None
         self.common = _CommonAdapterControl(self)
-        self.canoe = _CANoeExecutionControl(self)
         self.tsmaster = _TSMasterExecutionControl(self)
+
+    def get_capability(self, name: str, default=None):
+        """Forward capability lookups to the underlying adapter."""
+        if hasattr(self.adapter, "get_capability"):
+            return self.adapter.get_capability(name, default)
+        return default
 
     @property
     def is_connected(self) -> bool:
@@ -344,37 +217,6 @@ class AdapterWrapper:
 
     def execute_test_module(self, module_name: str, timeout: int = None) -> Dict[str, Any]:
         return self.common.execute_test_module(module_name, timeout)
-
-    def _get_system_variable(self, var_name: str, namespace: str = "mutualVar"):
-        return self.canoe._get_system_variable(var_name, namespace)
-
-    def _set_system_variable(self, var_name: str, value: Any, namespace: str = "mutualVar") -> bool:
-        return self.canoe._set_system_variable(var_name, value, namespace)
-
-    def set_test_case_name(self, test_case_name: str, namespace: str = "mutualVar") -> bool:
-        return self.canoe.set_test_case_name(test_case_name, namespace)
-
-    def set_test_variable(self, var_name: str, value: Any, namespace: str = "mutualVar") -> bool:
-        return self.canoe.set_test_variable(var_name, value, namespace)
-
-    def get_test_variable(self, var_name: str, namespace: str = "mutualVar") -> Any:
-        return self.canoe.get_test_variable(var_name, namespace)
-
-    def start_test_case(self, namespace: str = "mutualVar") -> bool:
-        return self.canoe.start_test_case(namespace)
-
-    def check_test_case_complete(self, namespace: str = "mutualVar") -> tuple[bool, Any]:
-        return self.canoe.check_test_case_complete(namespace)
-
-    def run_test_case_with_config(
-        self, test_case_name: str, config: Dict[str, Any], timeout: int = 300
-    ) -> Dict[str, Any]:
-        return self.canoe.run_test_case_with_config(test_case_name, config, timeout)
-
-    def run_test_cases_batch(
-        self, test_cases: List[Dict[str, Any]], timeout_per_case: int = 300
-    ) -> List[Dict[str, Any]]:
-        return self.canoe.run_test_cases_batch(test_cases, timeout_per_case)
 
     def start_test_execution(
         self,

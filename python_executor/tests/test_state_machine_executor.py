@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from core.execution_plan import ExecutionPlan, PlannedCase
 from core.state_machine_executor import StateMachineTaskExecutor
+from core.test_state_handlers import ConnectingHandler
+from core.state_machine import StateContext, TestState
 from models.task import Case, Task, TaskStatus
 
 
@@ -95,3 +97,59 @@ def test_state_machine_executor_emits_shared_result_report_message_format():
     assert messages[1]["type"] == "RESULT_REPORT"
     assert messages[1]["taskNo"] == "TASK-SM-5"
     assert messages[1]["summary"] == {"passed": 1}
+
+
+def test_connecting_handler_uses_raw_adapter_factory(monkeypatch):
+    task_view = type("_TaskView", (), {"task_id": "TASK-SM-6"})()
+    handler = ConnectingHandler(task_view, "canoe")
+    created = {}
+
+    class _Adapter:
+        def connect(self):
+            created["connected"] = True
+            return True
+
+    def _fake_create_adapter(tool_type, config=None, singleton=True):
+        created["singleton"] = singleton
+        return created.setdefault("adapter", _Adapter())
+
+    monkeypatch.setattr("core.test_state_handlers.create_adapter", _fake_create_adapter)
+    monkeypatch.setattr(
+        "core.test_state_handlers.config_manager",
+        type("_ConfigManager", (), {"get": staticmethod(lambda key, default=None: 1 if "max_retries" in key else 0)})(),
+    )
+
+    context = StateContext(task_id="TASK-SM-6")
+    handler.on_enter(context)
+    next_state = handler.on_execute(context)
+
+    assert isinstance(context.data["controller"], _Adapter)
+    assert next_state == TestState.RUNNING
+    assert created["connected"] is True
+    assert created["singleton"] is False
+
+
+def test_state_machine_executor_rejects_tsmaster_execution_plan():
+    executor = StateMachineTaskExecutor(message_sender=lambda _: None)
+    plan = ExecutionPlan(
+        task_no="TASK-SM-7",
+        device_id="DEVICE-SM-7",
+        tool_type="tsmaster",
+        timeout_seconds=60,
+        cases=[PlannedCase(case_no="CASE-SM-7", case_name="Case SM 7", case_type="test_module")],
+    )
+
+    assert executor.execute_plan(plan) is False
+
+
+def test_state_machine_executor_rejects_unknown_tool_type():
+    executor = StateMachineTaskExecutor(message_sender=lambda _: None)
+    plan = ExecutionPlan(
+        task_no="TASK-SM-8",
+        device_id="DEVICE-SM-8",
+        tool_type="unknown-tool",
+        timeout_seconds=60,
+        cases=[PlannedCase(case_no="CASE-SM-8", case_name="Case SM 8", case_type="test_module")],
+    )
+
+    assert executor.execute_plan(plan) is False
