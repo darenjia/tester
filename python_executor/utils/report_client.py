@@ -240,6 +240,7 @@ class ReportClient:
         try:
             effective_report_data = dict(report_data)
             task_info = task_info or {}
+            upload_failed = False
 
             # 如果提供了报告文件，先上传并获取URL
             report_url = None
@@ -254,10 +255,16 @@ class ReportClient:
                             case["reAddress"] = report_url
                 else:
                     logger.warning(f"报告文件上传失败: {report_file_path}")
+                    upload_failed = True
+
+            # 如果上传失败，持久化失败信息（不受 report_retry.enabled 控制）
+            if upload_failed:
+                self._handle_report_failure(effective_report_data, task_info, "文件上传失败")
 
             # 执行实际上报
             if self.report_payload(effective_report_data):
-                return True
+                # 上报成功，但如果上传失败仍返回 False
+                return not upload_failed
             else:
                 # 上报失败，持久化以便重试
                 error_msg = "服务器无响应"
@@ -283,14 +290,10 @@ class ReportClient:
         task_no = report_data.get('taskNo', 'unknown')
         logger.error(f"任务结果上报失败: taskNo={task_no}, error={error}")
 
-        # 检查是否启用失败持久化
+        # 检查是否启用重试（注意：失败持久化始终启用，不受 report_retry.enabled 控制）
         retry_enabled = True
         if self.config_manager:
             retry_enabled = self.config_manager.get('report_retry.enabled', True)
-
-        if not retry_enabled:
-            logger.warning("失败报告持久化未启用，丢弃上报数据")
-            return
 
         try:
             from core.failed_report_manager import get_failed_report_manager
