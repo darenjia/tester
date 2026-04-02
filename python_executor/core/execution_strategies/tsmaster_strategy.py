@@ -17,10 +17,7 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
     strategy_name = "tsmaster"
 
     def prepare(self, plan: Any, adapter: Any):
-        has_execution = adapter.get_capability("tsmaster_execution") is not None
-        if not has_execution:
-            has_execution = adapter.get_capability("rpc_execution") is not None
-        if not has_execution:
+        if adapter.get_capability("tsmaster_execution") is None:
             return False, "Missing TSMaster capability: tsmaster_execution"
         return True, None
 
@@ -63,10 +60,6 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
         capability = adapter.get_capability("tsmaster_execution")
         if capability is not None:
             return capability, "tsmaster_execution"
-
-        capability = adapter.get_capability("rpc_execution")
-        if capability is not None:
-            return capability, "rpc_execution"
 
         raise RuntimeError("TSMaster execution capability is not available")
 

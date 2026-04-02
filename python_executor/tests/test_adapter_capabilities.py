@@ -119,7 +119,7 @@ def test_tsmaster_adapter_registers_expected_capabilities():
 
     assert adapter.has_capability("configuration") is True
     assert adapter.has_capability("measurement") is True
-    assert adapter.has_capability("rpc_execution") is True
+    assert adapter.has_capability("tsmaster_execution") is True
     assert adapter.has_capability("project_control") is True
     assert adapter.has_capability("artifact") is True
 
@@ -159,6 +159,10 @@ def test_tsmaster_adapter_no_longer_exposes_removed_legacy_execution_helpers():
     assert not hasattr(adapter, "_execute_message_send")
     assert not hasattr(adapter, "_execute_test_sequence")
     assert not hasattr(adapter, "_execute_system_api")
+    assert not hasattr(adapter, "run_test_with_master_form")
+    assert not hasattr(adapter, "generate_test_report")
+    assert not hasattr(adapter, "_wait_for_test_complete_by_status")
+    assert not hasattr(adapter, "_wait_for_test_complete")
 
 
 def test_tsmaster_adapter_registers_dedicated_execution_capability():

@@ -39,7 +39,7 @@ class _Adapter:
         self._capability = capability
 
     def get_capability(self, name, default=None):
-        if name in {"tsmaster_execution", "rpc_execution"}:
+        if name == "tsmaster_execution":
             return self._capability
         return default
 
