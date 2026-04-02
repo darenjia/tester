@@ -6,6 +6,7 @@ __pycache__/
 # 忽略日志文件
 logs/
 *.log
+data/tasks.json
 
 # 忽略配置文件（可选）
 config/executor_config.json
