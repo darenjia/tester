@@ -1442,16 +1442,20 @@ class TaskExecutorProduction:
             # 创建新任务
             from models.executor_task import Task as ExecutorTask, TaskPriority
 
+            copied_params = dict(old_task.params or {})
+            copied_metadata = dict(old_task.metadata or {})
+
             new_task = ExecutorTask(
                 name=old_task.name,
                 task_type=old_task.task_type,
                 priority=old_task.priority,
-                params=old_task.params,
+                params=copied_params,
                 timeout=old_task.timeout,
                 max_retries=old_task.max_retries,
                 created_by=old_task.created_by,
-                metadata=old_task.metadata
+                metadata=copied_metadata
             )
+            new_task.metadata["taskNo"] = new_task.id
 
             # 提交新任务
             if self.submit_task(new_task):

@@ -211,8 +211,12 @@ class TaskScheduler:
                 del self._scheduled_tasks[task_id]
                 was_scheduled = True
                  
-        # 未到期的定时任务仍在全局队列里，先移除全局 pending 记录
-        if was_scheduled and task_queue.remove(task_id):
+        # 未到期的定时任务仍在全局队列里，直接标记为取消并保留审计记录
+        if was_scheduled and task_queue.update_task_status(
+            task_id,
+            TaskStatus.CANCELLED.value,
+            error_message="定时任务已取消",
+        ):
             task_log_manager.info(task_id, "定时任务已取消")
             return True
 

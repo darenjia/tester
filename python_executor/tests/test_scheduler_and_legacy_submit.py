@@ -120,18 +120,21 @@ def test_process_queue_does_not_resubmit_pending_task_already_in_executor(monkey
     assert submitted == []
 
 
-def test_cancel_scheduled_task_removes_pending_task_from_global_queue(monkeypatch):
+def test_cancel_scheduled_task_marks_task_cancelled_in_global_queue(monkeypatch):
     from core.task_scheduler import TaskScheduler
 
     scheduler = TaskScheduler()
     scheduler._scheduled_tasks["scheduled-cancel"] = datetime.now() + timedelta(seconds=30)
-    removed = []
+    updated = []
 
-    monkeypatch.setattr("core.task_scheduler.task_queue.remove", lambda task_id: removed.append(task_id) or True)
+    monkeypatch.setattr(
+        "core.task_scheduler.task_queue.update_task_status",
+        lambda task_id, status, error_message=None, result=None: updated.append((task_id, status, error_message)) or True,
+    )
     monkeypatch.setattr("core.task_scheduler.task_executor.cancel_task", lambda task_id: False)
 
     assert scheduler.cancel_scheduled_task("scheduled-cancel") is True
-    assert removed == ["scheduled-cancel"]
+    assert updated == [("scheduled-cancel", "cancelled", "定时任务已取消")]
     assert "scheduled-cancel" not in scheduler._scheduled_tasks
 
 

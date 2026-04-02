@@ -142,6 +142,12 @@ def create_task():
         delay = data.get('delay', 0)
 
         if delay > 0:
+            try:
+                task_executor._build_execution_plan_from_queue_task(task)
+            except TaskCompileError as exc:
+                return jsonify({"success": False, "message": str(exc)}), 400
+
+        if delay > 0:
             # 定时任务
             if task_scheduler.schedule_task(task, delay):
                 return jsonify({

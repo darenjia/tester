@@ -54,6 +54,7 @@ def test_retry_task_preserves_execution_content_for_execution_plan_tasks(monkeyp
     assert new_task.id != "retry-source"
     assert new_task.params["testItems"][0]["caseNo"] == "CASE-RETRY"
     assert new_task.params["testItems"][0]["name"] == "Case Retry"
+    assert new_task.metadata["taskNo"] == new_task.id
     assert global_tasks[new_task.id] is new_task
     assert status_updates[-1][0] == "retry-source"
     assert "已重试" in (status_updates[-1][2] or "")

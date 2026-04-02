@@ -94,6 +94,33 @@ def test_create_task_tdm2_rejects_invalid_payload_as_bad_request(task_api_client
     assert "testItems" in payload["message"] or "caseList" in payload["message"]
 
 
+def test_create_task_delayed_internal_request_rejects_invalid_payload(task_api_client, monkeypatch):
+    class _FakeScheduler:
+        def schedule_task(self, task, delay):
+            raise AssertionError("invalid delayed task should not reach scheduler")
+
+    monkeypatch.setattr(task_api, "task_scheduler", _FakeScheduler())
+
+    response = task_api_client.post(
+        "/api/tasks",
+        json={
+            "taskNo": "TASK-DELAY-BAD",
+            "name": "Delayed Bad Task",
+            "type": "default",
+            "delay": 30,
+            "params": {
+                "tool_type": "canoe",
+                "config_path": "D:/cfgs/demo.cfg",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert "testItems" in payload["message"] or "caseList" in payload["message"]
+
+
 def test_cancel_task_route_uses_scheduler_to_cancel_delayed_tasks(task_api_client, monkeypatch):
     cancelled = []
 
