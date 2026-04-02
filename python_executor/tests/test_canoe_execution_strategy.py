@@ -74,21 +74,19 @@ def test_canoe_strategy_runs_test_modules_via_capability():
             self.current_collector = _Collector()
 
         def _load_configuration_by_path(self, config_path):
-            return None
+            raise AssertionError("strategy should load configuration via capability")
 
         def _start_measurement(self, plan):
-            return None
+            raise AssertionError("strategy should start measurement via capability")
 
         def _stop_measurement(self, plan):
-            return None
-
-        def _task_timeout(self, plan):
-            return 45
+            raise AssertionError("strategy should stop measurement via capability")
 
         def _execute_test_items(self, plan):
             raise AssertionError("test_module path should execute via strategy capability")
 
     class _Plan:
+        timeout_seconds = 45
         cases = [
             type("_Case", (), {"case_name": "ModuleA", "case_type": "test_module"})(),
             type("_Case", (), {"case_name": "ModuleB", "case_type": "test_module"})(),
@@ -118,13 +116,13 @@ def test_canoe_strategy_rejects_non_test_module_cases():
 
     class _Executor:
         def _load_configuration_by_path(self, config_path):
-            return None
+            raise AssertionError("strategy should load configuration via capability")
 
         def _start_measurement(self, plan):
-            return None
+            raise AssertionError("strategy should start measurement via capability")
 
         def _stop_measurement(self, plan):
-            return None
+            raise AssertionError("strategy should stop measurement via capability")
 
     class _Plan:
         cases = [type("_Case", (), {"case_name": "SignalCase", "case_type": "signal_check"})()]

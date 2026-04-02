@@ -23,29 +23,44 @@ class CANoeExecutionStrategy(ExecutionStrategy):
             return False, "Missing CANoe capability: test_module"
         return True, None
 
+    def _load_configuration(self, adapter: Any, config_path: str | None) -> None:
+        if not config_path:
+            return
+        configuration_capability = adapter.get_capability("configuration")
+        if configuration_capability is None or not configuration_capability.load(config_path):
+            raise RuntimeError(f"failed to load CANoe configuration: {config_path}")
+
+    def _start_measurement(self, adapter: Any) -> None:
+        measurement_capability = adapter.get_capability("measurement")
+        if measurement_capability is None or not measurement_capability.start():
+            raise RuntimeError("failed to start CANoe measurement")
+
+    def _stop_measurement(self, adapter: Any) -> None:
+        measurement_capability = adapter.get_capability("measurement")
+        if measurement_capability is not None:
+            measurement_capability.stop()
+
+    def _timeout_for(self, plan: Any) -> int:
+        return int(getattr(plan, "timeout_seconds", 0) or 0)
+
     def run(self, plan: Any, adapter: Any, executor: Any = None, config_path: str | None = None) -> Any:
-        if executor is None:
-            raise RuntimeError("CANoeExecutionStrategy requires executor context")
+        test_module_capability = adapter.get_capability("test_module")
+        plan_cases = getattr(plan, "cases", []) or []
+        if test_module_capability is None:
+            raise RuntimeError("CANoe test_module capability is not available")
+        if not plan_cases:
+            return []
+        if not all(getattr(case, "case_type", "") == "test_module" for case in plan_cases):
+            raise RuntimeError("CANoeExecutionStrategy only supports test_module cases")
 
-        if config_path:
-            executor._load_configuration_by_path(config_path)
-
-        executor._start_measurement(plan)
+        self._load_configuration(adapter, config_path)
+        self._start_measurement(adapter)
         try:
-            test_module_capability = adapter.get_capability("test_module")
-            plan_cases = getattr(plan, "cases", []) or []
-            if test_module_capability is None:
-                raise RuntimeError("CANoe test_module capability is not available")
-            if not plan_cases:
-                return []
-            if not all(getattr(case, "case_type", "") == "test_module" for case in plan_cases):
-                raise RuntimeError("CANoeExecutionStrategy only supports test_module cases")
-
             results = []
             for case in plan_cases:
                 result = test_module_capability.execute_module(
                     getattr(case, "case_name", ""),
-                    timeout=executor._task_timeout(plan),
+                    timeout=self._timeout_for(plan),
                 )
                 test_result = TestResult(
                     name=getattr(case, "case_name", ""),
@@ -53,9 +68,9 @@ class CANoeExecutionStrategy(ExecutionStrategy):
                     verdict=result.get("verdict", "UNKNOWN"),
                     details=result,
                 )
-                if getattr(executor, "current_collector", None) is not None:
+                if executor is not None and getattr(executor, "current_collector", None) is not None:
                     executor.current_collector.add_test_result(test_result)
                 results.append(test_result)
             return results
         finally:
-            executor._stop_measurement(plan)
+            self._stop_measurement(adapter)
