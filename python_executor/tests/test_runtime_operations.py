@@ -363,6 +363,19 @@ def test_runtime_operations_api_exposes_preflight_and_diagnose(tmp_path: Path):
     assert housekeeping_response.get_json()["data"]["status"] == "ready"
 
 
+def test_web_server_registers_runtime_operations_routes(monkeypatch):
+    import web.server as web_server
+
+    monkeypatch.setattr(web_server, "initialize_retry_system", lambda: None)
+
+    app = web_server.create_app()
+    routes = {rule.rule for rule in app.url_map.iter_rules()}
+
+    assert "/api/runtime/preflight" in routes
+    assert "/api/runtime/diagnose" in routes
+    assert "/api/runtime/housekeeping" in routes
+
+
 def test_runtime_housekeeping_service_cleans_failed_reports(tmp_path: Path):
     from core.runtime_operations import RuntimeHousekeepingService
 
