@@ -163,3 +163,15 @@ class ExecutionPlan:
     @property
     def test_items(self) -> list[PlannedCase]:
         return self.cases
+
+    @property
+    def is_tsmaster_inline(self) -> bool:
+        """Returns True if this plan is for TSMaster inline execution (no cfg file needed)."""
+        prepared_config = self.raw_refs.get("prepared_config", {}) if self.raw_refs else {}
+        return prepared_config.get("is_tsmaster_inline", False)
+
+    @property
+    def ini_path(self) -> str | None:
+        """Returns the ini file path if prepared via ConfigManager."""
+        prepared_config = self.raw_refs.get("prepared_config", {}) if self.raw_refs else {}
+        return prepared_config.get("ini_path")

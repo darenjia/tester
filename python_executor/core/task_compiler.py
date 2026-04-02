@@ -22,6 +22,16 @@ class TaskCompiler:
         return self.compile_payload(payload)
 
     def compile_payload(self, payload: dict[str, Any]) -> ExecutionPlan:
+        """
+        Compile a task payload into an execution plan.
+
+        This method ONLY resolves task intent:
+        - Tool type from explicit request or case mapping categories
+        - Planned cases with their metadata from mappings
+
+        Configuration resolution is NOT done here - it happens in the
+        ConfigPreparationPhase.prepare() method between compile and execute.
+        """
         test_items = payload.get("testItems") or []
         if not test_items:
             raise TaskCompileError("testItems不能为空")
@@ -29,9 +39,10 @@ class TaskCompiler:
         requested_tool_type = self._normalize_tool_type(payload.get("toolType"))
         resolved_tool_types: set[str] = set()
         planned_cases: list[PlannedCase] = []
-        config_path = payload.get("configPath")
-        config_source = ConfigSource.DIRECT_PATH if config_path else ConfigSource.UNSPECIFIED
-        resolution_notes: list[str] = []
+
+        # Track explicit config path (but don't resolve from mappings)
+        explicit_config_path = payload.get("configPath")
+        config_source = ConfigSource.DIRECT_PATH if explicit_config_path else ConfigSource.UNSPECIFIED
 
         for item in test_items:
             if not isinstance(item, dict):
@@ -66,12 +77,8 @@ class TaskCompiler:
                     planned_case.execution_params["iniConfig"] = mapping.ini_config
                 if getattr(mapping, "para_config", None):
                     planned_case.execution_params["paraConfig"] = mapping.para_config
-                if not config_path and getattr(mapping, "enabled", True) and getattr(
-                    mapping, "script_path", None
-                ):
-                    config_path = mapping.script_path
-                    config_source = ConfigSource.CASE_MAPPING
-                    resolution_notes.append(f"config_path resolved from mapping for {case_no}")
+                # NOTE: config_path resolution from mapping is handled by ConfigPreparationPhase,
+                # not here. This keeps compiler focused on task intent only.
 
             planned_cases.append(planned_case)
 
@@ -92,7 +99,7 @@ class TaskCompiler:
             device_id=payload.get("deviceId", "") or "",
             tool_type=tool_type,
             cases=planned_cases,
-            config_path=config_path,
+            config_path=explicit_config_path,
             config_name=payload.get("configName"),
             base_config_dir=payload.get("baseConfigDir"),
             variables=self._coerce_mapping(payload.get("variables"), field_name="variables"),
@@ -101,7 +108,7 @@ class TaskCompiler:
             max_concurrency=1,
             report_required=True,
             config_source=config_source,
-            resolution_notes=resolution_notes,
+            resolution_notes=[f"config resolution deferred to ConfigPreparationPhase"],
             raw_refs={"message_type": "TASK_DISPATCH"},
         )
 

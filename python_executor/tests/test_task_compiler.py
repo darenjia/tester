@@ -54,7 +54,12 @@ def test_task_compiler_rejects_mixed_tool_types():
         compiler.compile_message(message)
 
 
-def test_task_compiler_resolves_mapping_backed_execution_plan():
+def test_task_compiler_defers_config_resolution_to_preparation_phase():
+    """
+    TaskCompiler should NOT resolve config from mappings.
+    It only resolves task intent (tool type, planned cases).
+    Config resolution happens in ConfigPreparationPhase.
+    """
     compiler = TaskCompiler(
         mapping_manager=_FakeMappingManager(
             {
@@ -77,13 +82,47 @@ def test_task_compiler_resolves_mapping_backed_execution_plan():
 
     plan = compiler.compile_message(message)
 
+    # TaskCompiler should resolve task intent (tool type, cases)
     assert isinstance(plan, ExecutionPlan)
     assert plan.tool_type == "canoe"
-    assert plan.config_path == "D:/cfgs/main.cfg"
-    assert plan.config_source is ConfigSource.CASE_MAPPING
     assert plan.cases[0].case_name == "fallback-name"
     assert plan.cases[0].execution_params["iniConfig"] == "A=1"
     assert plan.cases[0].execution_params["paraConfig"] == "B=2"
+
+    # TaskCompiler should NOT resolve config_path from mapping
+    # Config resolution is deferred to ConfigPreparationPhase
+    assert plan.config_path is None
+    assert plan.config_source is ConfigSource.UNSPECIFIED
+    assert "config resolution deferred" in plan.resolution_notes[0]
+
+
+def test_task_compiler_resolves_explicit_config_path():
+    """When explicit configPath is provided, TaskCompiler sets config_source to DIRECT_PATH."""
+    compiler = TaskCompiler(
+        mapping_manager=_FakeMappingManager(
+            {
+                "CASE-5": _FakeMapping(
+                    category="CANOE",
+                    script_path="D:/cfgs/other.cfg",
+                )
+            }
+        )
+    )
+    message = Message(
+        type="TASK_DISPATCH",
+        taskNo="TASK-5",
+        deviceId="DEVICE-5",
+        payload={
+            "testItems": [{"case_no": "CASE-5"}],
+            "configPath": "D:/cfgs/explicit.cfg",
+        },
+    )
+
+    plan = compiler.compile_message(message)
+
+    # Explicit configPath should be preserved
+    assert plan.config_path == "D:/cfgs/explicit.cfg"
+    assert plan.config_source is ConfigSource.DIRECT_PATH
 
 
 def test_task_compiler_tolerates_null_params_and_variables():

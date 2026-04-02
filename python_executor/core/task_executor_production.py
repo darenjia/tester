@@ -33,6 +33,12 @@ from core.execution_observability import (
 )
 from core.status_monitor import get_status_monitor
 from core.task_compiler import TaskCompiler, TaskCompileError
+from core.config_preparation import (
+    ConfigPreparationPhase,
+    ConfigPreparationError,
+    ConfigConflictError,
+    MissingConfigError,
+)
 logger = get_logger("task_executor_production")
 
 
@@ -609,67 +615,24 @@ class TaskExecutorProduction:
 
             logger.info(f"[_execute_task_production] 任务初始化完成，开始配置准备阶段")
 
-            # ========== 配置准备 ==========
-            cfg_path = None
-
-            # 1. 优先使用任务指定的配置路径
-            if self._task_config_path(task):
-                cfg_path = self._task_config_path(task)
-                logger.info(f"使用任务指定的配置路径: {cfg_path}")
-
-            # 2. 尝试从配置管理器准备配置
-            elif self._task_config_name(task) or self._task_base_config_dir(task):
-                self.current_collector.add_log("INFO", "正在准备测试配置...")
-
-                base_dir = self._task_base_config_dir(task) or _get_runtime_config_manager().get(
-                    'config_base_dir',
-                    r'D:\TAMS\DTTC_CONFIG',
+            # ========== 配置准备（使用 ConfigPreparationPhase） ==========
+            try:
+                prep_phase = ConfigPreparationPhase()
+                task = prep_phase.prepare(task)
+                logger.info(
+                    f"[_execute_task_production] 配置准备完成: "
+                    f"config_source={task.config_source}, config_path={task.config_path}"
                 )
-                logger.info(f"[_execute_task_production] base_dir={base_dir}, config_name={self._task_config_name(task)}")
-                self.config_manager = TestConfigManager(base_config_dir=base_dir)
+                self.current_collector.add_log("INFO", f"配置来源: {task.config_source.value}")
+                if task.config_path:
+                    self.current_collector.add_log("INFO", f"cfg文件: {task.config_path}")
 
-                # 确定配置名称
-                config_name = self._task_config_name(task)
-                if not config_name and self._task_config_path(task):
-                    config_name = os.path.basename(self._task_config_path(task)).replace('.cfg', '')
-
-                if config_name:
-                    config_info = self.config_manager.prepare_config_for_task(
-                        task_config_name=config_name,
-                        test_cases=[self._legacy_config_case_dict(item) for item in self._task_cases(task)],
-                        variables=self._task_variables(task)
-                    )
-                    cfg_path = config_info.get('cfg_path')
-                    ini_path = config_info.get('ini_path')
-
-                    self.current_collector.add_log("INFO", f"cfg文件: {cfg_path}")
-                    if ini_path:
-                        self.current_collector.add_log("INFO", f"ini文件: {ini_path}")
-                    logger.info(f"配置准备完成: cfg={cfg_path}, ini={ini_path}")
-
-            # 3. 尝试从用例映射获取配置路径
-            # 检查是否是TSMaster用例（TSMaster使用ini_config，不需要cfg_path）
-            is_tsmaster_case = False
-            if not cfg_path and self._task_cases(task):
-                mapping_manager = get_case_mapping_manager()
-                for test_item in self._task_cases(task):
-                    case_no = self._case_no(test_item)
-                    if case_no:
-                        mapping = mapping_manager.get_mapping(case_no)
-                        if mapping and mapping.enabled:
-                            # 检查category是否是tsmaster
-                            if mapping.category and mapping.category.lower() == 'tsmaster':
-                                is_tsmaster_case = True
-                                logger.info(f"检测到TSMaster用例: case_no={case_no}, 使用ini_config执行")
-                                break
-                            elif mapping.script_path:
-                                cfg_path = mapping.script_path
-                                logger.info(f"从用例映射获取配置路径: case_no={case_no}, cfg_path={cfg_path}")
-                                break
-
-            # 4. 如果仍然没有配置路径，检查是否是TSMaster用例
-            if not cfg_path and not is_tsmaster_case:
-                raise TaskException("未指定配置文件路径(configPath/configName)，也未找到用例映射，无法执行任务")
+            except ConfigConflictError as e:
+                raise TaskException(f"配置冲突: {e}")
+            except MissingConfigError as e:
+                raise TaskException(f"缺少配置: {e}")
+            except ConfigPreparationError as e:
+                raise TaskException(f"配置准备失败: {e}")
 
             # 根据工具类型选择控制器（使用适配器工厂）
             step_start = time.time()
@@ -699,8 +662,7 @@ class TaskExecutorProduction:
             self._current_metrics.record_step('connect_tool', time.time() - step_start)
 
             step_start = time.time()
-            current_cfg_path = cfg_path or ""
-            results = self._run_strategy_execution(task, adapter=self.controller, config_path=current_cfg_path)
+            results = self._run_strategy_execution(task, adapter=self.controller, config_path=task.config_path or "")
             self._current_metrics.record_step('strategy_execute', time.time() - step_start)
             
             # 完成任务
