@@ -151,6 +151,17 @@ python app.py
 - `/health`：返回服务健康状态和业务健康摘要，例如当前排队数、活跃任务数、最近失败任务数
 - `/status`：返回运行状态、当前任务信息和业务摘要
 - `/metrics`：返回原始指标、性能报告和业务执行摘要
+- `/api/runtime/preflight`：返回发布前自检结果，状态分为 `ready / warning / blocked`
+- `/api/runtime/diagnose`：返回运行时诊断摘要，聚合服务、队列、失败报告和业务指标
+- `/api/runtime/housekeeping`：执行低风险运维清理，补齐关键目录并清理过期失败报告
+
+运维辅助入口：
+
+- `python scripts/preflight_check.py`：输出发布前自检 JSON 摘要
+- `python scripts/runtime_diagnose.py`：输出当前运行诊断 JSON 摘要
+- `python scripts/runtime_housekeeping.py`：执行一次低风险 housekeeping 并输出摘要
+- [docs/release_checklist.md](/C:/Users/deng/.codex/worktrees/can_test/codex-release-runtime-ops/python_executor/docs/release_checklist.md)：发布前检查清单
+- [docs/rollback_checklist.md](/C:/Users/deng/.codex/worktrees/can_test/codex-release-runtime-ops/python_executor/docs/rollback_checklist.md)：回滚检查清单
 
 ## 开发文档
 

@@ -49,6 +49,7 @@ from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp
 from api.system_check_api import system_check_bp
 from api.report_retry_api import report_retry_bp
+from api.runtime_operations_api import runtime_ops_bp
 
 print("正在设置日志...")
 setup_logging()
@@ -127,6 +128,7 @@ class PythonExecutorProduction:
         self.app.register_blueprint(api_bp)
         self.app.register_blueprint(system_check_bp)
         self.app.register_blueprint(report_retry_bp)
+        self.app.register_blueprint(runtime_ops_bp)
         logger.info("API蓝图注册完成")
 
     def _setup_routes(self):
