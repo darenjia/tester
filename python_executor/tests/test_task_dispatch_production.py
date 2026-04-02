@@ -104,7 +104,7 @@ def dispatcher(monkeypatch):
 
 def test_single_tool_dispatch_uses_executor_owned_queue_write(dispatcher, monkeypatch):
     dispatcher.fake_manager._mappings = {
-        "case-1": _FakeMapping(category="CANOE", case_name="case-1"),
+        "case-1": _FakeMapping(category="CANOE", case_name="case-1", script_path="D:/cfgs/case-1.cfg"),
     }
 
     message = Message(
@@ -179,7 +179,7 @@ def test_mixed_tool_dispatch_is_rejected_before_execution(dispatcher):
 
 def test_rejected_enqueue_marks_observability_finished(dispatcher, monkeypatch):
     dispatcher.fake_manager._mappings = {
-        "case-3": _FakeMapping(category="CANOE", case_name="case-3"),
+        "case-3": _FakeMapping(category="CANOE", case_name="case-3", script_path="D:/cfgs/case-3.cfg"),
     }
 
     class _RejectingExecutor(_FakeExecutor):

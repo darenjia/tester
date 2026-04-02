@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -22,6 +22,9 @@ class PlannedCase:
     dtc_info: str | None = None
     execution_params: dict[str, Any] = field(default_factory=dict)
     mapping_metadata: dict[str, Any] = field(default_factory=dict)
+    enabled: bool = True
+    priority: int = 0
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def name(self) -> str:
@@ -59,6 +62,9 @@ class PlannedCase:
             "repeat": self.repeat,
             "dtcInfo": self.dtc_info,
             "params": self.execution_params,
+            "enabled": self.enabled,
+            "priority": self.priority,
+            "metadata": self.metadata,
         }
 
 
@@ -82,12 +88,26 @@ class ExecutionPlan:
     config_source: ConfigSource = ConfigSource.UNSPECIFIED
     resolution_notes: list[str] = field(default_factory=list)
     raw_refs: dict[str, Any] = field(default_factory=dict)
+    prepared_cases: list[PlannedCase] = field(default_factory=list)
+    preparation_mode: str | None = None
+    resolved_config_path: str | None = None
+    selection_material: dict[str, Any] | None = None
+    resolved_variables: dict[str, Any] = field(default_factory=dict)
+    prepare_summary: str = ""
+    config_artifacts: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.max_concurrency < 1:
             self.max_concurrency = 1
         if self.timeout_seconds <= 0:
             self.timeout_seconds = 3600
+        if not self.prepared_cases:
+            self.prepared_cases = list(self.cases)
+        if not self.resolved_variables:
+            self.resolved_variables = dict(self.variables)
+
+    def with_preparation(self, **updates: Any) -> "ExecutionPlan":
+        return replace(self, **updates)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -105,6 +125,9 @@ class ExecutionPlan:
                 repeat=getattr(item, "repeat", 1) or 1,
                 dtc_info=getattr(item, "dtcInfo", None) or getattr(item, "dtc_info", None),
                 execution_params=getattr(item, "params", None) or getattr(item, "execution_params", None) or {},
+                enabled=getattr(item, "enabled", True),
+                priority=getattr(item, "priority", 0) or 0,
+                metadata=getattr(item, "metadata", None) or {},
             )
             cases.append(planned_case)
 

@@ -107,7 +107,7 @@ def test_execute_task_async_uses_execute_plan(monkeypatch):
     monkeypatch.setattr(
         http_task_executor,
         "get_case_mapping_manager",
-        lambda: _FakeMappingManager({"CASE-1": _FakeMapping("CANOE")}),
+        lambda: _FakeMappingManager({"CASE-1": _FakeMapping("CANOE", script_path="D:/cfgs/async.cfg")}),
     )
 
     http_task_executor.execute_task_async(
@@ -155,7 +155,7 @@ def test_execute_task_async_marks_failure_when_execute_plan_is_rejected(monkeypa
     monkeypatch.setattr(
         http_task_executor,
         "get_case_mapping_manager",
-        lambda: _FakeMappingManager({"CASE-1": _FakeMapping("CANOE")}),
+        lambda: _FakeMappingManager({"CASE-1": _FakeMapping("CANOE", script_path="D:/cfgs/rejected.cfg")}),
     )
 
     http_task_executor.execute_task_async(

@@ -26,6 +26,14 @@ from .case_mapping import (
     CaseChangeRecord,
     CaseMappingGroup
 )
+from .case_mapping_view import (
+    CANoeMaterial,
+    CaseMappingView,
+    MappingDeclaration,
+    MappingMaterial,
+    TSMasterMaterial,
+    TTworkbenchMaterial,
+)
 
 __all__ = [
     # Task模型
@@ -48,5 +56,11 @@ __all__ = [
     'ChangeType',
     'CaseMapping',
     'CaseChangeRecord',
-    'CaseMappingGroup'
+    'CaseMappingGroup',
+    'CaseMappingView',
+    'MappingDeclaration',
+    'MappingMaterial',
+    'CANoeMaterial',
+    'TSMasterMaterial',
+    'TTworkbenchMaterial',
 ]

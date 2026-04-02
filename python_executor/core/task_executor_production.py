@@ -271,7 +271,11 @@ class TaskExecutorProduction:
         return None
 
     def _task_config_path(self, task: ExecutionPlan) -> str | None:
-        return getattr(task, "configPath", None) or getattr(task, "config_path", None)
+        return (
+            getattr(task, "resolved_config_path", None)
+            or getattr(task, "configPath", None)
+            or getattr(task, "config_path", None)
+        )
 
     def _task_config_name(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "configName", None) or getattr(task, "config_name", None)
@@ -280,7 +284,7 @@ class TaskExecutorProduction:
         return getattr(task, "baseConfigDir", None) or getattr(task, "base_config_dir", None)
 
     def _task_variables(self, task: ExecutionPlan) -> Dict[str, Any]:
-        return getattr(task, "variables", {}) or {}
+        return getattr(task, "resolved_variables", None) or getattr(task, "variables", {}) or {}
 
     def _task_canoe_namespace(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "canoeNamespace", None) or getattr(task, "canoe_namespace", None)
@@ -294,7 +298,8 @@ class TaskExecutorProduction:
     def _ensure_execution_plan(self, task: Task | ExecutionPlan) -> ExecutionPlan:
         if isinstance(task, ExecutionPlan):
             return task
-        return ExecutionPlan.from_legacy_task(task)
+        compiler = TaskCompiler(get_case_mapping_manager())
+        return compiler.compile_task(task)
 
     def _case_name(self, case: Any) -> str:
         return getattr(case, "name", None) or getattr(case, "caseName", None) or getattr(case, "case_name", "") or ""
@@ -519,7 +524,8 @@ class TaskExecutorProduction:
         )
 
         strategy = self._strategy_selector.select(task)
-        return strategy.run(task, adapter=adapter, executor=self, config_path=config_path)
+        runtime_config_path = config_path or getattr(task, "resolved_config_path", None)
+        return strategy.run(task, adapter=adapter, executor=self, config_path=runtime_config_path)
 
     def _build_execution_plan_from_queue_task(self, task) -> ExecutionPlan:
         params = getattr(task, 'params', {}) if hasattr(task, 'params') else {}
@@ -609,67 +615,20 @@ class TaskExecutorProduction:
 
             logger.info(f"[_execute_task_production] 任务初始化完成，开始配置准备阶段")
 
-            # ========== 配置准备 ==========
-            cfg_path = None
+            # ========== 配置准备（由 compiler/resolver 前置完成） ==========
+            cfg_path = self._task_config_path(task)
+            preparation_mode = getattr(task, "preparation_mode", None)
+            prepare_summary = getattr(task, "prepare_summary", "")
 
-            # 1. 优先使用任务指定的配置路径
-            if self._task_config_path(task):
-                cfg_path = self._task_config_path(task)
-                logger.info(f"使用任务指定的配置路径: {cfg_path}")
-
-            # 2. 尝试从配置管理器准备配置
-            elif self._task_config_name(task) or self._task_base_config_dir(task):
-                self.current_collector.add_log("INFO", "正在准备测试配置...")
-
-                base_dir = self._task_base_config_dir(task) or _get_runtime_config_manager().get(
-                    'config_base_dir',
-                    r'D:\TAMS\DTTC_CONFIG',
-                )
-                logger.info(f"[_execute_task_production] base_dir={base_dir}, config_name={self._task_config_name(task)}")
-                self.config_manager = TestConfigManager(base_config_dir=base_dir)
-
-                # 确定配置名称
-                config_name = self._task_config_name(task)
-                if not config_name and self._task_config_path(task):
-                    config_name = os.path.basename(self._task_config_path(task)).replace('.cfg', '')
-
-                if config_name:
-                    config_info = self.config_manager.prepare_config_for_task(
-                        task_config_name=config_name,
-                        test_cases=[self._legacy_config_case_dict(item) for item in self._task_cases(task)],
-                        variables=self._task_variables(task)
-                    )
-                    cfg_path = config_info.get('cfg_path')
-                    ini_path = config_info.get('ini_path')
-
-                    self.current_collector.add_log("INFO", f"cfg文件: {cfg_path}")
-                    if ini_path:
-                        self.current_collector.add_log("INFO", f"ini文件: {ini_path}")
-                    logger.info(f"配置准备完成: cfg={cfg_path}, ini={ini_path}")
-
-            # 3. 尝试从用例映射获取配置路径
-            # 检查是否是TSMaster用例（TSMaster使用ini_config，不需要cfg_path）
-            is_tsmaster_case = False
-            if not cfg_path and self._task_cases(task):
-                mapping_manager = get_case_mapping_manager()
-                for test_item in self._task_cases(task):
-                    case_no = self._case_no(test_item)
-                    if case_no:
-                        mapping = mapping_manager.get_mapping(case_no)
-                        if mapping and mapping.enabled:
-                            # 检查category是否是tsmaster
-                            if mapping.category and mapping.category.lower() == 'tsmaster':
-                                is_tsmaster_case = True
-                                logger.info(f"检测到TSMaster用例: case_no={case_no}, 使用ini_config执行")
-                                break
-                            elif mapping.script_path:
-                                cfg_path = mapping.script_path
-                                logger.info(f"从用例映射获取配置路径: case_no={case_no}, cfg_path={cfg_path}")
-                                break
-
-            # 4. 如果仍然没有配置路径，检查是否是TSMaster用例
-            if not cfg_path and not is_tsmaster_case:
-                raise TaskException("未指定配置文件路径(configPath/configName)，也未找到用例映射，无法执行任务")
+            if prepare_summary:
+                self.current_collector.add_log("INFO", f"配置准备: {prepare_summary}")
+            if cfg_path:
+                self.current_collector.add_log("INFO", f"cfg文件: {cfg_path}")
+                logger.info(f"使用准备后的配置路径: {cfg_path}")
+            elif preparation_mode == "prepared_config":
+                raise TaskException("配置准备阶段未生成cfg文件，无法执行任务")
+            elif preparation_mode not in {"mapping_material_only", "tool_runtime_only"}:
+                raise TaskException("任务缺少可执行配置或执行素材，无法执行任务")
 
             # 根据工具类型选择控制器（使用适配器工厂）
             step_start = time.time()

@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from models.case_mapping import CaseMapping, CaseChangeRecord, ChangeType
+from models.case_mapping_view import CaseMappingView
 from utils.logger import get_logger
 from config.settings import get_config as get_runtime_config
 
@@ -171,6 +172,17 @@ class CaseMappingManager:
             CaseMapping或None
         """
         return self.mappings.get(case_no)
+
+    def get_mapping_view(self, case_no: str) -> Optional[CaseMappingView]:
+        """Return the normalized read model for a legacy mapping record."""
+        mapping = self.get_mapping(case_no)
+        if mapping is None:
+            return None
+        return CaseMappingView.from_mapping(mapping)
+
+    def iter_mapping_views(self) -> List[CaseMappingView]:
+        """Iterate through normalized read models for all mappings."""
+        return [CaseMappingView.from_mapping(mapping) for mapping in self.mappings.values()]
 
     def get_mapping_by_name(self, case_name: str) -> Optional[CaseMapping]:
         """根据用例名称获取映射（模糊匹配）

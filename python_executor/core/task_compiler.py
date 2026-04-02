@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from core.config_preparation import ConfigPreparationResolver
 from core.execution_plan import ConfigSource, ExecutionPlan, PlannedCase
 from models.result import Message
+from models.task import Task
 
 
 class TaskCompileError(ValueError):
@@ -13,7 +15,18 @@ class TaskCompileError(ValueError):
 
 @dataclass(slots=True)
 class TaskCompiler:
-    mapping_manager: Any
+    mapping_manager: Any = None
+    resolver: ConfigPreparationResolver | None = field(default=None)
+
+    def __post_init__(self) -> None:
+        if self.resolver is None:
+            self.resolver = ConfigPreparationResolver(mapping_lookup=self.mapping_manager)
+
+    def compile(self, task: Task) -> ExecutionPlan:
+        return self.resolver.resolve(self.compile_execution_intent(task))
+
+    def compile_task(self, task: Task) -> ExecutionPlan:
+        return self.compile(task)
 
     def compile_message(self, message: Message) -> ExecutionPlan:
         payload = dict(message.payload or {})
@@ -22,7 +35,21 @@ class TaskCompiler:
         return self.compile_payload(payload)
 
     def compile_payload(self, payload: dict[str, Any]) -> ExecutionPlan:
-        test_items = payload.get("testItems") or []
+        intent = self.compile_payload_intent(payload)
+        return self.resolver.resolve(intent)
+
+    def compile_execution_intent(self, task: Task) -> ExecutionPlan:
+        payload = task.to_dict()
+        if getattr(task, "deviceId", None):
+            payload["deviceId"] = task.deviceId
+        if getattr(task, "toolType", None):
+            payload["toolType"] = task.toolType
+        if getattr(task, "timeout", None) is not None:
+            payload["timeout"] = task.timeout
+        return self.compile_payload_intent(payload)
+
+    def compile_payload_intent(self, payload: dict[str, Any]) -> ExecutionPlan:
+        test_items = payload.get("testItems") or self._case_list_to_test_items(payload.get("caseList") or [])
         if not test_items:
             raise TaskCompileError("testItems不能为空")
 
@@ -47,8 +74,8 @@ class TaskCompiler:
 
             planned_case = PlannedCase(
                 case_no=case_no,
-                case_name=item.get("name", "") or (mapping.case_name if mapping else ""),
-                case_type=item.get("type", "test_module"),
+                case_name=item.get("name", "") or item.get("caseName", "") or (mapping.case_name if mapping else ""),
+                case_type=item.get("type", "test_module") or item.get("caseType", "test_module"),
                 repeat=item.get("repeat", 1),
                 dtc_info=item.get("dtc_info") or item.get("dtcInfo"),
                 execution_params=self._coerce_mapping(item.get("params"), field_name="params"),
@@ -57,22 +84,13 @@ class TaskCompiler:
 
             if mapping:
                 if getattr(mapping, "category", None):
-                    planned_case.mapping_metadata["category"] = self._normalize_tool_type(
-                        mapping.category
-                    )
+                    planned_case.mapping_metadata["category"] = self._normalize_tool_type(mapping.category)
                 if getattr(mapping, "case_name", None) and not planned_case.case_name:
                     planned_case.case_name = mapping.case_name
                 if getattr(mapping, "ini_config", None):
                     planned_case.execution_params["iniConfig"] = mapping.ini_config
                 if getattr(mapping, "para_config", None):
                     planned_case.execution_params["paraConfig"] = mapping.para_config
-                if not config_path and getattr(mapping, "enabled", True) and getattr(
-                    mapping, "script_path", None
-                ):
-                    config_path = mapping.script_path
-                    config_source = ConfigSource.CASE_MAPPING
-                    resolution_notes.append(f"config_path resolved from mapping for {case_no}")
-
             planned_cases.append(planned_case)
 
         if requested_tool_type:
@@ -104,6 +122,24 @@ class TaskCompiler:
             resolution_notes=resolution_notes,
             raw_refs={"message_type": "TASK_DISPATCH"},
         )
+
+    def _case_list_to_test_items(self, case_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        test_items: list[dict[str, Any]] = []
+        for case in case_list:
+            if not isinstance(case, dict):
+                continue
+            test_items.append(
+                {
+                    "caseNo": case.get("caseNo") or case.get("case_no") or case.get("name", ""),
+                    "caseName": case.get("caseName") or case.get("case_name") or case.get("name", ""),
+                    "name": case.get("caseName") or case.get("name", ""),
+                    "type": case.get("caseType") or case.get("type", "test_module"),
+                    "dtcInfo": case.get("dtcInfo") or case.get("dtc_info"),
+                    "params": case.get("params"),
+                    "repeat": case.get("repeat", 1),
+                }
+            )
+        return test_items
 
     def _normalize_tool_type(self, value: Any) -> str:
         if value is None:
