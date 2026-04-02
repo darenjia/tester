@@ -285,6 +285,14 @@ class ReportClient:
             "device_id": task_info.get("deviceId") or report_data.get("deviceId"),
             "toolType": task_info.get("toolType") or report_data.get("toolType"),
             "tool_type": task_info.get("toolType") or report_data.get("toolType"),
+            "trace_id": task_info.get("trace_id") or task_info.get("traceId") or report_data.get("trace_id") or report_data.get("traceId"),
+            "traceId": task_info.get("trace_id") or task_info.get("traceId") or report_data.get("trace_id") or report_data.get("traceId"),
+            "attempt_id": task_info.get("attempt_id") or task_info.get("attemptId") or report_data.get("attempt_id") or report_data.get("attemptId"),
+            "attemptId": task_info.get("attempt_id") or task_info.get("attemptId") or report_data.get("attempt_id") or report_data.get("attemptId"),
+            "error_category": task_info.get("error_category") or task_info.get("errorCategory") or report_data.get("error_category") or report_data.get("errorCategory") or "report_failure",
+            "errorCategory": task_info.get("error_category") or task_info.get("errorCategory") or report_data.get("error_category") or report_data.get("errorCategory") or "report_failure",
+            "report_error_category": "report_failure",
+            "reportErrorCategory": "report_failure",
         }
 
     def _calculate_priority(self, report_data: Dict[str, Any]) -> int:

@@ -3,6 +3,7 @@
 集成熔断器、重试、性能监控、配置热更新等功能
 """
 import os
+import uuid
 import threading
 import time
 import queue
@@ -43,6 +44,11 @@ def _get_runtime_config_manager():
 def _ensure_observability_context(task: ExecutionPlan):
     """Ensure direct executor/reporting calls still have an observability context."""
     observability_manager = get_execution_observability_manager()
+    raw_refs = getattr(task, "raw_refs", None)
+    observability_ref = raw_refs.get("observability", {}) if isinstance(raw_refs, dict) else {}
+    attempt_id = observability_ref.get("attempt_id")
+    trace_id = observability_ref.get("trace_id")
+    error_category = observability_ref.get("error_category")
     try:
         observability_manager.get_snapshot(
             getattr(task, "task_id", None) or getattr(task, "task_no")
@@ -58,6 +64,10 @@ def _ensure_observability_context(task: ExecutionPlan):
             or getattr(task, "tool_type", "")
             or getattr(task, "tool_type", "")
             or "",
+            attempt=1,
+            attempt_id=attempt_id,
+            trace_id=trace_id,
+            error_category=error_category,
         )
     return observability_manager
 
@@ -166,6 +176,10 @@ class TaskExecutorProduction:
 
         # 性能监控
         self._current_metrics = None
+        self._current_trace_id: str | None = None
+        self._current_attempt_id: str | None = None
+        self._current_error_category: str | None = None
+        self._current_execution_error_category: str | None = None
 
         # 配置管理器
         self.config_manager: Optional[TestConfigManager] = None
@@ -195,6 +209,66 @@ class TaskExecutorProduction:
 
     def _task_tool_type(self, task: ExecutionPlan) -> str:
         return getattr(task, "toolType", None) or getattr(task, "tool_type", "") or ""
+
+    def _task_observability_store(self, task: ExecutionPlan) -> Dict[str, Any]:
+        raw_refs = getattr(task, "raw_refs", None)
+        if isinstance(raw_refs, dict):
+            return raw_refs.setdefault("observability", {})
+        return {}
+
+    def _set_task_observability_value(self, task: ExecutionPlan, key: str, value: Any) -> None:
+        if value is None:
+            return
+        store = self._task_observability_store(task)
+        store[key] = value
+
+    def _task_observability_context(self, task: ExecutionPlan) -> Dict[str, Any]:
+        store = self._task_observability_store(task)
+        trace_id = store.get("trace_id") or self._current_trace_id
+        attempt_id = store.get("attempt_id") or self._current_attempt_id
+        error_category = store.get("error_category") or self._current_error_category
+        execution_error_category = store.get("execution_error_category") or self._current_execution_error_category
+
+        return {
+            "trace_id": trace_id,
+            "attempt_id": attempt_id,
+            "error_category": error_category,
+            "execution_error_category": execution_error_category,
+        }
+
+    def _ensure_task_observability_context(self, task: ExecutionPlan) -> Dict[str, Any]:
+        context = self._task_observability_context(task)
+
+        if not context["trace_id"]:
+            context["trace_id"] = str(uuid.uuid4())
+        if not context["attempt_id"]:
+            context["attempt_id"] = str(uuid.uuid4())
+
+        self._set_task_observability_value(task, "trace_id", context["trace_id"])
+        self._set_task_observability_value(task, "attempt_id", context["attempt_id"])
+        if context["error_category"] is not None:
+            self._set_task_observability_value(task, "error_category", context["error_category"])
+        if context["execution_error_category"] is not None:
+            self._set_task_observability_value(task, "execution_error_category", context["execution_error_category"])
+
+        self._current_trace_id = context["trace_id"]
+        self._current_attempt_id = context["attempt_id"]
+        if context["error_category"] is not None:
+            self._current_error_category = context["error_category"]
+        if context["execution_error_category"] is not None:
+            self._current_execution_error_category = context["execution_error_category"]
+
+        return context
+
+    def _infer_execution_error_category(self, task_result: TaskResult | ExecutionOutcome) -> str | None:
+        outcome = self._normalize_execution_outcome(task_result)
+        if outcome.status in {"failed", "FAILED"}:
+            return "execution_failure"
+        if outcome.status in {"timeout", "TIMEOUT"}:
+            return "timeout"
+        if outcome.errorMessage:
+            return "execution_failure"
+        return None
 
     def _task_config_path(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "configPath", None) or getattr(task, "config_path", None)
@@ -506,10 +580,15 @@ class TaskExecutorProduction:
             self.current_task = task
             self._stop_event.clear()
             self._start_time = time.time()
+            self._current_trace_id = None
+            self._current_attempt_id = None
+            self._current_error_category = None
+            self._current_execution_error_category = None
 
         # 初始化性能指标
         self._current_metrics = TaskMetrics(task_id)
         self._task_queue.mark_processing(task_id, task)
+        self._ensure_task_observability_context(task)
         observability_manager = _ensure_observability_context(task)
 
         try:
@@ -744,10 +823,16 @@ class TaskExecutorProduction:
             return
 
         error_message = getattr(task_result, "errorMessage", None) or "任务执行失败"
+        execution_error_category = self._infer_execution_error_category(task_result) or "execution_failure"
+        self._current_execution_error_category = execution_error_category
+        self._current_error_category = execution_error_category
+        self._set_task_observability_value(task, "execution_error_category", execution_error_category)
+        self._set_task_observability_value(task, "error_category", execution_error_category)
         observability_manager.fail(
             task_id,
             error_code="TASK_TIMEOUT" if final_status == "timeout" else "TASK_FAILED",
             error_message=error_message,
+            error_category=execution_error_category,
             retryable=False,
         )
         record_metric(
@@ -762,10 +847,16 @@ class TaskExecutorProduction:
         task_id = self._task_id(task)
         logger.error(f"任务失败: {task_id}, 错误: {error_message}")
         observability_manager = get_execution_observability_manager()
+        execution_error_category = "execution_failure"
+        self._current_execution_error_category = execution_error_category
+        self._current_error_category = execution_error_category
+        self._set_task_observability_value(task, "execution_error_category", execution_error_category)
+        self._set_task_observability_value(task, "error_category", execution_error_category)
         observability_manager.fail(
             task_id,
             error_code="TASK_FAILED",
             error_message=error_message,
+            error_category=execution_error_category,
             retryable=False,
         )
         record_metric(
@@ -1043,6 +1134,13 @@ class TaskExecutorProduction:
 
         try:
             outcome = self._normalize_execution_outcome(task_result)
+            observability_context = self._ensure_task_observability_context(task)
+            execution_error_category = self._infer_execution_error_category(outcome)
+            if execution_error_category and not observability_context.get("error_category"):
+                observability_context["error_category"] = execution_error_category
+                self._current_error_category = execution_error_category
+                self._set_task_observability_value(task, "error_category", execution_error_category)
+
             # 构建 TDM2.0 格式的上报数据
             execution_result = self._build_execution_result(task, outcome)
             logger.info(f"[_report_to_remote] 构建执行结果完成: caseList数量={len(execution_result.caseList)}")
@@ -1059,6 +1157,22 @@ class TaskExecutorProduction:
             report_data["summary"] = outcome.summary
             report_data["errorMessage"] = outcome.errorMessage
             report_data["timestamp"] = int(time.time() * 1000)
+            report_data["trace_id"] = observability_context["trace_id"]
+            report_data["traceId"] = observability_context["trace_id"]
+            report_data["attempt_id"] = observability_context["attempt_id"]
+            report_data["attemptId"] = observability_context["attempt_id"]
+            report_data["error_category"] = observability_context.get("error_category")
+            report_data["errorCategory"] = observability_context.get("error_category")
+            report_data["reportMetadata"] = {
+                "trace_id": observability_context["trace_id"],
+                "traceId": observability_context["trace_id"],
+                "attempt_id": observability_context["attempt_id"],
+                "attemptId": observability_context["attempt_id"],
+                "error_category": observability_context.get("error_category"),
+                "errorCategory": observability_context.get("error_category"),
+                "execution_error_category": observability_context.get("execution_error_category"),
+                "taskNo": task_id,
+            }
 
             if outcome.startTime:
                 report_data["startTime"] = outcome.startTime.isoformat()
@@ -1091,6 +1205,9 @@ class TaskExecutorProduction:
                 logger.warning(f"[_report_to_remote] 任务结果上报失败: {task_id}")
                 record_metric('task.report.failure', 1, {'task_no': task_id})
                 # 上报失败时持久化以便后续重试
+                self._current_error_category = "report_failure"
+                report_data["report_error_category"] = "report_failure"
+                report_data["reportErrorCategory"] = "report_failure"
                 self._persist_failed_report(report_data, task)
 
             _ensure_observability_context(task).finish(
@@ -1106,6 +1223,10 @@ class TaskExecutorProduction:
         except Exception as e:
             logger.error(f"[_report_to_remote] 远端上报任务结果时出错: {e}", exc_info=True)
             record_metric('task.report.failure', 1, {'task_no': task_id})
+            self._current_error_category = "report_failure"
+            if 'report_data' in locals():
+                report_data["report_error_category"] = "report_failure"
+                report_data["reportErrorCategory"] = "report_failure"
             _ensure_observability_context(task).finish(
                 task_id,
                 report_status='failed',
@@ -1138,7 +1259,15 @@ class TaskExecutorProduction:
                 'projectNo': self._task_project_no(task),
                 'deviceId': self._task_device_id(task),
                 'toolType': self._task_tool_type(task),
-                'taskName': self._task_name(task)
+                'taskName': self._task_name(task),
+                'trace_id': self._current_trace_id or report_data.get('trace_id'),
+                'traceId': self._current_trace_id or report_data.get('traceId'),
+                'attempt_id': self._current_attempt_id or report_data.get('attempt_id'),
+                'attemptId': self._current_attempt_id or report_data.get('attemptId'),
+                'error_category': self._current_error_category or report_data.get('error_category'),
+                'errorCategory': self._current_error_category or report_data.get('errorCategory'),
+                'execution_error_category': self._current_execution_error_category or report_data.get('error_category'),
+                'executionErrorCategory': self._current_execution_error_category or report_data.get('errorCategory'),
             }
 
             # 计算优先级（失败任务优先级更高）

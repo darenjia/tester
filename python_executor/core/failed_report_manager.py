@@ -251,6 +251,30 @@ class FailedReportManager:
         task_name = task_info.get("taskName") or report_data.get("taskName") or ""
         tool_type = task_info.get("toolType") or report_data.get("toolType") or ""
         resolved_endpoint = endpoint or task_info.get("endpoint") or report_data.get("endpoint")
+        trace_id = (
+            task_info.get("trace_id")
+            or task_info.get("traceId")
+            or report_data.get("trace_id")
+            or report_data.get("traceId")
+        )
+        attempt_id = (
+            task_info.get("attempt_id")
+            or task_info.get("attemptId")
+            or report_data.get("attempt_id")
+            or report_data.get("attemptId")
+        )
+        error_category = (
+            task_info.get("error_category")
+            or task_info.get("errorCategory")
+            or report_data.get("error_category")
+            or report_data.get("errorCategory")
+        )
+        report_error_category = (
+            task_info.get("report_error_category")
+            or task_info.get("reportErrorCategory")
+            or report_data.get("report_error_category")
+            or report_data.get("reportErrorCategory")
+        )
 
         metadata = {
             "taskNo": task_no,
@@ -271,6 +295,14 @@ class FailedReportManager:
             "max_retries": max_retries,
             "priority": priority,
             "report_status": report_data.get("status"),
+            "trace_id": trace_id,
+            "traceId": trace_id,
+            "attempt_id": attempt_id,
+            "attemptId": attempt_id,
+            "error_category": error_category,
+            "errorCategory": error_category,
+            "report_error_category": report_error_category,
+            "reportErrorCategory": report_error_category,
         }
         metadata.update(task_info)
         return metadata
@@ -280,6 +312,9 @@ class FailedReportManager:
         attempt_number: int,
         endpoint: str = None,
         payload_hash: str = None,
+        attempt_id: str = None,
+        trace_id: str = None,
+        error_category: str = None,
         success: bool = False,
         status: str = None,
         error_message: str = None,
@@ -289,11 +324,13 @@ class FailedReportManager:
         """构造结构化的上报尝试记录。"""
         attempted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return ReportAttempt(
-            attempt_id=str(uuid.uuid4()),
+            attempt_id=attempt_id or str(uuid.uuid4()),
             attempt_number=attempt_number,
             attempted_at=attempted_at,
             endpoint=endpoint,
             payload_hash=payload_hash,
+            trace_id=trace_id,
+            error_category=error_category,
             success=success,
             status=status or (ReportStatus.SUCCESS.value if success else ReportStatus.FAILED.value),
             error_message=error_message,
@@ -341,6 +378,9 @@ class FailedReportManager:
             attempt_number=1,
             endpoint=normalized_metadata.get("endpoint"),
             payload_hash=normalized_metadata.get("payload_hash"),
+            attempt_id=normalized_metadata.get("attempt_id"),
+            trace_id=normalized_metadata.get("trace_id"),
+            error_category=normalized_metadata.get("error_category"),
             success=False,
             status=ReportStatus.FAILED.value,
             error_message=normalized_metadata.get("failure_reason"),
@@ -518,6 +558,9 @@ class FailedReportManager:
                 attempt_number=len(report.attempts) + 1,
                 endpoint=report.metadata.get("endpoint") or report.metadata.get("report_endpoint"),
                 payload_hash=report.metadata.get("payload_hash"),
+                attempt_id=report.metadata.get("attempt_id"),
+                trace_id=report.metadata.get("trace_id"),
+                error_category=report.metadata.get("error_category"),
                 success=success,
                 status=ReportStatus.SUCCESS.value if success else ReportStatus.FAILED.value,
                 error_message=error,
@@ -662,6 +705,49 @@ class FailedReportManager:
         self._save()
         logger.info(f"重置报告状态以便重试: {report_id}")
         return True
+
+    def get_trace_context_summary(self, limit: int = 20) -> Dict[str, Any]:
+        """获取失败报告中的最近观测上下文摘要。"""
+        with self._data_lock:
+            reports = sorted(self.reports.values(), key=lambda report: report.updated_at, reverse=True)
+
+        recent = []
+        seen_trace_ids = []
+        for report in reports[:limit]:
+            metadata = report.metadata or {}
+            latest_attempt = report.latest_attempt()
+            trace_id = metadata.get("trace_id") or metadata.get("traceId")
+            if not trace_id and latest_attempt:
+                trace_id = latest_attempt.trace_id
+            attempt_id = metadata.get("attempt_id") or metadata.get("attemptId")
+            if not attempt_id and latest_attempt:
+                attempt_id = latest_attempt.attempt_id
+            error_category = metadata.get("error_category") or metadata.get("errorCategory")
+            if not error_category and latest_attempt:
+                error_category = latest_attempt.error_category
+            report_error_category = metadata.get("report_error_category") or metadata.get("reportErrorCategory")
+
+            if trace_id:
+                seen_trace_ids.append(trace_id)
+
+            recent.append(
+                {
+                    "report_id": report.report_id,
+                    "task_no": report.task_no,
+                    "trace_id": trace_id,
+                    "attempt_id": attempt_id,
+                    "error_category": error_category,
+                    "report_error_category": report_error_category,
+                    "status": report.status,
+                    "updated_at": report.updated_at,
+                }
+            )
+
+        return {
+            "recent": recent,
+            "recent_trace_ids": seen_trace_ids[:limit],
+            "total_reports": len(self.reports),
+        }
 
 
 # 单例实例

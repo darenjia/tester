@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+from utils.observability_context import build_observability_log_extra
+
 
 class ExecutionLifecycleStage(str, Enum):
     RECEIVED = "received"
@@ -27,7 +29,10 @@ class ExecutionContext:
     tool_type: str
     current_stage: str = ExecutionLifecycleStage.RECEIVED.value
     attempt: int = 1
+    attempt_id: str | None = None
+    trace_id: str | None = None
     error_code: str | None = None
+    error_category: str | None = None
     error_message: str | None = None
     failed_stage: str | None = None
     retryable: bool = False
@@ -39,6 +44,29 @@ class ExecutionContext:
         default_factory=lambda: [ExecutionLifecycleStage.RECEIVED.value]
     )
     stage_durations: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def stage(self) -> str:
+        return self.current_stage
+
+    @stage.setter
+    def stage(self, value: str) -> None:
+        self.current_stage = value
+
+    def to_observability_log_extra(self) -> dict[str, Any]:
+        return build_observability_log_extra(
+            {
+                "task_no": self.task_no,
+                "attempt_id": self.attempt_id,
+                "trace_id": self.trace_id,
+                "tool_type": self.tool_type,
+                "stage": self.current_stage,
+                "error_code": self.error_code,
+                "error_category": self.error_category,
+                "device_id": self.device_id,
+                "attempt": self.attempt,
+            }
+        )
 
 
 class ExecutionObservabilityManager:
@@ -55,8 +83,25 @@ class ExecutionObservabilityManager:
         self._recent_failure_window_seconds = recent_failure_window_seconds
         self._retention_seconds = retention_seconds
 
-    def create_context(self, task_no: str, device_id: str, tool_type: str) -> ExecutionContext:
-        context = ExecutionContext(task_no=task_no, device_id=device_id, tool_type=tool_type)
+    def create_context(
+        self,
+        task_no: str,
+        device_id: str,
+        tool_type: str,
+        attempt: int = 1,
+        attempt_id: str | None = None,
+        trace_id: str | None = None,
+        error_category: str | None = None,
+    ) -> ExecutionContext:
+        context = ExecutionContext(
+            task_no=task_no,
+            device_id=device_id,
+            tool_type=tool_type,
+            attempt=attempt,
+            attempt_id=attempt_id,
+            trace_id=trace_id,
+            error_category=error_category,
+        )
         with self._lock:
             self._contexts[task_no] = context
             self._prune_contexts_locked()
@@ -89,6 +134,7 @@ class ExecutionObservabilityManager:
         *,
         error_code: str,
         error_message: str,
+        error_category: str | None = None,
         retryable: bool = False,
     ) -> ExecutionContext:
         with self._lock:
@@ -96,6 +142,7 @@ class ExecutionObservabilityManager:
             context.failed_stage = context.current_stage
             context.error_code = error_code
             context.error_message = error_message
+            context.error_category = error_category
             context.retryable = retryable
         return self.transition(task_no, ExecutionLifecycleStage.FINISHED)
 

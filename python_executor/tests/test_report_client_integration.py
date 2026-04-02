@@ -174,6 +174,50 @@ def test_executor_remote_report_accepts_execution_outcome(monkeypatch):
     assert captured["report_data"]["summary"]["passed"] == 1
 
 
+def test_executor_remote_report_attaches_traceable_metadata(monkeypatch):
+    executor = TaskExecutorProduction(message_sender=lambda _: None)
+    captured = {}
+
+    class FakeReportClient:
+        def upload_report_file(self, file_path):
+            return None
+
+        def report_payload(self, report_data):
+            captured["report_data"] = report_data
+            return True
+
+    class FakeExecutionResult:
+        caseList = [{"caseNo": "CASE-TRACE"}]
+
+        def to_tdm2_format(self):
+            return {"taskNo": "TASK-TRACE", "caseList": [{"caseNo": "CASE-TRACE"}]}
+
+    task = Task(
+        projectNo="PROJ-TRACE",
+        taskNo="TASK-TRACE",
+        taskName="Trace Report",
+        deviceId="DEVICE-TRACE",
+        toolType="canoe",
+    )
+    outcome = ExecutionOutcome(
+        task_no="TASK-TRACE",
+        status="failed",
+        summary={"failed": 1},
+        error_summary="boom",
+    )
+
+    monkeypatch.setattr(executor, "report_client", FakeReportClient())
+    monkeypatch.setattr(executor, "_build_execution_result", lambda task, result: FakeExecutionResult())
+
+    executor._report_to_remote(task, outcome)
+
+    assert captured["report_data"]["trace_id"]
+    assert captured["report_data"]["attempt_id"]
+    assert captured["report_data"]["error_category"] == "execution_failure"
+    assert captured["report_data"]["reportMetadata"]["trace_id"] == captured["report_data"]["trace_id"]
+    assert captured["report_data"]["reportMetadata"]["attempt_id"] == captured["report_data"]["attempt_id"]
+
+
 def test_persist_failed_report_uses_task_identity_for_execution_plan(monkeypatch):
     from core.execution_plan import ExecutionPlan, PlannedCase
 
@@ -248,6 +292,46 @@ def test_report_client_persists_failure_with_structured_metadata_and_endpoint(mo
     assert captured["failure_reason"] == "timeout while posting report"
     assert captured["endpoint"] == "http://report.example.com/direct-report"
     assert captured["metadata"]["report_source"] == "report_client"
+
+
+def test_report_client_persists_failure_with_trace_context(monkeypatch):
+    client = ReportClient(build_report_config())
+    captured = {}
+
+    class FakeFailedReportManager:
+        def add_failed_report(
+            self,
+            report_data,
+            task_info=None,
+            max_retries=None,
+            priority=0,
+            failure_reason=None,
+            endpoint=None,
+            metadata=None,
+        ):
+            captured["metadata"] = metadata
+            return "report-trace"
+
+    monkeypatch.setattr(
+        "core.failed_report_manager.get_failed_report_manager",
+        lambda config_manager: FakeFailedReportManager(),
+    )
+
+    client._handle_report_failure(
+        {
+            "taskNo": "TASK-TRACE",
+            "status": "failed",
+            "trace_id": "trace-123",
+            "attempt_id": "attempt-456",
+            "error_category": "execution_failure",
+        },
+        {"projectNo": "PROJECT-TRACE", "deviceId": "DEVICE-TRACE"},
+        "timeout while posting report",
+    )
+
+    assert captured["metadata"]["trace_id"] == "trace-123"
+    assert captured["metadata"]["attempt_id"] == "attempt-456"
+    assert captured["metadata"]["error_category"] == "execution_failure"
 
 
 def test_report_client_builds_payload_from_execution_outcome():

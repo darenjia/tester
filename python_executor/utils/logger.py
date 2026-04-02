@@ -8,14 +8,9 @@ from datetime import datetime
 from typing import Any, List, Dict, Optional
 from collections import deque
 
-
-TASK_CONTEXT_FIELDS = (
-    "task_no",
-    "device_id",
-    "tool_type",
-    "stage",
-    "attempt",
-    "error_code",
+from utils.observability_context import (
+    OBSERVABILITY_LOG_FIELDS,
+    build_observability_log_extra,
 )
 
 
@@ -50,7 +45,7 @@ class MemoryLogHandler(logging.Handler):
                 'message': self.format(record),
                 'levelno': record.levelno,
             }
-            for field_name in TASK_CONTEXT_FIELDS:
+            for field_name in OBSERVABILITY_LOG_FIELDS:
                 log_entry[field_name] = getattr(record, field_name, None)
             self.log_entries.append(log_entry)
         except Exception:
@@ -187,7 +182,8 @@ class LoggerManager:
 
     def bind_task_context(self, logger: logging.Logger, **context: Any) -> TaskContextAdapter:
         """Bind task context to a logger without changing the logging stack."""
-        normalized_context = {field: context.get(field) for field in TASK_CONTEXT_FIELDS}
+        normalized_context = dict(context)
+        normalized_context.update(build_observability_log_extra(context))
         return TaskContextAdapter(logger, normalized_context)
     
     def get_memory_logs(self, level: str = None, limit: int = None, search: str = None) -> List[Dict]:

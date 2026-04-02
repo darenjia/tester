@@ -28,6 +28,8 @@ class ReportAttempt:
     attempted_at: str
     endpoint: Optional[str] = None
     payload_hash: Optional[str] = None
+    trace_id: Optional[str] = None
+    error_category: Optional[str] = None
     success: bool = False
     status: str = ReportStatus.FAILED.value
     error_message: Optional[str] = None
@@ -44,6 +46,8 @@ class ReportAttempt:
             "attempted_at": self.attempted_at,
             "endpoint": self.endpoint,
             "payload_hash": self.payload_hash,
+            "trace_id": self.trace_id,
+            "error_category": self.error_category,
             "success": self.success,
             "status": self.status,
             "error_message": self.error_message,
@@ -62,6 +66,8 @@ class ReportAttempt:
             attempted_at=data.get("attempted_at", ""),
             endpoint=data.get("endpoint"),
             payload_hash=data.get("payload_hash"),
+            trace_id=data.get("trace_id"),
+            error_category=data.get("error_category"),
             success=data.get("success", False),
             status=data.get("status", ReportStatus.FAILED.value),
             error_message=data.get("error_message"),
@@ -165,6 +171,57 @@ class FailedReport:
             projection_metadata.setdefault("tool_type", tool_type)
             projection_metadata.setdefault("toolType", tool_type)
 
+        trace_id = projection_metadata.get("trace_id") or projection_metadata.get("traceId")
+        if not trace_id:
+            trace_id = self.task_info.get("trace_id") or self.task_info.get("traceId")
+        if not trace_id:
+            trace_id = self.report_data.get("trace_id") or self.report_data.get("traceId")
+        if not trace_id and self.attempts:
+            trace_id = self.attempts[-1].trace_id
+        if trace_id:
+            projection_metadata.setdefault("trace_id", trace_id)
+            projection_metadata.setdefault("traceId", trace_id)
+
+        attempt_id = projection_metadata.get("attempt_id") or projection_metadata.get("attemptId")
+        if not attempt_id:
+            attempt_id = self.task_info.get("attempt_id") or self.task_info.get("attemptId")
+        if not attempt_id:
+            attempt_id = self.report_data.get("attempt_id") or self.report_data.get("attemptId")
+        if not attempt_id and self.attempts:
+            attempt_id = self.attempts[-1].attempt_id
+        if attempt_id:
+            projection_metadata.setdefault("attempt_id", attempt_id)
+            projection_metadata.setdefault("attemptId", attempt_id)
+
+        error_category = projection_metadata.get("error_category") or projection_metadata.get("errorCategory")
+        if not error_category:
+            error_category = self.task_info.get("error_category") or self.task_info.get("errorCategory")
+        if not error_category:
+            error_category = self.report_data.get("error_category") or self.report_data.get("errorCategory")
+        if not error_category and self.attempts:
+            error_category = self.attempts[-1].error_category
+        if error_category:
+            projection_metadata.setdefault("error_category", error_category)
+            projection_metadata.setdefault("errorCategory", error_category)
+
+        execution_error_category = projection_metadata.get("execution_error_category") or projection_metadata.get("executionErrorCategory")
+        if not execution_error_category:
+            execution_error_category = self.task_info.get("execution_error_category") or self.task_info.get("executionErrorCategory")
+        if not execution_error_category:
+            execution_error_category = self.report_data.get("execution_error_category") or self.report_data.get("executionErrorCategory")
+        if execution_error_category:
+            projection_metadata.setdefault("execution_error_category", execution_error_category)
+            projection_metadata.setdefault("executionErrorCategory", execution_error_category)
+
+        report_error_category = projection_metadata.get("report_error_category") or projection_metadata.get("reportErrorCategory")
+        if not report_error_category:
+            report_error_category = self.task_info.get("report_error_category") or self.task_info.get("reportErrorCategory")
+        if not report_error_category:
+            report_error_category = self.report_data.get("report_error_category") or self.report_data.get("reportErrorCategory")
+        if report_error_category:
+            projection_metadata.setdefault("report_error_category", report_error_category)
+            projection_metadata.setdefault("reportErrorCategory", report_error_category)
+
         return projection_metadata
 
     def to_projection(self) -> Dict[str, Any]:
@@ -189,6 +246,11 @@ class FailedReport:
             "priority": self.priority,
             "attempt_count": len(self.attempts),
             "latest_attempt": latest_attempt.to_dict() if latest_attempt else None,
+            "trace_id": metadata.get("trace_id") or metadata.get("traceId") or (latest_attempt.trace_id if latest_attempt else None),
+            "attempt_id": metadata.get("attempt_id") or metadata.get("attemptId") or (latest_attempt.attempt_id if latest_attempt else None),
+            "error_category": metadata.get("error_category") or metadata.get("errorCategory") or (latest_attempt.error_category if latest_attempt else None),
+            "execution_error_category": metadata.get("execution_error_category") or metadata.get("executionErrorCategory") or "",
+            "report_error_category": metadata.get("report_error_category") or metadata.get("reportErrorCategory") or "",
             "metadata": metadata,
         }
 
