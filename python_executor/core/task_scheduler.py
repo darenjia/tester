@@ -6,6 +6,7 @@ import threading
 import time
 import logging
 import copy
+import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from enum import Enum
@@ -60,6 +61,7 @@ class TaskScheduler:
             
         if self._scheduler_thread:
             self._scheduler_thread.join(timeout=5)
+        remaining_periodic_tasks: Dict[str, Dict[str, Any]] = {}
         for entry in periodic_entries:
             cancel_event = entry.get("cancel_event")
             thread = entry.get("thread")
@@ -67,8 +69,10 @@ class TaskScheduler:
                 cancel_event.set()
             if thread:
                 thread.join(timeout=5)
+            if thread and thread.is_alive():
+                remaining_periodic_tasks[entry["scheduler_id"]] = entry
         with self._lock:
-            self._periodic_tasks.clear()
+            self._periodic_tasks = remaining_periodic_tasks
             
         logger.info("任务调度器已停止")
         task_log_manager.info("system", "任务调度器已停止")
@@ -186,7 +190,7 @@ class TaskScheduler:
             task_log_manager.error(task.id, f"周期性任务预校验失败: {exc}")
             return None
 
-        scheduler_id = f"periodic_{task.id}"
+        scheduler_id = f"periodic_{task.id}_{uuid.uuid4().hex[:8]}"
         cancel_event = threading.Event()
         registry_entry: Dict[str, Any] = {
             "scheduler_id": scheduler_id,

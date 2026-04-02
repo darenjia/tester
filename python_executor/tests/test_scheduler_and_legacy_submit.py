@@ -223,7 +223,7 @@ def test_schedule_periodic_task_logs_failed_submissions_without_stopping(monkeyp
 
     scheduler_id = scheduler.schedule_periodic_task(task, interval=0.01, max_iterations=2)
 
-    assert scheduler_id == "periodic_periodic-fail"
+    assert scheduler_id.startswith("periodic_periodic-fail_")
     for _ in range(50):
         if sleeps:
             break
@@ -318,7 +318,7 @@ def test_schedule_periodic_task_registers_scheduler_id(monkeypatch):
 
     scheduler_id = scheduler.schedule_periodic_task(task, interval=0.01, max_iterations=1)
 
-    assert scheduler_id == "periodic_periodic-registered"
+    assert scheduler_id.startswith("periodic_periodic-registered_")
     assert scheduler_id in scheduler._periodic_tasks
     assert started == [True]
 
@@ -439,3 +439,93 @@ def test_get_scheduled_tasks_uses_periodic_registry_metadata(monkeypatch):
         "max_iterations": 4,
         "iteration": 2,
     }]
+
+
+def test_schedule_periodic_task_uses_unique_scheduler_ids(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    task = Task(id="periodic-dup", name="Periodic Dup")
+    started = []
+
+    class _FakeThread:
+        def __init__(self, target, daemon=True):
+            self._target = target
+
+        def start(self):
+            started.append(True)
+
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor._build_execution_plan_from_queue_task",
+        lambda task: object(),
+    )
+    monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", lambda new_task: True)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.threading.Thread", _FakeThread)
+
+    first_id = scheduler.schedule_periodic_task(task, interval=1.0, max_iterations=1)
+    second_id = scheduler.schedule_periodic_task(task, interval=1.0, max_iterations=1)
+
+    assert first_id != second_id
+    assert len(scheduler._periodic_tasks) == 2
+    assert started == [True, True]
+
+
+def test_stop_keeps_registry_for_periodic_threads_that_fail_to_exit(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    joined = []
+
+    class _FakeMainThread:
+        def join(self, timeout=None):
+            joined.append(("main", timeout))
+
+    class _StuckThread:
+        def join(self, timeout=None):
+            joined.append(("periodic", timeout))
+
+        def is_alive(self):
+            return True
+
+    class _FakeEvent:
+        def __init__(self):
+            self.set_called = False
+
+        def set(self):
+            self.set_called = True
+
+        def is_set(self):
+            return self.set_called
+
+    cancel_event = _FakeEvent()
+    scheduler._scheduler_thread = _FakeMainThread()
+    scheduler._periodic_tasks["periodic-stuck"] = {
+        "scheduler_id": "periodic-stuck",
+        "task_id": "stuck-task",
+        "task_name": "Stuck Periodic",
+        "interval": 5.0,
+        "max_iterations": None,
+        "iteration": 3,
+        "thread": _StuckThread(),
+        "cancel_event": cancel_event,
+    }
+
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+
+    scheduler.stop()
+
+    assert ("main", 5) in joined
+    assert ("periodic", 5) in joined
+    assert cancel_event.set_called is True
+    assert "periodic-stuck" in scheduler._periodic_tasks
