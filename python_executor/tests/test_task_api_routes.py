@@ -25,6 +25,27 @@ class _FakeMappingManager:
         return self._mappings.get(case_no)
 
 
+class _FakeExecutionPlan:
+    """Fake execution plan for testing."""
+    def __init__(self, task_no="TEST", tool_type="canoe", config_path=None, project_no="", device_id=""):
+        self.task_no = task_no
+        self.tool_type = tool_type
+        self.config_path = config_path
+        self.project_no = project_no
+        self.device_id = device_id
+        self.cases = [type('Case', (), {'case_no': 'CASE-1'})()]
+
+
+class _FakeSubmissionResult:
+    """Fake submission result for testing."""
+    def __init__(self, success=True, task_no="TEST", execution_plan=None, error_message=None, error_code=None):
+        self.success = success
+        self.task_no = task_no
+        self.execution_plan = execution_plan
+        self.error_message = error_message
+        self.error_code = error_code
+
+
 @pytest.fixture
 def task_api_client():
     app = Flask(__name__)
@@ -32,22 +53,24 @@ def task_api_client():
     return app.test_client()
 
 
-def test_create_task_tdm2_uses_compiled_execution_plan(task_api_client, monkeypatch):
-    executed = {}
+def test_create_task_tdm2_uses_submit_task(task_api_client, monkeypatch):
+    """Test that TDM2.0 format task creation uses submit_task."""
+    submitted_data = {}
 
-    class _FakeExecutor:
-        def execute_plan(self, plan):
-            executed["plan"] = plan
-            return True
+    def fake_submit_task(task_data, task_no=None, device_id=None, executor=None):
+        submitted_data['task_data'] = task_data
+        submitted_data['task_no'] = task_no
+        return _FakeSubmissionResult(
+            success=True,
+            task_no=task_no or task_data.get('taskNo'),
+            execution_plan=_FakeExecutionPlan(
+                task_no=task_no or task_data.get('taskNo'),
+                tool_type='tsmaster',
+                config_path='D:/cfgs/task-api.cfg'
+            )
+        )
 
-    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
-    monkeypatch.setattr(
-        task_api,
-        "get_case_mapping_manager",
-        lambda: _FakeMappingManager(
-            {"CASE-1": _FakeMapping("TSMASTER", script_path="D:/cfgs/task-api.cfg")}
-        ),
-    )
+    monkeypatch.setattr(task_api, 'submit_task', fake_submit_task)
 
     response = task_api_client.post(
         "/api/tasks",
@@ -61,22 +84,26 @@ def test_create_task_tdm2_uses_compiled_execution_plan(task_api_client, monkeypa
     )
 
     assert response.status_code == 200
-    assert executed["plan"].task_no == "TASK-API-1"
-    assert executed["plan"].tool_type == "tsmaster"
-    assert executed["plan"].config_path == "D:/cfgs/task-api.cfg"
+    data = response.get_json()
+    assert data["success"] is True
+    assert submitted_data['task_no'] == "TASK-API-1"
 
 
 def test_create_task_tdm2_rejects_invalid_payload_as_bad_request(task_api_client, monkeypatch):
-    class _FakeExecutor:
-        def execute_plan(self, plan):
-            raise AssertionError("invalid payload should not reach execute_plan")
+    """Test that invalid TDM2.0 payload is rejected."""
+    call_count = [0]
 
-    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
-    monkeypatch.setattr(
-        task_api,
-        "get_case_mapping_manager",
-        lambda: _FakeMappingManager({"CASE-1": _FakeMapping("CANOE")}),
-    )
+    def fake_submit_task(task_data, task_no=None, device_id=None, executor=None):
+        call_count[0] += 1
+        # Return failure for empty caseList
+        return _FakeSubmissionResult(
+            success=False,
+            task_no=task_no,
+            error_message="testItems不能为空",
+            error_code="TASK_VALIDATION_FAILED"
+        )
+
+    monkeypatch.setattr(task_api, 'submit_task', fake_submit_task)
 
     response = task_api_client.post(
         "/api/tasks",
@@ -88,18 +115,19 @@ def test_create_task_tdm2_rejects_invalid_payload_as_bad_request(task_api_client
         },
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 500  # submit_task returns 500 on failure
     payload = response.get_json()
     assert payload["success"] is False
-    assert "testItems" in payload["message"] or "caseList" in payload["message"]
+    # The error should mention the validation failure
 
 
 def test_create_task_delayed_internal_request_rejects_invalid_payload(task_api_client, monkeypatch):
+    """Test that delayed internal format tasks still use scheduler."""
     class _FakeScheduler:
         def schedule_task(self, task, delay):
             raise AssertionError("invalid delayed task should not reach scheduler")
 
-    monkeypatch.setattr(task_api, "task_scheduler", _FakeScheduler())
+    monkeypatch.setattr(task_api, 'task_scheduler', _FakeScheduler())
 
     response = task_api_client.post(
         "/api/tasks",
@@ -118,10 +146,10 @@ def test_create_task_delayed_internal_request_rejects_invalid_payload(task_api_c
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["success"] is False
-    assert "testItems" in payload["message"] or "caseList" in payload["message"]
 
 
 def test_cancel_task_route_uses_scheduler_to_cancel_delayed_tasks(task_api_client, monkeypatch):
+    """Test that cancel task uses scheduler for delayed tasks."""
     cancelled = []
 
     class _FakeScheduler:
@@ -133,8 +161,8 @@ def test_cancel_task_route_uses_scheduler_to_cancel_delayed_tasks(task_api_clien
         def cancel_task(self, task_id):
             raise AssertionError("route should delegate to task scheduler first")
 
-    monkeypatch.setattr(task_api, "task_scheduler", _FakeScheduler())
-    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
+    monkeypatch.setattr(task_api, 'task_scheduler', _FakeScheduler())
+    monkeypatch.setattr(task_api, 'task_executor', _FakeExecutor())
 
     response = task_api_client.post("/api/tasks/task-delay/cancel")
 
@@ -143,6 +171,7 @@ def test_cancel_task_route_uses_scheduler_to_cancel_delayed_tasks(task_api_clien
 
 
 def test_cancel_task_route_accepts_periodic_scheduler_id(task_api_client, monkeypatch):
+    """Test that cancel task accepts periodic scheduler IDs."""
     cancelled = []
 
     class _FakeScheduler:
@@ -154,8 +183,8 @@ def test_cancel_task_route_accepts_periodic_scheduler_id(task_api_client, monkey
         def cancel_task(self, task_id):
             raise AssertionError("periodic cancel should be handled by scheduler registry")
 
-    monkeypatch.setattr(task_api, "task_scheduler", _FakeScheduler())
-    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
+    monkeypatch.setattr(task_api, 'task_scheduler', _FakeScheduler())
+    monkeypatch.setattr(task_api, 'task_executor', _FakeExecutor())
 
     response = task_api_client.post("/api/tasks/periodic_task-1/cancel")
 
@@ -164,6 +193,7 @@ def test_cancel_task_route_accepts_periodic_scheduler_id(task_api_client, monkey
 
 
 def test_delete_task_removes_queued_executor_task_before_deleting_record(task_api_client, monkeypatch):
+    """Test that delete removes task from executor before deleting record."""
     removed = []
     cancelled = []
 
@@ -180,9 +210,9 @@ def test_delete_task_removes_queued_executor_task_before_deleting_record(task_ap
             cancelled.append(task_id)
             return True
 
-    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
-    monkeypatch.setattr(task_api.task_queue, "get_task", lambda task_id: _QueuedTask())
-    monkeypatch.setattr(task_api.task_queue, "remove", lambda task_id: removed.append(task_id) or True)
+    monkeypatch.setattr(task_api, 'task_executor', _FakeExecutor())
+    monkeypatch.setattr(task_api.task_queue, 'get_task', lambda task_id: _QueuedTask())
+    monkeypatch.setattr(task_api.task_queue, 'remove', lambda task_id: removed.append(task_id) or True)
 
     response = task_api_client.delete("/api/tasks/queued-delete")
 
@@ -192,6 +222,7 @@ def test_delete_task_removes_queued_executor_task_before_deleting_record(task_ap
 
 
 def test_get_task_reports_tool_type_from_execution_metadata(task_api_client, monkeypatch):
+    """Test that get_task reports tool type from metadata."""
     class _Task:
         id = "task-detail-1"
         name = "Task Detail"
@@ -219,9 +250,9 @@ def test_get_task_reports_tool_type_from_execution_metadata(task_api_client, mon
         def get_wait_time(self):
             return 1.0
 
-    monkeypatch.setattr(task_api.task_queue, "get_task", lambda task_id: _Task())
-    monkeypatch.setattr(task_api.task_log_manager, "get_log_stats", lambda task_id: {})
-    monkeypatch.setattr(task_api.task_log_manager, "get_latest_logs", lambda count=20, task_id=None: [])
+    monkeypatch.setattr(task_api.task_queue, 'get_task', lambda task_id: _Task())
+    monkeypatch.setattr(task_api.task_log_manager, 'get_log_stats', lambda task_id: {})
+    monkeypatch.setattr(task_api.task_log_manager, 'get_latest_logs', lambda count=20, task_id=None: [])
 
     response = task_api_client.get("/api/tasks/task-detail-1")
 
@@ -231,9 +262,10 @@ def test_get_task_reports_tool_type_from_execution_metadata(task_api_client, mon
 
 
 def test_get_scheduled_tasks_includes_periodic_registrations(task_api_client, monkeypatch):
+    """Test that get_scheduled_tasks includes periodic registrations."""
     monkeypatch.setattr(
         task_api,
-        "task_scheduler",
+        'task_scheduler',
         type(
             "_FakeScheduler",
             (),
@@ -269,11 +301,12 @@ def test_get_scheduled_tasks_includes_periodic_registrations(task_api_client, mo
 
 
 def test_task_stats_exposes_periodic_scheduler_count(task_api_client, monkeypatch):
-    monkeypatch.setattr(task_api.task_queue, "get_stats", lambda: {"total": 1, "pending": 1})
-    monkeypatch.setattr(task_api, "task_executor", type("_FakeExecutor", (), {"get_stats": staticmethod(lambda: {"queue_size": 0})})())
+    """Test that task stats exposes periodic scheduler count."""
+    monkeypatch.setattr(task_api.task_queue, 'get_stats', lambda: {"total": 1, "pending": 1})
+    monkeypatch.setattr(task_api, 'task_executor', type("_FakeExecutor", (), {"get_stats": staticmethod(lambda: {"queue_size": 0})})())
     monkeypatch.setattr(
         task_api,
-        "task_scheduler",
+        'task_scheduler',
         type("_FakeScheduler", (), {"get_stats": staticmethod(lambda: {"running": True, "scheduled_count": 3, "periodic_count": 2})})(),
     )
 

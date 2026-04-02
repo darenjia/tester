@@ -6,9 +6,8 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any, Optional
 
-from core.task_compiler import TaskCompiler, TaskCompileError
 from models.executor_task import Task, TaskStatus, TaskPriority, task_queue
-from core.case_mapping_manager import get_case_mapping_manager
+from core.task_submission import submit_task
 from utils.logger import get_logger
 from utils.validators import InputValidator, ValidationError
 
@@ -16,41 +15,6 @@ logger = get_logger("api_routes")
 
 # 创建蓝图
 api_bp = Blueprint('api', __name__, url_prefix='/api/tdm2')
-
-
-def determine_tool_type_from_cases(case_list: list) -> Optional[str]:
-    """
-    从用例列表通过用例映射确定tool_type
-
-    Args:
-        case_list: 用例列表
-
-    Returns:
-        tool_type字符串，如果无法确定则返回None
-    """
-    if not case_list:
-        return None
-
-    mapping_manager = get_case_mapping_manager()
-    tool_types = set()
-
-    for case in case_list:
-        case_no = case.get('caseNo') or case.get('case_no')
-        if case_no:
-            mapping = mapping_manager.get_mapping(case_no)
-            if mapping and mapping.category:
-                tool_types.add(mapping.category.lower())
-
-    if len(tool_types) == 1:
-        tool_type = list(tool_types)[0]
-        logger.info(f"从用例映射确定tool_type: {tool_type}")
-        return tool_type
-    elif len(tool_types) > 1:
-        logger.warning(f"用例列表包含多种tool_type: {tool_types}")
-        raise ValueError(f"用例列表包含多个工具类型: {', '.join(sorted(tool_types))}")
-
-    logger.info("无法从用例映射确定tool_type")
-    return None
 
 
 def create_response(data: Dict[str, Any] = None, message: str = None, status: str = "success") -> Dict[str, Any]:
@@ -164,103 +128,26 @@ def create_task():
                 503
             )
 
-        # 从用例映射获取tool_type（不依赖请求参数中的toolType）
-        tool_type = data.get('toolType')
-        if case_list and not tool_type:
-            try:
-                determined_tool_type = determine_tool_type_from_cases(case_list)
-            except ValueError as e:
-                return create_error_response(str(e), "TASK_COMPILE_FAILED", 400)
+        # 使用权威提交helper进行任务提交
+        result = submit_task(data, task_no=task_no)
 
-            if determined_tool_type:
-                tool_type = determined_tool_type
-                data['toolType'] = determined_tool_type
-                logger.info(f"从用例映射自动设置toolType: {determined_tool_type}")
-
-        if tool_type:
-            try:
-                tool_type = InputValidator.validate_tool_type(tool_type)
-                data['toolType'] = tool_type
-            except ValidationError as e:
-                return create_error_response(str(e), "INVALID_TOOL_TYPE", 400)
-
-        # 统一编译前校验，确保旧入口和主链路行为一致
-        compiler = TaskCompiler(get_case_mapping_manager())
-        compile_payload = {
-            "taskNo": task_no,
-            "projectNo": data.get('projectNo', ''),
-            "taskName": data.get('taskName', ''),
-            "deviceId": data.get('deviceId'),
-            "toolType": tool_type,
-            "configPath": data.get('configPath'),
-            "configName": data.get('configName'),
-            "baseConfigDir": data.get('baseConfigDir'),
-            "variables": data.get('variables', {}),
-            "canoeNamespace": data.get('canoeNamespace'),
-            "timeout": data.get('timeout', 3600),
-            "testItems": [
-                {
-                    "caseNo": case.get('caseNo') or case.get('case_no'),
-                    "name": case.get('caseName') or case.get('name', ''),
-                    "type": case.get('caseType') or case.get('type') or 'test_module',
-                    "dtcInfo": case.get('dtcInfo') or case.get('dtc_info'),
-                    "params": case.get('params') or {},
-                    "repeat": case.get('repeat', 1),
-                }
-                for case in case_list
-            ],
-        }
-        try:
-            compiler.compile_payload(compile_payload)
-        except TaskCompileError as e:
-            return create_error_response(str(e), "TASK_COMPILE_FAILED", 400)
-
-        # 构建params，包含TDM2.0的原始数据
-        params = {
-            "projectNo": data.get('projectNo', ''),
-            "taskNo": task_no,
-            "taskName": data.get('taskName', ''),
-            "caseList": case_list,
-            "deviceId": data.get('deviceId'),
-            "toolType": tool_type,
-            "configPath": data.get('configPath'),
-            "timeout": data.get('timeout', 3600)
-        }
-
-        # 创建任务
-        task = Task(
-            id=task_no,
-            name=data.get('taskName') or data.get('projectNo', '未命名任务'),
-            status=TaskStatus.PENDING.value,
-            priority=data.get('priority', TaskPriority.NORMAL.value),
-            task_type=tool_type or 'default',
-            params=params,
-            timeout=data.get('timeout', 3600),
-            max_retries=data.get('max_retries', 3),
-            metadata=data
-        )
-
-        # 添加到队列
-        if task_queue.add(task):
-            logger.info(f"HTTP API创建任务: taskNo={task_no}")
+        if result.success:
+            return jsonify(create_response(
+                data={
+                    "projectNo": data.get('projectNo', ''),
+                    "taskNo": task_no,
+                    "taskName": data.get('taskName', ''),
+                    "status": "pending",
+                    "message": "任务已创建并开始执行",
+                },
+                message="任务创建成功"
+            )), 201
         else:
-            return create_error_response(f"任务 {task_no} 添加失败", "ADD_TASK_FAILED", 500)
-
-        # 触发任务执行（异步）
-        from api.task_executor import execute_task_async
-        execute_task_async(task.id, data)
-
-        return jsonify(create_response(
-            data={
-                "projectNo": data.get('projectNo', ''),
-                "taskNo": task_no,
-                "taskName": data.get('taskName', ''),
-                "status": task.status,
-                "message": "任务已创建并开始执行",
-                "createdAt": task.created_at
-            },
-            message="任务创建成功"
-        )), 201
+            return create_error_response(
+                result.error_message or "任务提交失败",
+                result.error_code or "TASK_SUBMISSION_FAILED",
+                500
+            )
 
     except Exception as e:
         logger.error(f"创建任务失败: {e}", exc_info=True)

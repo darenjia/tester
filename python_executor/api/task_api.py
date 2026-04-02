@@ -8,45 +8,15 @@ from typing import Dict, Any, Optional
 
 from models.executor_task import Task, TaskStatus, TaskPriority, task_queue
 from models.task_log import task_log_manager
-from core.case_mapping_manager import get_case_mapping_manager
 from core.task_executor_production import get_task_executor
-from core.task_compiler import TaskCompiler, TaskCompileError
+from core.task_compiler import TaskCompileError
+from core.task_submission import submit_task, submit_task_from_legacy_format
 task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 
 
 # 创建蓝图
 task_bp = Blueprint('task', __name__, url_prefix='/api')
-
-
-def _compile_tdm2_execution_plan(data: Dict[str, Any]):
-    compiler = TaskCompiler(get_case_mapping_manager())
-    case_list = data.get("caseList") or []
-    payload = {
-        "taskNo": data.get("taskNo") or str(uuid.uuid4()),
-        "projectNo": data.get("projectNo", ""),
-        "taskName": data.get("taskName", ""),
-        "deviceId": data.get("deviceId"),
-        "toolType": data.get("toolType"),
-        "configPath": data.get("configPath"),
-        "configName": data.get("configName"),
-        "baseConfigDir": data.get("baseConfigDir"),
-        "variables": data.get("variables"),
-        "canoeNamespace": data.get("canoeNamespace"),
-        "timeout": data.get("timeout", 3600),
-        "testItems": [
-            {
-                "caseNo": case.get("caseNo") or case.get("case_no") or "",
-                "name": case.get("caseName") or case.get("name") or "",
-                "type": case.get("caseType") or case.get("type") or "test_module",
-                "dtcInfo": case.get("dtcInfo") or case.get("dtc_info"),
-                "params": case.get("params"),
-                "repeat": case.get("repeat", 1),
-            }
-            for case in case_list
-        ],
-    }
-    return compiler.compile_payload(payload)
 
 
 @task_bp.route('/tasks', methods=['POST'])
@@ -97,26 +67,21 @@ def create_task():
 
         # 检测是否为TDM2.0格式（包含caseList）
         if 'caseList' in data:
-            try:
-                execution_plan = _compile_tdm2_execution_plan(data)
-            except TaskCompileError as exc:
-                return jsonify({"success": False, "message": str(exc)}), 400
-
-            task_no = execution_plan.task_no
-
-            if task_executor.execute_plan(execution_plan):
+            # Use authoritative submission helper
+            result = submit_task(data, task_no=data.get('taskNo'))
+            if result.success:
                 return jsonify({
                     "success": True,
                     "message": "任务已创建并提交到队列",
                     "data": {
-                        "taskNo": task_no,
-                        "projectNo": execution_plan.project_no,
-                        "deviceId": execution_plan.device_id,
-                        "caseCount": len(execution_plan.cases)
+                        "taskNo": result.task_no,
+                        "projectNo": result.execution_plan.project_no if result.execution_plan else "",
+                        "deviceId": result.execution_plan.device_id if result.execution_plan else "",
+                        "caseCount": len(result.execution_plan.cases) if result.execution_plan else 0
                     }
                 })
             else:
-                return jsonify({"success": False, "message": "任务提交失败"}), 500
+                return jsonify({"success": False, "message": result.error_message or "任务提交失败"}), 500
 
         # 内部格式处理（兼容旧接口）
         name = data.get('name') or data.get('projectNo', '未命名任务')
@@ -156,8 +121,9 @@ def create_task():
                     "data": task.to_dict()
                 })
         else:
-            # 立即执行
-            if task_executor.submit_task(task):
+            # 立即执行 - use submit_task_from_legacy_format for internal format
+            result = submit_task_from_legacy_format(task)
+            if result.success:
                 return jsonify({
                     "success": True,
                     "message": "任务已创建并提交到队列",
@@ -174,7 +140,7 @@ def create_task():
 def get_tasks():
     """
     获取任务列表
-    
+
     查询参数:
     - status: 任务状态筛选 (pending/running/completed/failed/cancelled/timeout)
     - page: 页码，默认1
@@ -205,7 +171,7 @@ def get_tasks():
         # 确保tasks是列表
         if tasks is None:
             tasks = []
-            
+
         # 排序（处理None值）
         reverse = sort_order.lower() == 'desc'
         if sort_by == 'created_at':
@@ -214,13 +180,13 @@ def get_tasks():
             tasks.sort(key=lambda x: x.priority or 0, reverse=reverse)
         elif sort_by == 'status':
             tasks.sort(key=lambda x: x.status or '', reverse=reverse)
-            
+
         # 分页
         total = len(tasks)
         start = (page - 1) * per_page
         end = start + per_page
         paginated_tasks = tasks[start:end]
-        
+
         return jsonify({
             "success": True,
             "data": {
@@ -233,7 +199,7 @@ def get_tasks():
                 }
             }
         })
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"获取任务列表失败: {str(e)}"}), 500
 
@@ -389,7 +355,7 @@ def get_task(task_id: str):
 def cancel_task(task_id: str):
     """
     取消任务
-    
+
     路径参数:
     - task_id: 任务ID
     """
@@ -401,7 +367,7 @@ def cancel_task(task_id: str):
             })
         else:
             return jsonify({"success": False, "message": "任务不存在或无法取消"}), 400
-            
+
     except Exception as e:
         return jsonify({"success": False, "message": f"取消任务失败: {str(e)}"}), 500
 
@@ -410,7 +376,7 @@ def cancel_task(task_id: str):
 def retry_task(task_id: str):
     """
     重试任务
-    
+
     路径参数:
     - task_id: 任务ID
     """
@@ -424,7 +390,7 @@ def retry_task(task_id: str):
             })
         else:
             return jsonify({"success": False, "message": "任务不存在或无法重试"}), 400
-            
+
     except Exception as e:
         return jsonify({"success": False, "message": f"重试任务失败: {str(e)}"}), 500
 
@@ -433,7 +399,7 @@ def retry_task(task_id: str):
 def delete_task(task_id: str):
     """
     删除任务
-    
+
     路径参数:
     - task_id: 任务ID
     """
@@ -441,7 +407,7 @@ def delete_task(task_id: str):
         task = task_queue.get_task(task_id)
         if not task:
             return jsonify({"success": False, "message": "任务不存在"}), 404
-            
+
         # 正在运行的任务不能删除
         if task.is_running():
             return jsonify({"success": False, "message": "任务正在执行中，无法删除"}), 400
@@ -457,7 +423,7 @@ def delete_task(task_id: str):
             })
         else:
             return jsonify({"success": False, "message": "删除任务失败"}), 500
-            
+
     except Exception as e:
         return jsonify({"success": False, "message": f"删除任务失败: {str(e)}"}), 500
 
@@ -471,7 +437,7 @@ def get_task_stats():
         queue_stats = task_queue.get_stats()
         executor_stats = task_executor.get_stats()
         scheduler_stats = task_scheduler.get_stats()
-        
+
         return jsonify({
             "success": True,
             "data": {
@@ -480,7 +446,7 @@ def get_task_stats():
                 "scheduler": scheduler_stats,
             }
         })
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"获取统计信息失败: {str(e)}"}), 500
 
@@ -489,7 +455,7 @@ def get_task_stats():
 def clear_completed_tasks():
     """
     清理已完成的任务
-    
+
     请求体:
     {
         "max_age": 3600  // 最大保留时间(秒)，可选，不填则清理所有
@@ -498,15 +464,15 @@ def clear_completed_tasks():
     try:
         data = request.get_json() or {}
         max_age = data.get('max_age')
-        
+
         count = task_queue.clear_completed(max_age)
-        
+
         return jsonify({
             "success": True,
             "message": f"已清理 {count} 个任务",
             "data": {"cleared_count": count}
         })
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"清理任务失败: {str(e)}"}), 500
 
@@ -518,11 +484,11 @@ def get_scheduled_tasks():
     """
     try:
         scheduled_tasks = task_scheduler.get_scheduled_tasks()
-        
+
         return jsonify({
             "success": True,
             "data": scheduled_tasks
         })
-        
+
     except Exception as e:
         return jsonify({"success": False, "message": f"获取定时任务失败: {str(e)}"}), 500

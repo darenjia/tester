@@ -11,6 +11,7 @@ import json
 import time
 import signal
 import sys
+import threading
 from datetime import datetime
 from typing import Dict, Any
 from functools import wraps
@@ -35,6 +36,7 @@ from core.execution_observability import (
     get_execution_observability_manager,
 )
 from core.task_executor_production import TaskExecutorProduction
+from core.task_submission import submit_task
 from core.status_monitor import get_status_monitor, ConnectionStatus
 
 # 注册API蓝图
@@ -89,6 +91,7 @@ class PythonExecutorProduction:
         
         # 初始化组件
         self.task_executor = None
+        self._executor_lock = threading.Lock()
         self.clients = {}  # sid -> client_info
         self.running = True
         
@@ -394,60 +397,56 @@ class PythonExecutorProduction:
             )
             record_metric("task.received", 1, {"task_no": message.taskNo})
 
-            # 验证输入
-            validated_data = InputValidator.validate_task_data(task_data)
-            observability_manager.transition(message.taskNo, ExecutionLifecycleStage.VALIDATED)
-            record_metric("task.validated", 1, {"task_no": message.taskNo})
-
-            # 从映射库编译执行计划
-            from core.case_mapping_manager import get_case_mapping_manager
-            mapping_manager = get_case_mapping_manager()
-            compiler = TaskCompiler(mapping_manager=mapping_manager)
-            execution_plan = compiler.compile_payload(validated_data)
-            observability_manager.transition(message.taskNo, ExecutionLifecycleStage.COMPILED)
-            record_metric("task.compiled", 1, {"task_no": message.taskNo})
-
-            # 初始化任务执行器（如果还没初始化）
+            # 初始化任务执行器（如果还没初始化，线程安全）
+            # Create executor but don't store it yet - only store after successful submit_task
             if not self.task_executor:
-                self.task_executor = TaskExecutorProduction(
-                    message_sender=lambda msg: self._send_message_to_client(client_sid, msg)
-                )
-                self.task_executor.start()
+                with self._executor_lock:
+                    if not self.task_executor:  # Double-check
+                        self._pending_executor = TaskExecutorProduction(
+                            message_sender=lambda msg: self._send_message_to_client(client_sid, msg)
+                        )
+                        self._pending_executor.start()
+            else:
+                self._pending_executor = self.task_executor
 
-            # 执行任务 (使用 ExecutionPlan)
-            success = self.task_executor.execute_plan(execution_plan)
+            # 提交任务（验证、编译、执行）
+            result = submit_task(
+                task_data,
+                task_no=message.taskNo,
+                device_id=message.deviceId,
+                executor=self._pending_executor
+            )
 
-            if success:
-                if not execution_context.tool_type:
-                    execution_context.tool_type = execution_plan.tool_type or ""
+            if result.success:
+                # Store executor only after successful submission
+                self.task_executor = self._pending_executor
+                del self._pending_executor
                 observability_manager.transition(message.taskNo, ExecutionLifecycleStage.QUEUED)
                 record_metric("task.queued", 1, {"task_no": message.taskNo})
-                logger.info(f"任务已加入队列: {execution_plan.task_no}")
+                logger.info(f"任务已加入队列: {result.task_no}")
                 emit('task_response', {
-                    'taskNo': execution_plan.task_no,
+                    'taskNo': result.task_no,
                     'status': 'queued',
                     'message': '任务已加入队列',
                     'timestamp': int(time.time() * 1000)
                 })
             else:
-                observability_manager.fail(
-                    message.taskNo,
-                    error_code="TASK_QUEUE_REJECTED",
-                    error_message="任务加入队列失败",
-                    retryable=False,
-                )
-                record_metric(
-                    "task.failed",
-                    1,
-                    {"task_no": message.taskNo, "stage": "compiled"},
-                )
-                logger.warning(f"任务加入队列失败: {execution_plan.task_no}")
-                emit('task_response', {
-                    'taskNo': execution_plan.task_no,
-                    'status': 'rejected',
-                    'message': '任务加入队列失败',
-                    'timestamp': int(time.time() * 1000)
-                })
+                logger.warning(f"任务提交失败: {result.task_no} - {result.error_message}")
+                if result.error_code == "TASK_COMPILE_FAILED":
+                    # Compilation failures emit 'error' event
+                    emit('error', {
+                        'error': result.error_message or '任务提交失败',
+                        'taskNo': result.task_no,
+                        'timestamp': int(time.time() * 1000)
+                    })
+                else:
+                    # Executor rejection emits 'task_response' with status 'rejected'
+                    emit('task_response', {
+                        'taskNo': result.task_no,
+                        'status': 'rejected',
+                        'message': result.error_message or '任务提交失败',
+                        'timestamp': int(time.time() * 1000)
+                    })
                 
         except ValidationError as e:
             try:

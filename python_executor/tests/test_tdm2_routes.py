@@ -28,7 +28,6 @@ def tdm2_client(monkeypatch):
     monkeypatch.setattr(routes.task_queue, "get_task", lambda task_no: None)
     monkeypatch.setattr(routes.task_queue, "get_running_tasks", lambda: [])
     monkeypatch.setattr(routes.task_queue, "add", lambda task: True)
-    monkeypatch.setattr("api.task_executor.execute_task_async", lambda task_no, data: None)
 
     return app.test_client()
 

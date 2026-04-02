@@ -91,6 +91,11 @@ def dispatcher(monkeypatch):
         "core.case_mapping_manager.get_case_mapping_manager",
         lambda: fake_manager,
     )
+    # Also patch in task_submission module so submit_task uses fake_manager
+    monkeypatch.setattr(
+        "core.task_submission.get_case_mapping_manager",
+        lambda: fake_manager,
+    )
 
     executor = main_production.PythonExecutorProduction()
     return types.SimpleNamespace(

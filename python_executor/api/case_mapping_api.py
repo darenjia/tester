@@ -1136,8 +1136,8 @@ def start_case_test(case_no: str):
         }
         logger.info(f"[start_case_test] 测试状态已创建: test_id={test_id}")
 
-        from api.task_executor import execute_task_async, _get_executor
-        from models.task import Task
+        from core.task_submission import submit_task
+        import threading
 
         task_data = {
             'taskNo': test_id,
@@ -1161,16 +1161,14 @@ def start_case_test(case_no: str):
             task_data['iniConfig'] = mapping.ini_config
         logger.info(f"[start_case_test] 任务数据: {task_data}")
 
-        # 检查执行器状态
-        try:
-            executor = _get_executor()
-            executor_status = executor.get_current_status()
-            logger.info(f"[start_case_test] 执行器状态: {executor_status}")
-        except Exception as ex:
-            logger.error(f"[start_case_test] 获取执行器状态失败: {ex}")
+        def run_submit():
+            try:
+                submit_task(task_data, task_no=test_id)
+            except Exception as e:
+                logger.error(f"[start_case_test] submit_task failed: test_id={test_id}, error={e}")
 
-        execute_task_async(test_id, task_data)
-        logger.info(f"[start_case_test] execute_task_async 已调用: test_id={test_id}")
+        threading.Thread(target=run_submit, daemon=True).start()
+        logger.info(f"[start_case_test] submit_task 已调用: test_id={test_id}")
 
         return jsonify({
             "success": True,
