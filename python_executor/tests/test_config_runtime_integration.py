@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 
+import gevent.monkey
 import pytest
 from flask import Flask
 
@@ -45,7 +46,7 @@ def _write_config(
 
 
 @pytest.fixture
-def runtime_modules(tmp_path: Path):
+def runtime_modules(tmp_path: Path, monkeypatch):
     config_a = tmp_path / "config-a.json"
     config_b = tmp_path / "config-b.json"
     workspace_a = str(tmp_path / "workspace-a")
@@ -83,6 +84,7 @@ def runtime_modules(tmp_path: Path):
         importlib.import_module("core.task_executor_production")
     )
     api_config_module = importlib.reload(importlib.import_module("api.config_api"))
+    monkeypatch.setattr(gevent.monkey, "patch_all", lambda *args, **kwargs: None)
     main_module = importlib.reload(importlib.import_module("main_production"))
 
     original_report_client = getattr(report_client_module, "_report_client_instance", None)

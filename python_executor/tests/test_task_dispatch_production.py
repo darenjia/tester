@@ -1,12 +1,12 @@
 import types
 
 import pytest
+import gevent.monkey
 
 from core.execution_observability import (
     ExecutionLifecycleStage,
     get_execution_observability_manager,
 )
-import main_production
 from models.result import Message
 from models import executor_task as executor_task_module
 
@@ -57,6 +57,9 @@ class _FakeExecutor:
 
 @pytest.fixture
 def dispatcher(monkeypatch):
+    monkeypatch.setattr(gevent.monkey, "patch_all", lambda *args, **kwargs: None)
+    import main_production
+
     observability_manager = get_execution_observability_manager()
     observability_manager._contexts.clear()
 
@@ -91,6 +94,7 @@ def dispatcher(monkeypatch):
 
     executor = main_production.PythonExecutorProduction()
     return types.SimpleNamespace(
+        main_production=main_production,
         executor=executor,
         emitted=emitted,
         task_queue_calls=task_queue_calls,
@@ -183,7 +187,7 @@ def test_rejected_enqueue_marks_observability_finished(dispatcher, monkeypatch):
             self.executed_tasks.append(task)
             return False
 
-    monkeypatch.setattr(main_production, "TaskExecutorProduction", _RejectingExecutor)
+    monkeypatch.setattr(dispatcher.main_production, "TaskExecutorProduction", _RejectingExecutor)
 
     message = Message(
         type="TASK_DISPATCH",

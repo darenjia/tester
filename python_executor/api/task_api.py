@@ -8,13 +8,45 @@ from typing import Dict, Any, Optional
 
 from models.executor_task import Task, TaskStatus, TaskPriority, task_queue
 from models.task_log import task_log_manager
+from core.case_mapping_manager import get_case_mapping_manager
 from core.task_executor_production import get_task_executor
+from core.task_compiler import TaskCompiler, TaskCompileError
 task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 
 
 # 创建蓝图
 task_bp = Blueprint('task', __name__, url_prefix='/api')
+
+
+def _compile_tdm2_execution_plan(data: Dict[str, Any]):
+    compiler = TaskCompiler(get_case_mapping_manager())
+    case_list = data.get("caseList") or []
+    payload = {
+        "taskNo": data.get("taskNo") or str(uuid.uuid4()),
+        "projectNo": data.get("projectNo", ""),
+        "taskName": data.get("taskName", ""),
+        "deviceId": data.get("deviceId"),
+        "toolType": data.get("toolType"),
+        "configPath": data.get("configPath"),
+        "configName": data.get("configName"),
+        "baseConfigDir": data.get("baseConfigDir"),
+        "variables": data.get("variables"),
+        "canoeNamespace": data.get("canoeNamespace"),
+        "timeout": data.get("timeout", 3600),
+        "testItems": [
+            {
+                "caseNo": case.get("caseNo") or case.get("case_no") or "",
+                "name": case.get("caseName") or case.get("name") or "",
+                "type": case.get("caseType") or case.get("type") or "test_module",
+                "dtcInfo": case.get("dtcInfo") or case.get("dtc_info"),
+                "params": case.get("params"),
+                "repeat": case.get("repeat", 1),
+            }
+            for case in case_list
+        ],
+    }
+    return compiler.compile_payload(payload)
 
 
 @task_bp.route('/tasks', methods=['POST'])
@@ -65,37 +97,22 @@ def create_task():
 
         # 检测是否为TDM2.0格式（包含caseList）
         if 'caseList' in data:
-            # TDM2.0格式处理
-            from models.task import Task as TDMTask, Case
+            try:
+                execution_plan = _compile_tdm2_execution_plan(data)
+            except TaskCompileError as exc:
+                return jsonify({"success": False, "message": str(exc)}), 400
 
-            case_list = []
-            for case_data in data.get('caseList', []):
-                case_list.append(Case.from_dict(case_data))
+            task_no = execution_plan.task_no
 
-            task_no = data.get('taskNo') or data.get('taskNo') or str(uuid.uuid4())
-
-            tdm_task = TDMTask(
-                projectNo=data.get('projectNo', ''),
-                taskNo=task_no,
-                taskName=data.get('taskName', ''),
-                caseList=case_list,
-                deviceId=data.get('deviceId'),
-                toolType=data.get('toolType', 'canoe'),
-                configPath=data.get('configPath'),
-                timeout=data.get('timeout', 3600),
-                timestamp=data.get('timestamp')
-            )
-
-            # 提交到执行器
-            if task_executor.execute_task(tdm_task):
+            if task_executor.execute_plan(execution_plan):
                 return jsonify({
                     "success": True,
                     "message": "任务已创建并提交到队列",
                     "data": {
                         "taskNo": task_no,
-                        "projectNo": tdm_task.projectNo,
-                        "deviceId": tdm_task.deviceId,
-                        "caseCount": len(case_list)
+                        "projectNo": execution_plan.project_no,
+                        "deviceId": execution_plan.device_id,
+                        "caseCount": len(execution_plan.cases)
                     }
                 })
             else:

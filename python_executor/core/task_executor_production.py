@@ -244,6 +244,12 @@ class TaskExecutorProduction:
             "name": self._case_name(case),
             "type": self._case_type(case),
             "case_no": self._case_no(case),
+            "caseNo": self._case_no(case),
+            "caseName": self._case_name(case),
+            "caseType": self._case_type(case),
+            "repeat": self._case_repeat(case),
+            "dtcInfo": self._case_dtc_info(case),
+            "params": self._case_params(case),
         }
 
     def _legacy_config_case_dict(self, case: Any) -> Dict[str, Any]:
@@ -355,14 +361,19 @@ class TaskExecutorProduction:
                 params={
                     'tool_type': self._task_tool_type(plan),
                     'config_path': self._task_config_path(plan),
-                    'variables': self._task_variables(plan)
+                    'config_name': self._task_config_name(plan),
+                    'base_config_dir': self._task_base_config_dir(plan),
+                    'variables': self._task_variables(plan),
+                    'canoe_namespace': self._task_canoe_namespace(plan),
+                    'testItems': test_items,
                 },
                 timeout=self._task_timeout(plan),
                 metadata={
                     'taskNo': task_id,
                     'projectNo': self._task_project_no(plan),
                     'deviceId': self._task_device_id(plan),
-                    'caseCount': len(self._task_cases(plan) or [])
+                    'caseCount': len(self._task_cases(plan) or []),
+                    'caseList': [self._legacy_config_case_dict(item) for item in self._task_cases(plan)],
                 }
             )
             global_task_queue.add(exec_task)
