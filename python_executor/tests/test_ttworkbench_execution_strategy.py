@@ -1,4 +1,5 @@
 from core.execution_strategies.ttworkbench_strategy import TTworkbenchExecutionStrategy
+from core.result_collector import ResultCollector
 
 
 class _DummyAdapter:
@@ -25,6 +26,7 @@ def test_ttworkbench_strategy_requires_execution_capability():
 
 
 def test_ttworkbench_strategy_runs_cases_via_capability():
+    """Test that TTworkbench strategy executes cases via capability and returns ExecutionOutcome."""
     strategy = TTworkbenchExecutionStrategy()
     observed = {"loads": [], "starts": 0, "stops": 0, "single": [], "batch": []}
 
@@ -77,17 +79,6 @@ def test_ttworkbench_strategy_runs_cases_via_capability():
         }
     )
 
-    class _Collector:
-        def __init__(self):
-            self.results = []
-
-        def add_test_result(self, result):
-            self.results.append(result)
-
-    class _Executor:
-        def __init__(self):
-            self.current_collector = _Collector()
-
     plan = type(
         "_Plan",
         (),
@@ -116,13 +107,18 @@ def test_ttworkbench_strategy_runs_cases_via_capability():
         },
     )()
 
-    results = strategy.run(plan, adapter=adapter, executor=_Executor(), config_path="D:/workspace/root.clf")
+    collector = ResultCollector("TTW-1")
+
+    outcome = strategy.run(plan, adapter=adapter, collector=collector, config_path="D:/workspace/root.clf")
 
     assert observed["loads"] == ["D:/workspace/root.clf"]
     assert observed["starts"] == 1
     assert observed["stops"] == 1
     assert observed["single"] == [("D:/workspace/single.clf", "TTW-1")]
     assert observed["batch"] == [(("D:/workspace/a.clf", "D:/workspace/b.clf"), "TTW-1")]
-    assert len(results) == 2
-    assert results[0].verdict == "PASS"
-    assert results[1].verdict == "PASS"
+    # Contract: when collector is provided, return ExecutionOutcome
+    assert outcome.taskNo == "TTW-1"
+    assert outcome.status == "completed"
+    assert len(outcome.results) == 2
+    assert outcome.results[0].verdict == "PASS"
+    assert outcome.results[1].verdict == "PASS"

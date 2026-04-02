@@ -1,4 +1,5 @@
 from core.execution_strategies.canoe_strategy import CANoeExecutionStrategy
+from core.result_collector import ResultCollector
 
 
 class _DummyAdapter:
@@ -41,6 +42,7 @@ def test_canoe_strategy_prepare_accepts_registered_capabilities():
 
 
 def test_canoe_strategy_runs_test_modules_via_capability():
+    """Test that CANoe strategy executes test modules via capability and returns ExecutionOutcome."""
     strategy = CANoeExecutionStrategy()
     executed = []
 
@@ -62,29 +64,6 @@ def test_canoe_strategy_runs_test_modules_via_capability():
             }
             return mapping.get(name, default)
 
-    class _Collector:
-        def __init__(self):
-            self.results = []
-
-        def add_test_result(self, result):
-            self.results.append(result)
-
-    class _Executor:
-        def __init__(self):
-            self.current_collector = _Collector()
-
-        def _load_configuration_by_path(self, config_path):
-            raise AssertionError("strategy should load configuration via capability")
-
-        def _start_measurement(self, plan):
-            raise AssertionError("strategy should start measurement via capability")
-
-        def _stop_measurement(self, plan):
-            raise AssertionError("strategy should stop measurement via capability")
-
-        def _execute_test_items(self, plan):
-            raise AssertionError("test_module path should execute via strategy capability")
-
     class _Plan:
         timeout_seconds = 45
         cases = [
@@ -92,14 +71,16 @@ def test_canoe_strategy_runs_test_modules_via_capability():
             type("_Case", (), {"case_name": "ModuleB", "case_type": "test_module"})(),
         ]
 
-    executor = _Executor()
+    collector = ResultCollector("CANOE-TEST-001")
 
-    results = strategy.run(_Plan(), adapter=_Adapter(), executor=executor, config_path=None)
+    outcome = strategy.run(_Plan(), adapter=_Adapter(), collector=collector, config_path=None)
 
     assert executed == [("ModuleA", 45), ("ModuleB", 45)]
-    assert len(results) == 2
-    assert results[0].verdict == "PASS"
-    assert len(executor.current_collector.results) == 2
+    # Contract: when collector is provided, return ExecutionOutcome
+    assert outcome.taskNo == "CANOE-TEST-001"
+    assert outcome.status == "completed"
+    assert len(outcome.results) == 2
+    assert outcome.results[0].verdict == "PASS"
 
 
 def test_canoe_strategy_rejects_non_test_module_cases():

@@ -1,27 +1,61 @@
-"""TSMaster execution strategy."""
+"""TSMaster execution strategy.
+
+TSMaster Runtime Adapter Contract Implementation
+------------------------------------------------
+
+Capability Requirements:
+- configuration: Load .cfg files (optional)
+- measurement: Stop measurement (optional cleanup)
+- tsmaster_execution: Execute test cases and get report info
+
+Execution Flow:
+1. Load configuration via configuration.load(config_path) if provided
+2. Start execution via tsmaster_execution.start_execution(selected_cases)
+3. Wait for completion via tsmaster_execution.wait_for_completion(timeout)
+4. Collect report info via tsmaster_execution.get_report_info()
+5. Stop measurement in finally block (if measurement capability exists)
+6. Return ExecutionOutcome or list[TestResult]
+
+Note: TSMaster handles configuration differently - case selection is built
+from ini_config in case mappings, not direct configuration files.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from core.case_mapping_manager import get_case_mapping_manager
 from core.result_collector import ResultCollector
+from models.result import ExecutionOutcome
 from models.task import TestResult
 
 from .base import ExecutionStrategy
 
 
 class TSMasterExecutionStrategy(ExecutionStrategy):
-    """Strategy for TSMaster execution flow."""
+    """Strategy for TSMaster execution flow.
+
+    Follows the Runtime Adapter Contract defined in base.py.
+    """
 
     strategy_name = "tsmaster"
 
-    def prepare(self, plan: Any, adapter: Any):
+    def prepare(self, plan: Any, adapter: Any) -> tuple[bool, Optional[str]]:
+        """Validate TSMaster-specific capabilities.
+
+        Required capabilities:
+        - tsmaster_execution: Execute cases and get reports
+
+        Optional capabilities:
+        - configuration: Load configuration files
+        - measurement: Stop measurement cleanup
+        """
         if adapter.get_capability("tsmaster_execution") is None:
             return False, "Missing TSMaster capability: tsmaster_execution"
         return True, None
 
-    def _load_configuration(self, adapter: Any, config_path: str | None) -> None:
+    def _load_configuration(self, adapter: Any, config_path: Optional[str]) -> None:
+        """Load TSMaster configuration via configuration capability."""
         if not config_path:
             return
         configuration_capability = adapter.get_capability("configuration")
@@ -29,20 +63,24 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             raise RuntimeError(f"failed to load TSMaster configuration: {config_path}")
 
     def _stop_measurement(self, adapter: Any) -> None:
+        """Stop TSMaster measurement via measurement capability."""
         measurement_capability = adapter.get_capability("measurement")
         if measurement_capability is not None:
             measurement_capability.stop()
 
     def _timeout_for(self, plan: Any) -> int:
+        """Extract timeout from plan."""
         timeout = getattr(plan, "timeout_seconds", None)
         if timeout is None:
             timeout = getattr(plan, "timeout", 0)
         return int(timeout or 0)
 
     def _plan_cases(self, plan: Any) -> list[Any]:
+        """Get cases from plan."""
         return list(getattr(plan, "cases", []) or getattr(plan, "test_items", []) or [])
 
     def _case_selection_string(self, plan: Any) -> str:
+        """Build case selection string from plan cases using case mappings."""
         mapping_manager = get_case_mapping_manager()
         cases = []
         for item in self._plan_cases(plan):
@@ -56,49 +94,47 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
                 cases.append(f"{case_no}=1")
         return ",".join(cases)
 
-    def _execution_capability(self, adapter: Any) -> tuple[Any, str]:
+    def _execution_capability(self, adapter: Any) -> Any:
+        """Get TSMaster execution capability."""
         capability = adapter.get_capability("tsmaster_execution")
-        if capability is not None:
-            return capability, "tsmaster_execution"
-
-        raise RuntimeError("TSMaster execution capability is not available")
+        if capability is None:
+            raise RuntimeError("TSMaster execution capability is not available")
+        return capability
 
     def _build_case_selection(self, plan: Any, capability: Any) -> str:
+        """Build case selection string."""
         if hasattr(capability, "build_case_selection"):
             return capability.build_case_selection(plan)
         return self._case_selection_string(plan)
 
-    def _start_execution(self, capability: Any, capability_name: str, selected_cases: str, timeout: int) -> bool:
-        if capability_name == "tsmaster_execution":
-            return bool(capability.start_execution(selected_cases))
-        return bool(
-            capability.start_execution(
-                test_cases=selected_cases,
-                wait_for_complete=False,
-                timeout=timeout,
-            )
-        )
+    def _start_execution(self, capability: Any, selected_cases: str) -> bool:
+        """Start TSMaster execution.
 
-    def _wait_for_completion(self, capability: Any, capability_name: str, timeout: int) -> bool:
-        if capability_name == "tsmaster_execution":
-            waiter = getattr(capability, "wait_for_completion", None) or getattr(
-                capability, "wait_for_complete", None
-            )
-            if waiter is None:
-                return True
-            return bool(waiter(timeout))
+        Note: The timeout parameter is NOT passed to start_execution because
+        TSMaster enforces timeout via wait_for_completion(), not here.
+        This is documented in the Runtime Adapter Contract.
+        """
+        return bool(capability.start_execution(selected_cases))
 
-        waiter = getattr(capability, "wait_for_complete", None) or getattr(
-            capability, "wait_for_completion", None
+    def _wait_for_completion(self, capability: Any, timeout: int) -> bool:
+        """Wait for TSMaster execution to complete.
+
+        Args:
+            capability: The tsmaster_execution capability
+            timeout: Timeout in seconds for wait operation
+
+        Returns:
+            True if execution completed, False if timeout
+        """
+        waiter = getattr(capability, "wait_for_completion", None) or getattr(
+            capability, "wait_for_complete", None
         )
         if waiter is None:
             return True
-        try:
-            return bool(waiter(timeout=timeout))
-        except TypeError:
-            return bool(waiter(timeout))
+        return bool(waiter(timeout))
 
     def _report_items(self, report_info: Any) -> list[TestResult]:
+        """Extract TestResult items from report info."""
         if not report_info:
             return []
 
@@ -122,11 +158,13 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
                     type="test_module",
                     passed=passed,
                     verdict=verdict,
+                    details=item,
                 )
             )
         return results
 
     def _failure_results(self, plan: Any, verdict: str, message: str) -> list[TestResult]:
+        """Create failure TestResult for each case in plan."""
         results: list[TestResult] = []
         for item in self._plan_cases(plan):
             results.append(
@@ -155,58 +193,82 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
 
         return results
 
-    def _append_results(self, collector: ResultCollector | None, results: list[TestResult]) -> None:
+    def _append_results(self, collector: Optional[ResultCollector], results: list[TestResult]) -> None:
+        """Append results to collector if available."""
         if collector is None:
             return
         for result in results:
             collector.add_test_result(result)
 
+    def _finalize_with_status(
+        self,
+        runtime_collector: Optional[ResultCollector],
+        status: str,
+        error_message: Optional[str],
+        results: list[TestResult],
+    ) -> ExecutionOutcome | list[TestResult]:
+        """Finalize with given status."""
+        if runtime_collector is not None:
+            runtime_collector.add_log("ERROR", error_message or f"TSMaster execution {status}")
+            return runtime_collector.finalize(status=status, error_message=error_message)
+        return results
+
     def run(
         self,
         plan: Any,
         adapter: Any,
-        collector: ResultCollector | None = None,
+        collector: Optional[ResultCollector] = None,
         executor: Any = None,
-        config_path: str | None = None,
-    ) -> Any:
+        config_path: Optional[str] = None,
+    ) -> ExecutionOutcome | list[TestResult]:
+        """Execute TSMaster test cases following the Runtime Adapter Contract.
+
+        Execution Flow:
+        1. Load configuration (optional)
+        2. Build case selection from plan
+        3. Start execution
+        4. Wait for completion
+        5. Get report info
+        6. Stop measurement in finally block
+        7. Return ExecutionOutcome or list[TestResult]
+        """
         self._load_configuration(adapter, config_path)
 
+        # Use collector from executor if not provided directly
         runtime_collector = collector or getattr(executor, "current_collector", None)
 
         try:
-            capability, capability_name = self._execution_capability(adapter)
+            capability = self._execution_capability(adapter)
             selected_cases = self._build_case_selection(plan, capability)
             timeout = self._timeout_for(plan)
 
-            if not self._start_execution(capability, capability_name, selected_cases, timeout):
+            if not self._start_execution(capability, selected_cases):
                 results = self._failure_results(
                     plan,
                     verdict="ERROR",
                     message="TSMaster execution failed to start",
                 )
                 self._append_results(runtime_collector, results)
-                if runtime_collector is not None:
-                    runtime_collector.add_log("ERROR", "TSMaster execution failed to start")
-                    return runtime_collector.finalize(
-                        status="failed",
-                        error_message="TSMaster execution failed to start",
-                    )
-                return results
+                return self._finalize_with_status(
+                    runtime_collector,
+                    status="failed",
+                    error_message="TSMaster execution failed to start",
+                    results=results,
+                )
 
-            if not self._wait_for_completion(capability, capability_name, timeout):
+            if not self._wait_for_completion(capability, timeout):
                 results = self._failure_results(
                     plan,
                     verdict="TIMEOUT",
                     message="TSMaster execution timed out",
                 )
                 self._append_results(runtime_collector, results)
-                if runtime_collector is not None:
-                    runtime_collector.add_log("ERROR", "TSMaster execution timed out")
-                    return runtime_collector.finalize(
-                        status="timeout",
-                        error_message="TSMaster execution timed out",
-                    )
-                return results
+                return self._finalize_with_status(
+                    runtime_collector,
+                    status="timeout",
+                    error_message="TSMaster execution timed out",
+                    results=results,
+                )
 
             report_info = getattr(capability, "get_report_info", lambda: None)()
             if not report_info:
@@ -216,18 +278,19 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
                     message="TSMaster report information is missing",
                 )
                 self._append_results(runtime_collector, results)
-                if runtime_collector is not None:
-                    runtime_collector.add_log("ERROR", "TSMaster report information is missing")
-                    return runtime_collector.finalize(
-                        status="failed",
-                        error_message="TSMaster report information is missing",
-                    )
-                return results
+                return self._finalize_with_status(
+                    runtime_collector,
+                    status="failed",
+                    error_message="TSMaster report information is missing",
+                    results=results,
+                )
 
             results = self._report_items(report_info)
             self._append_results(runtime_collector, results)
+
             if runtime_collector is not None:
                 return runtime_collector.finalize(status="completed")
             return results
+
         finally:
             self._stop_measurement(adapter)
