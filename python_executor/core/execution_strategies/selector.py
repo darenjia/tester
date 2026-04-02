@@ -3,6 +3,7 @@
 from typing import Any
 
 from .canoe_strategy import CANoeExecutionStrategy
+from .ttworkbench_strategy import TTworkbenchExecutionStrategy
 from .tsmaster_strategy import TSMasterExecutionStrategy
 
 
@@ -17,5 +18,7 @@ class ExecutionStrategySelector:
             return CANoeExecutionStrategy()
         if normalized == "tsmaster":
             return TSMasterExecutionStrategy()
+        if normalized == "ttworkbench":
+            return TTworkbenchExecutionStrategy()
 
         raise ValueError(f"Unsupported tool type: {tool_type}")

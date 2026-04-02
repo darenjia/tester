@@ -43,6 +43,12 @@ class ProjectControlCapability:
     stop_form: Any
 
 
+@dataclass(frozen=True)
+class TTworkbenchExecutionCapability:
+    execute_clf: Any
+    execute_batch: Any
+
+
 class CapabilityRegistryMixin(ABC):
     """Mixin that stores and resolves named adapter capabilities."""
 

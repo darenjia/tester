@@ -25,6 +25,17 @@ def test_selector_returns_tsmaster_strategy():
     assert strategy.strategy_name == "tsmaster"
 
 
+def test_selector_returns_ttworkbench_strategy():
+    from core.execution_strategies.selector import ExecutionStrategySelector
+
+    selector = ExecutionStrategySelector()
+    plan = SimpleNamespace(tool_type="ttworkbench")
+
+    strategy = selector.select(plan)
+
+    assert strategy.strategy_name == "ttworkbench"
+
+
 def test_selector_rejects_unsupported_tool_type():
     from core.execution_strategies.selector import ExecutionStrategySelector
 

@@ -2,6 +2,7 @@
 
 from core.adapters.base_adapter import BaseTestAdapter, TestToolType
 from core.adapters.canoe import CANoeAdapter
+from core.adapters.ttworkbench_adapter import TTworkbenchAdapter
 from core.adapters.tsmaster_adapter import TSMasterAdapter
 
 
@@ -125,6 +126,24 @@ def test_tsmaster_adapter_rejects_legacy_execute_test_item_modes():
     adapter = TSMasterAdapter({})
 
     result = adapter.execute_test_item({"type": "signal_check", "signal_name": "VehicleSpeed"})
+
+    assert result["status"] == "error"
+    assert "不再支持" in result["error"]
+
+
+def test_ttworkbench_adapter_registers_expected_capabilities():
+    adapter = TTworkbenchAdapter({})
+
+    assert adapter.has_capability("configuration") is True
+    assert adapter.has_capability("measurement") is True
+    assert adapter.has_capability("artifact") is True
+    assert adapter.has_capability("ttworkbench_execution") is True
+
+
+def test_ttworkbench_adapter_rejects_legacy_execute_test_item_modes():
+    adapter = TTworkbenchAdapter({})
+
+    result = adapter.execute_test_item({"type": "clf_test", "clf_file": "D:/workspace/demo.clf"})
 
     assert result["status"] == "error"
     assert "不再支持" in result["error"]

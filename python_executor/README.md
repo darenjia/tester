@@ -18,10 +18,11 @@ python_executor/
 │   ├── task_compiler.py           # 平台任务编译器
 │   ├── task_executor_production.py # 任务执行引擎（生产环境版）
 │   ├── state_machine_executor.py  # 状态机执行器（兼容入口，内部也可接 ExecutionPlan）
+│   ├── execution_strategies/      # 工具执行策略
 │   ├── adapters/            # 测试工具适配器
 │   │   ├── adapter_factory.py    # 适配器工厂
-│   │   ├── adapter_wrapper.py    # 分层能力包装器
-│   │   ├── canoe_adapter.py      # CANoe适配器
+│   │   ├── capabilities.py       # capability 定义
+│   │   ├── canoe/adapter.py      # CANoe适配器
 │   │   ├── tsmaster_adapter.py   # TSMaster适配器
 │   │   └── ttworkbench_adapter.py # TTworkbench适配器
 │   └── result_collector.py  # 结果收集与格式化
@@ -47,7 +48,7 @@ python_executor/
 
 ## 功能特性
 
-- ✅ **双工具支持**：同时支持CANoe和TSMaster
+- ✅ **多工具支持**：支持CANoe、TSMaster和TTworkbench
 - ✅ **WebSocket通信**：实时双向通信，支持断线重连
 - ✅ **状态机管理**：完整的任务状态流转控制
 - ✅ **多线程执行**：支持任务取消和超时控制
@@ -131,7 +132,9 @@ python app.py
 - `core.adapters` 包级导出只保留 raw adapter 入口
 - `TaskExecutorProduction` 通过 `ExecutionStrategySelector` 选择工具策略
 - CANoe 当前只保留 `test_module` 执行路径
-- `AdapterWrapper` / `create_adapter_with_wrapper` 仅作为显式兼容 API 保留，不再是默认导出入口
+- TSMaster 通过 `rpc_execution` / `project_control` capability 执行
+- TTworkbench 通过 `ttworkbench_execution` capability 执行 clf / batch 任务
+- `AdapterWrapper` 已删除，主路径只保留 `raw adapter + strategy + capability`
 
 当前任务执行生命周期会按以下阶段流转：
 
