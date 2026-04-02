@@ -27,7 +27,6 @@ def test_imports():
     modules = [
         ("配置缓存管理器", "core.config_cache_manager", "ConfigCacheManager"),
         ("配置管理器", "core.config_manager", "TestConfigManager"),
-        ("状态处理器", "core.test_state_handlers", "SelfCheckHandler"),
         ("上报客户端", "utils.report_client", "ReportClient"),
         ("TSMaster适配器", "core.adapters.tsmaster_adapter", "TSMasterAdapter"),
         ("任务执行器", "core.task_executor_production", "TaskExecutorProduction"),

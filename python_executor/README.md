@@ -17,7 +17,6 @@ python_executor/
 │   ├── execution_plan.py          # 内部执行模型（ExecutionPlan / PlannedCase）
 │   ├── task_compiler.py           # 平台任务编译器
 │   ├── task_executor_production.py # 任务执行引擎（生产环境版）
-│   ├── state_machine_executor.py  # 状态机执行器（兼容入口，内部也可接 ExecutionPlan）
 │   ├── execution_strategies/      # 工具执行策略
 │   ├── adapters/            # 测试工具适配器
 │   │   ├── adapter_factory.py    # 适配器工厂
@@ -123,7 +122,6 @@ python app.py
 - 入口层通过 `TaskCompiler` 编译成内部 `ExecutionPlan`
 - `TaskExecutorProduction` 只消费内部执行计划
 - HTTP API 链路也复用 `TaskCompiler -> ExecutionPlan`
-- `StateMachineTaskExecutor` 保留为兼容执行器，但内部也可接 `ExecutionPlan`
 - 外部 API / 队列展示模型继续独立保留
 
 适配器边界目前已经收成：
