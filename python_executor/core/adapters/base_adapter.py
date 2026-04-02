@@ -125,10 +125,12 @@ class BaseTestAdapter(CapabilityRegistryMixin, ABC):
         """
         pass
     
-    @abstractmethod
     def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行单个测试项
+        Legacy compatibility API for direct test-item execution.
+
+        New execution paths should go through strategy + capability instead of
+        invoking high-level test items on adapters directly.
         
         Args:
             item: 测试项配置
@@ -136,7 +138,18 @@ class BaseTestAdapter(CapabilityRegistryMixin, ABC):
         Returns:
             测试结果字典
         """
-        pass
+        item_type = item.get("type")
+        item_name = item.get("name", "unnamed")
+        self.logger.warning(
+            "execute_test_item 已退化为兼容接口，不建议在新执行链路中直接调用: %s",
+            item_type,
+        )
+        return {
+            "name": item_name,
+            "type": item_type,
+            "status": "error",
+            "error": f"适配器层不再支持直接执行测试项: {item_type}",
+        }
     
     def get_status(self) -> Dict[str, Any]:
         """

@@ -29,6 +29,27 @@ class DemoAdapter(BaseTestAdapter):
         return {"ok": True}
 
 
+class MinimalLegacyFreeAdapter(BaseTestAdapter):
+    @property
+    def tool_type(self):
+        return TestToolType.CANOE
+
+    def connect(self):
+        return True
+
+    def disconnect(self):
+        return True
+
+    def load_configuration(self, config_path):
+        return True
+
+    def start_test(self):
+        return True
+
+    def stop_test(self):
+        return True
+
+
 def test_base_adapter_exposes_capability_lookup():
     adapter = DemoAdapter()
 
@@ -42,6 +63,15 @@ def test_base_adapter_registers_and_returns_capabilities():
     adapter.register_capability("measurement", capability)
 
     assert adapter.get_capability("measurement") is capability
+
+
+def test_base_adapter_rejects_legacy_execute_test_item_by_default():
+    adapter = MinimalLegacyFreeAdapter({})
+
+    result = adapter.execute_test_item({"type": "signal_check", "name": "legacy"})
+
+    assert result["status"] == "error"
+    assert "不再支持" in result["error"]
 
 
 def test_canoe_adapter_registers_expected_capabilities():
