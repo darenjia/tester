@@ -1,14 +1,13 @@
 """
 适配器工厂模块
 
-提供适配器创建、单例缓存和兼容包装器构建的唯一真源。
+提供适配器创建、单例缓存的唯一真源。
 """
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
-from .adapter_wrapper import AdapterWrapper
 from .base_adapter import AdapterStatus, BaseTestAdapter, TestToolType
 from .canoe import CANoeAdapter
 from .tsmaster_adapter import TSMasterAdapter
@@ -69,18 +68,6 @@ class AdapterFactory:
         singleton: bool = False,
     ) -> BaseTestAdapter:
         return cls.create_adapter(tool_type, config=config, singleton=singleton)
-
-    @classmethod
-    def create_adapter_with_wrapper(
-        cls,
-        tool_type: TestToolType | str,
-        config: Optional[dict[str, Any]] = None,
-        singleton: bool = False,
-    ) -> AdapterWrapper:
-        """Compatibility-only helper. New execution paths should use raw adapters."""
-        return AdapterWrapper(
-            cls.create_adapter(tool_type, config=config, singleton=singleton)
-        )
 
     @classmethod
     def register_adapter(cls, tool_type: TestToolType | str, adapter_class: type) -> None:
@@ -148,15 +135,6 @@ def get_adapter(
     singleton: bool = False,
 ) -> BaseTestAdapter:
     return AdapterFactory.get_adapter(tool_type, config=config, singleton=singleton)
-
-
-def create_adapter_with_wrapper(
-    tool_type: TestToolType | str, config: Optional[dict[str, Any]] = None
-) -> AdapterWrapper:
-    """Compatibility-only helper. Prefer create_adapter() in new code."""
-    return AdapterFactory.create_adapter_with_wrapper(tool_type, config=config, singleton=False)
-
-
 __all__ = [
     "AdapterFactory",
     "AdapterStatus",

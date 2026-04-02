@@ -1,7 +1,5 @@
 from core.execution_plan import ExecutionPlan, PlannedCase
 from core.task_executor_production import TaskExecutorProduction
-from core.adapters.adapter_wrapper import AdapterWrapper
-
 
 def _build_plan(tool_type="canoe"):
     return ExecutionPlan(
@@ -210,7 +208,7 @@ def test_execute_task_production_keeps_raw_adapter_on_controller(monkeypatch):
     executor._execute_task_production(plan)
 
     assert isinstance(executor.controller, _Adapter)
-    assert not isinstance(executor.controller, AdapterWrapper)
+    assert executor.controller.__class__ is _Adapter
 
 
 def test_execute_plan_uses_non_singleton_raw_adapter(monkeypatch):
