@@ -68,7 +68,15 @@ def list_reports():
         page_size = int(request.args.get('page_size', 20))
 
         offset = (page - 1) * page_size
-        reports = manager.list_reports(status=status, limit=page_size, offset=offset)
+        if hasattr(manager, "list_report_projections"):
+            reports = manager.list_report_projections(status=status, limit=page_size, offset=offset)
+        else:
+            reports = []
+            for report in manager.list_reports(status=status, limit=page_size, offset=offset):
+                if hasattr(report, "to_projection"):
+                    reports.append(report.to_projection())
+                else:
+                    reports.append(report.to_dict())
 
         # 获取总数
         stats = manager.get_statistics()
@@ -80,7 +88,7 @@ def list_reports():
         return jsonify({
             "success": True,
             "data": {
-                "reports": [r.to_dict() for r in reports],
+                "reports": reports,
                 "pagination": {
                     "total": total,
                     "page": page,
@@ -103,14 +111,22 @@ def get_report(report_id: str):
     """
     try:
         manager = get_manager()
-        report = manager.get_report(report_id)
+        raw_report = manager.get_report(report_id)
+        if not raw_report:
+            report = None
+        elif hasattr(raw_report, "to_detail_dict"):
+            report = raw_report.to_detail_dict()
+        elif hasattr(raw_report, "to_projection"):
+            report = raw_report.to_projection()
+        else:
+            report = raw_report.to_dict()
 
         if not report:
             return jsonify({"success": False, "message": "报告不存在"}), 404
 
         return jsonify({
             "success": True,
-            "data": report.to_dict()
+            "data": report
         })
 
     except Exception as e:

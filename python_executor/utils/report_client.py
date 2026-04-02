@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from config.settings import get_config as get_runtime_config
 from utils.logger import get_logger
 from models.task import TaskResult
+from models.result import ExecutionOutcome
 
 logger = get_logger("report_client")
 
@@ -89,7 +90,7 @@ class ReportClient:
         """重新加载配置"""
         self._load_config()
 
-    def report_task_result(self, task_result: TaskResult, task_info: Dict[str, Any] = None,
+    def report_task_result(self, task_result: TaskResult | ExecutionOutcome, task_info: Dict[str, Any] = None,
                           report_file_path: str = None) -> bool:
         """
         上报任务执行结果
@@ -115,8 +116,10 @@ class ReportClient:
                 else:
                     logger.warning(f"报告文件上传失败: {report_file_path}")
 
-            if report_url and task_result.results:
-                for result in task_result.results:
+            normalized_result = self._normalize_task_result(task_result)
+
+            if report_url and normalized_result.results:
+                for result in normalized_result.results:
                     if hasattr(result, 'reAddress') and not result.reAddress:
                         result.reAddress = report_url
 
@@ -129,8 +132,17 @@ class ReportClient:
             logger.error(f"提交结果上报任务失败: {e}")
             return False
 
-    def _build_report_data(self, task_result: TaskResult, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _normalize_task_result(self, task_result: TaskResult | ExecutionOutcome) -> TaskResult:
+        if isinstance(task_result, ExecutionOutcome):
+            return task_result.to_task_result()
+        return task_result
+
+    def _build_report_data(self, task_result: TaskResult | ExecutionOutcome, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
         """构建上报数据 - TDM2.0格式"""
+        if isinstance(task_result, ExecutionOutcome):
+            return task_result.to_report_payload(task_info)
+
+        task_result = self._normalize_task_result(task_result)
         data = {
             "taskNo": task_result.taskNo,
             "status": task_result.status,
@@ -233,18 +245,47 @@ class ReportClient:
             if self.config_manager:
                 max_retries = self.config_manager.get('report_retry.max_retries', 10)
 
+            failure_metadata = self._build_failure_metadata(report_data, task_info, error)
+
             # 持久化失败报告
             report_id = manager.add_failed_report(
                 report_data=report_data,
                 task_info=task_info,
                 max_retries=max_retries,
-                priority=priority
+                priority=priority,
+                failure_reason=error,
+                endpoint=self._result_api_url,
+                metadata=failure_metadata,
             )
 
             logger.info(f"失败报告已持久化: report_id={report_id}, task_no={task_no}")
 
         except Exception as e:
             logger.error(f"持久化失败报告时出错: {e}")
+
+    def _build_failure_metadata(
+        self,
+        report_data: Dict[str, Any],
+        task_info: Dict[str, Any] = None,
+        error: str = "未知错误",
+    ) -> Dict[str, Any]:
+        """构造失败上报的结构化元数据。"""
+        task_info = task_info or {}
+        return {
+            "report_source": "report_client",
+            "endpoint": self._result_api_url,
+            "failure_reason": error,
+            "taskNo": report_data.get("taskNo"),
+            "task_no": report_data.get("taskNo"),
+            "taskName": task_info.get("taskName") or report_data.get("taskName"),
+            "task_name": task_info.get("taskName") or report_data.get("taskName"),
+            "projectNo": task_info.get("projectNo") or report_data.get("projectNo"),
+            "project_no": task_info.get("projectNo") or report_data.get("projectNo"),
+            "deviceId": task_info.get("deviceId") or report_data.get("deviceId"),
+            "device_id": task_info.get("deviceId") or report_data.get("deviceId"),
+            "toolType": task_info.get("toolType") or report_data.get("toolType"),
+            "tool_type": task_info.get("toolType") or report_data.get("toolType"),
+        }
 
     def _calculate_priority(self, report_data: Dict[str, Any]) -> int:
         """

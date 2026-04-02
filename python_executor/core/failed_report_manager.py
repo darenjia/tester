@@ -4,6 +4,7 @@
 import os
 import sys
 import json
+import hashlib
 import uuid
 import threading
 import copy
@@ -11,7 +12,7 @@ from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime, timedelta
 
 from models.failed_report import (
-    FailedReport, ReportStatus, RetryHistoryRecord,
+    FailedReport, ReportAttempt, ReportStatus, RetryHistoryRecord,
     calculate_next_retry_time, get_delay_for_attempt
 )
 from utils.logger import get_logger
@@ -125,22 +126,48 @@ class FailedReportManager:
         try:
             task_no = task_data.get('id', report_id)
             error_message = task_data.get('error_message', '')
+            report_data = {
+                'taskNo': task_no,
+                'status': task_data.get('status', 'failed'),
+                'errorMessage': error_message,
+                'metadata': task_data.get('metadata', {})
+            }
+            metadata = self._build_report_metadata(
+                report_data=report_data,
+                task_info={
+                    'taskNo': task_no,
+                    'projectNo': task_data.get('metadata', {}).get('projectNo', ''),
+                    'deviceId': task_data.get('metadata', {}).get('deviceId', ''),
+                    'taskName': task_data.get('metadata', {}).get('taskName', ''),
+                    'toolType': task_data.get('metadata', {}).get('toolType', '')
+                },
+                endpoint=task_data.get('metadata', {}).get('endpoint'),
+                failure_reason=error_message,
+                source='legacy_task_conversion'
+            )
+            payload_hash = metadata.get('payload_hash')
+            initial_attempt = self._build_attempt(
+                attempt_number=1,
+                endpoint=metadata.get('endpoint'),
+                payload_hash=payload_hash,
+                success=False,
+                status=ReportStatus.FAILED.value,
+                error_message=error_message,
+                source='legacy_task_conversion'
+            )
 
             failed_report = FailedReport(
                 report_id=report_id,
                 task_no=task_no,
-                report_data={
-                    'taskNo': task_no,
-                    'status': task_data.get('status', 'failed'),
-                    'errorMessage': error_message,
-                    'metadata': task_data.get('metadata', {})
-                },
+                report_data=report_data,
                 task_info={
                     'taskNo': task_no,
                     'projectNo': task_data.get('metadata', {}).get('projectNo', ''),
                     'deviceId': task_data.get('metadata', {}).get('deviceId', ''),
                     'caseCount': task_data.get('metadata', {}).get('caseCount', 0)
                 },
+                metadata=metadata,
+                attempts=[initial_attempt],
                 status=ReportStatus.PENDING.value,
                 retry_count=0,
                 max_retries=task_data.get('max_retries', 3),
@@ -194,8 +221,90 @@ class FailedReportManager:
             return self.config_manager.get(key, default)
         return default
 
+    def _canonical_payload(self, payload: Dict[str, Any]) -> str:
+        """将上报内容规范化为稳定字符串，便于持久化 hash。"""
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+    def _calculate_payload_hash(self, payload: Dict[str, Any]) -> str:
+        """计算 payload 的 SHA256 摘要。"""
+        canonical_payload = self._canonical_payload(payload)
+        return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+    def _build_report_metadata(
+        self,
+        report_data: Dict[str, Any],
+        task_info: Dict[str, Any] = None,
+        endpoint: str = None,
+        failure_reason: str = None,
+        source: str = None,
+        max_retries: int = None,
+        priority: int = None,
+    ) -> Dict[str, Any]:
+        """为失败报告构造结构化元数据。"""
+        task_info = task_info or {}
+        payload_hash = self._calculate_payload_hash(report_data)
+        payload_size = len(self._canonical_payload(report_data).encode("utf-8"))
+
+        task_no = report_data.get("taskNo") or task_info.get("taskNo") or ""
+        project_no = task_info.get("projectNo") or report_data.get("projectNo") or ""
+        device_id = task_info.get("deviceId") or report_data.get("deviceId") or ""
+        task_name = task_info.get("taskName") or report_data.get("taskName") or ""
+        tool_type = task_info.get("toolType") or report_data.get("toolType") or ""
+        resolved_endpoint = endpoint or task_info.get("endpoint") or report_data.get("endpoint")
+
+        metadata = {
+            "taskNo": task_no,
+            "task_no": task_no,
+            "projectNo": project_no,
+            "project_no": project_no,
+            "deviceId": device_id,
+            "device_id": device_id,
+            "taskName": task_name,
+            "task_name": task_name,
+            "toolType": tool_type,
+            "tool_type": tool_type,
+            "endpoint": resolved_endpoint,
+            "payload_hash": payload_hash,
+            "payload_size": payload_size,
+            "failure_reason": failure_reason or report_data.get("errorMessage") or task_info.get("errorMessage"),
+            "source": source or "failed_report_manager",
+            "max_retries": max_retries,
+            "priority": priority,
+            "report_status": report_data.get("status"),
+        }
+        metadata.update(task_info)
+        return metadata
+
+    def _build_attempt(
+        self,
+        attempt_number: int,
+        endpoint: str = None,
+        payload_hash: str = None,
+        success: bool = False,
+        status: str = None,
+        error_message: str = None,
+        request_method: str = "POST",
+        source: str = None,
+    ) -> ReportAttempt:
+        """构造结构化的上报尝试记录。"""
+        attempted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return ReportAttempt(
+            attempt_id=str(uuid.uuid4()),
+            attempt_number=attempt_number,
+            attempted_at=attempted_at,
+            endpoint=endpoint,
+            payload_hash=payload_hash,
+            success=success,
+            status=status or (ReportStatus.SUCCESS.value if success else ReportStatus.FAILED.value),
+            error_message=error_message,
+            request_method=request_method,
+            source=source,
+        )
+
     def add_failed_report(self, report_data: Dict[str, Any], task_info: Dict[str, Any] = None,
-                          max_retries: int = None, priority: int = 0) -> str:
+                          max_retries: int = None, priority: int = 0,
+                          failure_reason: str = None, endpoint: str = None,
+                          metadata: Dict[str, Any] = None) -> str:
         """
         添加失败报告
 
@@ -213,12 +322,38 @@ class FailedReportManager:
 
         report_id = str(uuid.uuid4())
         task_no = report_data.get('taskNo', 'unknown')
+        normalized_metadata = self._build_report_metadata(
+            report_data=report_data,
+            task_info=task_info or {},
+            endpoint=endpoint,
+            failure_reason=failure_reason,
+            source="report_client" if metadata and metadata.get("report_source") == "report_client" else "failed_report_manager",
+            max_retries=max_retries,
+            priority=priority,
+        )
+        if metadata:
+            normalized_metadata.update(metadata)
+        normalized_metadata.setdefault("report_source", normalized_metadata.get("source", "failed_report_manager"))
+        normalized_metadata.setdefault("endpoint", endpoint or (task_info or {}).get("endpoint") or report_data.get("endpoint"))
+        normalized_metadata.setdefault("payload_hash", self._calculate_payload_hash(report_data))
+
+        initial_attempt = self._build_attempt(
+            attempt_number=1,
+            endpoint=normalized_metadata.get("endpoint"),
+            payload_hash=normalized_metadata.get("payload_hash"),
+            success=False,
+            status=ReportStatus.FAILED.value,
+            error_message=normalized_metadata.get("failure_reason"),
+            source=normalized_metadata.get("report_source"),
+        )
 
         failed_report = FailedReport(
             report_id=report_id,
             task_no=task_no,
             report_data=report_data,
             task_info=task_info or {},
+            metadata=normalized_metadata,
+            attempts=[initial_attempt],
             status=ReportStatus.PENDING.value,
             retry_count=0,
             max_retries=max_retries,
@@ -280,6 +415,15 @@ class FailedReportManager:
         pending.sort(key=lambda x: x.priority, reverse=True)
         return pending
 
+    def list_report_projections(self, status: str = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """列出报告的查询投影。"""
+        return [report.to_projection() for report in self.list_reports(status=status, limit=limit, offset=offset)]
+
+    def get_report_projection(self, report_id: str) -> Optional[Dict[str, Any]]:
+        """获取单个报告的查询投影。"""
+        report = self.get_report(report_id)
+        return report.to_projection() if report else None
+
     def get_reports_by_status(self, status: str, limit: int = 100) -> List[FailedReport]:
         """按状态获取报告（返回副本）"""
         results = []
@@ -340,8 +484,8 @@ class FailedReportManager:
         Returns:
             是否还有重试机会
         """
-        needs_save = False
         should_trigger_callback = False
+        has_more_retries = False
 
         with self._data_lock:
             if report_id not in self.reports:
@@ -370,15 +514,27 @@ class FailedReportManager:
                 error_message=error
             ))
 
+            attempt = self._build_attempt(
+                attempt_number=len(report.attempts) + 1,
+                endpoint=report.metadata.get("endpoint") or report.metadata.get("report_endpoint"),
+                payload_hash=report.metadata.get("payload_hash"),
+                success=success,
+                status=ReportStatus.SUCCESS.value if success else ReportStatus.FAILED.value,
+                error_message=error,
+                source=report.metadata.get("report_source") or report.metadata.get("source"),
+            )
+            report.record_attempt(attempt)
+            report.metadata["last_error"] = error
+            report.metadata["retry_count"] = report.retry_count
+            report.metadata["last_retry_time"] = report.last_retry_time
+            report.metadata["latest_attempt"] = attempt.to_dict()
+
             if success:
                 report.status = ReportStatus.SUCCESS.value
-                needs_save = True
-                return False
+                has_more_retries = False
             elif report.retry_count >= report.max_retries:
                 report.status = ReportStatus.FAILED.value
-                needs_save = True
                 should_trigger_callback = True
-                return False
             else:
                 report.status = ReportStatus.PENDING.value
                 report.next_retry_time = calculate_next_retry_time(
@@ -387,18 +543,18 @@ class FailedReportManager:
                     backoff_factor=self._get_config('report_retry.backoff_factor', 2.0),
                     max_delay=self._get_config('report_retry.max_delay', 3600.0)
                 )
-                needs_save = True
-                return True
+                has_more_retries = True
 
         # 在锁外面保存数据，避免死锁
-        if needs_save:
-            self._save()
+        self._save()
 
         # 触发失败回调（在锁外面）
         if should_trigger_callback:
             with self._data_lock:
                 if report_id in self.reports:
                     self._trigger_failure_callbacks(self.reports[report_id])
+
+        return has_more_retries
 
     def delete_report(self, report_id: str) -> bool:
         """删除报告"""
@@ -500,6 +656,8 @@ class FailedReportManager:
             report.retry_count = 0
             report.next_retry_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             report.updated_at = report.next_retry_time
+            report.metadata["retry_count"] = report.retry_count
+            report.metadata["last_retry_reset_at"] = report.updated_at
 
         self._save()
         logger.info(f"重置报告状态以便重试: {report_id}")
