@@ -1208,7 +1208,7 @@ function renderFailedReportTraceability(summary) {
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <a
                     class="btn btn-secondary btn-sm trace-lookup-link"
-                    href="${buildTraceLookupHref(item)}"
+                    href="${buildTraceLookupPageHref(item)}"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
@@ -1220,11 +1220,11 @@ function renderFailedReportTraceability(summary) {
     `).join('');
 }
 
-function buildTraceLookupHref(item) {
-    if (item.trace_id) return `/api/trace/query?trace_id=${encodeURIComponent(item.trace_id)}`;
-    if (item.attempt_id) return `/api/trace/query?attempt_id=${encodeURIComponent(item.attempt_id)}`;
-    if (item.report_id) return `/api/trace/query?report_id=${encodeURIComponent(item.report_id)}`;
-    return `/api/trace/query?task_no=${encodeURIComponent(item.task_no || '')}`;
+function buildTraceLookupPageHref(item) {
+    if (item.report_id) return `/logs?report_id=${encodeURIComponent(item.report_id)}`;
+    if (item.attempt_id) return `/logs?attempt_id=${encodeURIComponent(item.attempt_id)}`;
+    if (item.trace_id) return `/logs?trace_id=${encodeURIComponent(item.trace_id)}`;
+    return `/logs?task_no=${encodeURIComponent(item.task_no || '')}`;
 }
 
 async function runHousekeeping() {

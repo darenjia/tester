@@ -559,10 +559,10 @@
         const traceId = document.getElementById('task-detail-root')?.dataset?.traceId || '';
         const attemptId = document.getElementById('task-detail-root')?.dataset?.attemptId || '';
         const fallbackTaskId = taskId;
-        const queryUrl = traceId
-            ? `/api/trace/query?trace_id=${encodeURIComponent(traceId)}`
-            : (attemptId
-                ? `/api/trace/query?attempt_id=${encodeURIComponent(attemptId)}`
+        const queryUrl = attemptId
+            ? `/api/trace/query?attempt_id=${encodeURIComponent(attemptId)}`
+            : (traceId
+                ? `/api/trace/query?trace_id=${encodeURIComponent(traceId)}`
                 : `/api/trace/query?task_no=${encodeURIComponent(fallbackTaskId)}`);
 
         setPanelState(panelId, 'loading', {

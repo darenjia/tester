@@ -82,6 +82,7 @@
                             <option value="trace_id">trace_id</option>
                             <option value="attempt_id">attempt_id</option>
                             <option value="task_no">task_no</option>
+                            <option value="report_id">report_id</option>
                         </select>
                         <input type="text" class="form-input" id="log-search" placeholder="搜索日志内容..."
                                onkeyup="if(event.key==='Enter') loadLogs()">
@@ -271,9 +272,21 @@
             text: '搜索日志内容...',
             trace_id: '输入 trace_id...',
             attempt_id: '输入 attempt_id...',
-            task_no: '输入 task_no...'
+            task_no: '输入 task_no...',
+            report_id: '输入 report_id...'
         };
         search.placeholder = placeholders[mode] || placeholders.text;
+    }
+
+    function hydrateLogQueryFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const modeField = ['report_id', 'attempt_id', 'trace_id', 'task_no'].find(key => params.get(key));
+        if (!modeField) return;
+
+        const modeSelect = document.getElementById('log-query-mode');
+        const searchInput = document.getElementById('log-search');
+        if (modeSelect) modeSelect.value = modeField;
+        if (searchInput) searchInput.value = params.get(modeField) || '';
     }
 
     function statusClass(status) {
@@ -455,6 +468,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         setPanelState('logs-container', 'loading', { message: '正在加载实时日志...' });
+        hydrateLogQueryFromUrl();
         updateLogSearchHint();
         loadLogs();
         loadServiceSummary();

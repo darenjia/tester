@@ -415,9 +415,11 @@
     async function loadReportTraceQuery() {
         const panelId = 'report-trace-query-panel';
         const query = window.__reportTraceQuery__ || {};
-        const queryUrl = query.trace_id
-            ? `/api/trace/query?trace_id=${encodeURIComponent(query.trace_id)}`
-            : `/api/trace/query?report_id=${encodeURIComponent(query.report_id || reportId)}`;
+        const queryUrl = query.report_id
+            ? `/api/trace/query?report_id=${encodeURIComponent(query.report_id)}`
+            : (query.attempt_id
+                ? `/api/trace/query?attempt_id=${encodeURIComponent(query.attempt_id)}`
+                : `/api/trace/query?trace_id=${encodeURIComponent(query.trace_id || '')}`);
 
         setPanelState(panelId, 'loading', {
             message: '正在加载链路检索结果...',
