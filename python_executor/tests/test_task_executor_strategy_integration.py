@@ -108,58 +108,6 @@ def test_run_strategy_execution_delegates_to_selected_strategy(monkeypatch):
     assert observed["config_path"] == "D:/cfgs/main.cfg"
 
 
-def test_load_configuration_by_path_prefers_configuration_capability():
-    executor = TaskExecutorProduction(message_sender=lambda _: None)
-    loaded = []
-
-    class _Collector:
-        def add_log(self, *args, **kwargs):
-            return None
-
-    class _Controller:
-        def get_capability(self, name, default=None):
-            if name == "configuration":
-                return type("_Cfg", (), {"load": staticmethod(lambda path: loaded.append(path) or True)})()
-            return default
-
-    executor.current_collector = _Collector()
-    executor.controller = _Controller()
-
-    executor._load_configuration_by_path("D:/cfgs/capability.cfg")
-
-    assert loaded == ["D:/cfgs/capability.cfg"]
-
-
-def test_start_measurement_prefers_measurement_capability():
-    executor = TaskExecutorProduction(message_sender=lambda _: None)
-    calls = []
-
-    class _Collector:
-        def add_log(self, *args, **kwargs):
-            return None
-
-    class _Controller:
-        def get_capability(self, name, default=None):
-            if name == "measurement":
-                return type(
-                    "_Measurement",
-                    (),
-                    {
-                        "start": staticmethod(lambda: calls.append("start") or True),
-                        "stop": staticmethod(lambda: calls.append("stop") or True),
-                    },
-                )()
-            return default
-
-    executor.current_collector = _Collector()
-    executor.controller = _Controller()
-
-    executor._start_measurement(_build_plan())
-    executor._stop_measurement(_build_plan())
-
-    assert calls == ["start", "stop"]
-
-
 def test_execute_task_production_keeps_raw_adapter_on_controller(monkeypatch):
     executor = TaskExecutorProduction(message_sender=lambda _: None)
     plan = _build_plan(tool_type="canoe")
@@ -254,6 +202,11 @@ def test_task_executor_no_longer_exposes_legacy_signal_execution_helpers():
     assert not hasattr(executor, "_controller_set_signal")
     assert not hasattr(executor, "_execute_test_items")
     assert not hasattr(executor, "_execute_single_item")
+    assert not hasattr(executor, "_load_configuration_by_path")
+    assert not hasattr(executor, "_start_measurement")
+    assert not hasattr(executor, "_start_test_execution")
+    assert not hasattr(executor, "_collect_tsmaster_results")
+    assert not hasattr(executor, "_stop_measurement")
 
 
 def test_controller_execute_test_module_prefers_capability_and_never_falls_back_to_execute_test_item():
