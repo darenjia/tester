@@ -1402,7 +1402,13 @@ class TaskExecutorProduction:
                 return False
 
             # 添加到内部执行队列
-            self._task_queue.put(execution_plan)
+            if not self._task_queue.put(execution_plan):
+                logger.error(f"任务 {task_id} 加入内部执行队列失败")
+                try:
+                    global_task_queue.remove(task_id)
+                except Exception as rollback_error:
+                    logger.warning(f"回滚全局任务队列失败: {rollback_error}")
+                return False
 
             logger.info(f"任务 {task_id} 已提交到执行队列")
             return True

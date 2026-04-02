@@ -381,7 +381,7 @@ def cancel_task(task_id: str):
     - task_id: 任务ID
     """
     try:
-        if task_executor.cancel_task(task_id):
+        if task_scheduler.cancel_scheduled_task(task_id):
             return jsonify({
                 "success": True,
                 "message": "任务已取消"
@@ -432,9 +432,12 @@ def delete_task(task_id: str):
         # 正在运行的任务不能删除
         if task.is_running():
             return jsonify({"success": False, "message": "任务正在执行中，无法删除"}), 400
-            
+
+        if task.status == TaskStatus.PENDING.value:
+            task_executor.cancel_task(task_id) or task_scheduler.cancel_scheduled_task(task_id)
+
         # 从队列中移除
-        if task_queue.remove(task_id):
+        if task_queue.remove(task_id) or task_queue.get_task(task_id) is None:
             return jsonify({
                 "success": True,
                 "message": "任务已删除"

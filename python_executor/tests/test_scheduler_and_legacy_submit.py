@@ -133,3 +133,42 @@ def test_cancel_scheduled_task_removes_pending_task_from_global_queue(monkeypatc
     assert scheduler.cancel_scheduled_task("scheduled-cancel") is True
     assert removed == ["scheduled-cancel"]
     assert "scheduled-cancel" not in scheduler._scheduled_tasks
+
+
+def test_submit_task_fails_when_internal_execution_queue_rejects_plan(monkeypatch):
+    from core.task_executor_production import TaskExecutorProduction
+    from models.executor_task import Task, TaskPriority
+
+    executor = TaskExecutorProduction(message_sender=lambda _: None)
+    global_add_calls = []
+    removed = []
+
+    monkeypatch.setattr(
+        "core.task_executor_production.global_task_queue.add",
+        lambda task, overwrite=True: global_add_calls.append(task) or True,
+    )
+    monkeypatch.setattr(
+        executor._task_queue,
+        "put",
+        lambda plan: False,
+    )
+    monkeypatch.setattr(
+        "core.task_executor_production.global_task_queue.remove",
+        lambda task_id: removed.append(task_id) or True,
+    )
+
+    legacy_task = Task(
+        id="legacy-queue-full",
+        name="legacy-queue-full",
+        priority=TaskPriority.NORMAL.value,
+        params={
+            "tool_type": "canoe",
+            "config_path": "D:/cfgs/demo.cfg",
+            "testItems": [{"caseNo": "CASE-1", "name": "Case 1", "type": "test_module"}],
+        },
+        timeout=30,
+    )
+
+    assert executor.submit_task(legacy_task) is False
+    assert len(global_add_calls) == 1
+    assert removed == ["legacy-queue-full"]
