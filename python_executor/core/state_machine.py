@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class TestState(Enum):
     """测试执行状态枚举"""
+    __test__ = False
     IDLE = auto()           # 空闲状态
     SELF_CHECK = auto()     # 自检状态
     CONFIG_LOAD = auto()    # 配置加载状态
@@ -78,6 +79,7 @@ class StateHandler(ABC):
 
 class TestStateMachine:
     """测试状态机"""
+    __test__ = False
     
     def __init__(self, task_id: str):
         self.task_id = task_id

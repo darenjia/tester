@@ -8,6 +8,7 @@ import os
 from typing import Dict, Any, Optional, List
 from concurrent.futures import ThreadPoolExecutor
 
+from config.settings import get_config as get_runtime_config
 from utils.logger import get_logger
 from models.task import TaskResult
 
@@ -25,6 +26,7 @@ class ReportClient:
             config_manager: 配置管理器实例，用于获取上报配置
         """
         self.config_manager = config_manager
+        self._use_runtime_config = config_manager is None
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="report_")
         self._enabled = False
         self._api_url = None
@@ -41,19 +43,12 @@ class ReportClient:
 
     def _load_config(self):
         """从配置管理器加载配置"""
+        if self._use_runtime_config:
+            self.config_manager = get_runtime_config()
+
         if self.config_manager is None:
-            try:
-                # 优先使用 settings 模块（读取 config.json）
-                from config.settings import settings
-                self.config_manager = settings
-            except ImportError:
-                try:
-                    # 备用：使用 config_manager 模块
-                    from config.config_manager import config_manager
-                    self.config_manager = config_manager
-                except ImportError:
-                    logger.warning("无法导入配置管理器，使用默认配置")
-                    return
+            logger.warning("无法导入配置管理器，使用默认配置")
+            return
 
         self._enabled = self.config_manager.get('report_server.enabled', True)
         if not self._enabled:
@@ -88,7 +83,7 @@ class ReportClient:
         """是否启用上报"""
         # 不再每次检查前刷新配置，避免重复加载造成性能问题
         # 配置变更时应调用 reload_config()
-        return self._enabled and bool(self._api_url)
+        return self._enabled and bool(self._result_api_url)
 
     def reload_config(self):
         """重新加载配置"""
@@ -166,26 +161,41 @@ class ReportClient:
             report_data: 上报数据
             task_info: 额外的任务信息
         """
-        task_no = report_data.get('taskNo', 'unknown')
-
         try:
-            response = self._make_request(
-                method="POST",
-                url=self._result_api_url,
-                json=report_data
-            )
-
-            if response is not None:
-                logger.info(f"任务结果上报成功: taskNo={task_no}")
-                # 重置连续失败计数器
-                self._reset_failure_counter()
-            else:
+            if not self.report_payload(report_data):
                 # 上报失败，持久化以便重试
                 self._handle_report_failure(report_data, task_info, "服务器无响应")
-
         except Exception as e:
             # 上报异常，持久化以便重试
             self._handle_report_failure(report_data, task_info, str(e))
+
+    def report_payload(self, report_data: Dict[str, Any]) -> bool:
+        """
+        同步上报结果数据
+
+        Args:
+            report_data: 已构建的上报数据
+
+        Returns:
+            上报成功返回 True，否则返回 False
+        """
+        if not self.enabled:
+            logger.debug("上报功能未启用，跳过结果上报")
+            return False
+
+        task_no = report_data.get('taskNo', 'unknown')
+        response = self._make_request(
+            method="POST",
+            url=self._result_api_url,
+            json=report_data
+        )
+
+        if response is None:
+            return False
+
+        logger.info(f"任务结果上报成功: taskNo={task_no}")
+        self._reset_failure_counter()
+        return True
 
     def _handle_report_failure(self, report_data: Dict[str, Any],
                                 task_info: Dict[str, Any] = None,

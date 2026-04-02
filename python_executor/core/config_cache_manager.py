@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
+from config.unified_config import get_config_manager
 from utils.logger import get_logger
 
 logger = get_logger("config_cache")
@@ -61,7 +62,7 @@ class ConfigCacheManager:
     def _load_config(self):
         """从全局配置加载缓存相关配置"""
         try:
-            from config.config_manager import config_manager
+            config_manager = get_config_manager()
             self._enabled = config_manager.get('config_cache.enabled', True)
             self._max_cache_count = config_manager.get('config_cache.max_cache_count', 50)
             self._cache_ttl_hours = config_manager.get('config_cache.cache_ttl_hours', 168)

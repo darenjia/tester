@@ -11,9 +11,14 @@ from datetime import datetime
 
 from models.case_mapping import CaseMapping, CaseChangeRecord, ChangeType
 from utils.logger import get_logger
-from config.config_manager import config_manager
+from config.settings import get_config as get_runtime_config
 
 logger = get_logger("case_mapping_manager")
+
+
+def _get_config_manager():
+    """Return the active facade-backed config manager."""
+    return get_runtime_config()
 
 
 class CaseMappingManager:
@@ -537,7 +542,7 @@ class CaseMappingManager:
             转换后的ini_config值，如果不符合规则则返回空字符串
         """
         try:
-            rules = config_manager.get('category_ini_config_rules', {})
+            rules = _get_config_manager().get('category_ini_config_rules', {})
             rule = rules.get(category)
             if not rule:
                 return ""

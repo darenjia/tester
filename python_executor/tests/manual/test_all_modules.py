@@ -5,8 +5,13 @@ import os
 import sys
 import tempfile
 import shutil
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pytest
+
+pytestmark = pytest.mark.skip(reason="manual script; run directly instead of under pytest")
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils.logger import get_logger
 
@@ -22,6 +27,7 @@ def test_imports():
     modules = [
         ("配置缓存管理器", "core.config_cache_manager", "ConfigCacheManager"),
         ("配置管理器", "core.config_manager", "TestConfigManager"),
+        ("状态处理器", "core.test_state_handlers", "SelfCheckHandler"),
         ("上报客户端", "utils.report_client", "ReportClient"),
         ("TSMaster适配器", "core.adapters.tsmaster_adapter", "TSMasterAdapter"),
         ("任务执行器", "core.task_executor_production", "TaskExecutorProduction"),

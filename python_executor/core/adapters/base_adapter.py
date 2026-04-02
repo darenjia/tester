@@ -12,6 +12,7 @@ import logging
 
 class TestToolType(Enum):
     """测试工具类型枚举"""
+    __test__ = False
     CANOE = "canoe"
     TSMASTER = "tsmaster"
     TTWORKBENCH = "ttworkbench"

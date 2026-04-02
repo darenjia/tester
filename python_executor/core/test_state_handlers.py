@@ -8,12 +8,13 @@ import logging
 from typing import Dict, Any, Optional
 
 from core.state_machine import StateHandler, TestState, StateContext
-from core.adapters.adapter_factory import create_adapter_with_wrapper
+from core.adapters import create_adapter_with_wrapper, TestToolType
 from core.result_collector import ResultCollector
-from core.config_manager import config_manager
+from core.config_manager import TestConfigManager
 from models.task import Task
 
 logger = logging.getLogger(__name__)
+config_manager = TestConfigManager()
 
 
 class SelfCheckHandler(StateHandler):
@@ -155,7 +156,7 @@ class ConnectingHandler(StateHandler):
         """执行连接"""
         try:
             # 创建适配器
-            self.controller = create_adapter_with_wrapper(self.adapter_type)
+            self.controller = create_adapter_with_wrapper(TestToolType(self.adapter_type))
             context.data['controller'] = self.controller
             
             # 连接工具（带重试）

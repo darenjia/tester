@@ -10,19 +10,20 @@ python_executor/
 ├── main_production.py        # 生产环境入口（推荐）
 ├── app.py                    # Flask WebSocket服务端入口（简化版）
 ├── config/
-│   ├── settings.py          # 配置文件管理
-│   ├── config_manager.py    # 配置热更新管理
-│   └── executor_config.json # 自定义配置文件（可选）
+│   ├── settings.py          # 统一配置 facade
+│   ├── config_manager.py    # 统一配置 facade
+│   └── unified_config.py    # 统一配置真源（读取根目录 config.json）
 ├── core/
-│   ├── task_executor.py           # 任务执行核心引擎（标准版）
+│   ├── execution_plan.py          # 内部执行模型（ExecutionPlan / PlannedCase）
+│   ├── task_compiler.py           # 平台任务编译器
 │   ├── task_executor_production.py # 任务执行引擎（生产环境版）
+│   ├── state_machine_executor.py  # 状态机执行器（兼容入口，内部也可接 ExecutionPlan）
 │   ├── adapters/            # 测试工具适配器
 │   │   ├── adapter_factory.py    # 适配器工厂
+│   │   ├── adapter_wrapper.py    # 分层能力包装器
 │   │   ├── canoe_adapter.py      # CANoe适配器
 │   │   ├── tsmaster_adapter.py   # TSMaster适配器
 │   │   └── ttworkbench_adapter.py # TTworkbench适配器
-│   ├── canoe_controller.py  # CANoe控制器（旧版）
-│   ├── tsmaster_controller.py # TSMaster控制器（旧版）
 │   └── result_collector.py  # 结果收集与格式化
 ├── ws_server/
 │   └── client.py            # WebSocket服务端实现
@@ -54,6 +55,8 @@ python_executor/
 - ✅ **异常处理**：完善的异常捕获和错误上报机制
 - ✅ **配置管理**：灵活的配置文件支持
 - ✅ **日志系统**：分级日志，支持上下文追踪
+- ✅ **内部执行模型统一**：`TaskCompiler -> ExecutionPlan -> execute_plan()`
+- ✅ **业务可观测性**：生命周期、结构化日志、业务健康摘要
 
 ## 快速开始
 
@@ -82,13 +85,22 @@ python app.py
 ```
 
 ### 配置文件
-创建 `config/executor_config.json` 自定义配置：
+项目统一使用根目录下的 `config.json` 作为唯一配置入口：
 ```json
 {
-    "websocket_port": 8180,
-    "log_level": "INFO",
-    "task_timeout": 3600,
-    "canoe_timeout": 30
+    "websocket": {
+        "port": 8180,
+        "host": "0.0.0.0"
+    },
+    "logging": {
+        "level": "INFO"
+    },
+    "task": {
+        "timeout": 3600
+    },
+    "canoe": {
+        "timeout": 30
+    }
 }
 ```
 
@@ -101,6 +113,41 @@ python app.py
 - **HEARTBEAT**：心跳检测
 
 执行器会自动处理任务执行，并实时上报状态和结果。
+
+## 可观测性
+
+内部执行链路目前已经收成：
+
+- WebSocket / 平台任务先进入入口层
+- 入口层通过 `TaskCompiler` 编译成内部 `ExecutionPlan`
+- `TaskExecutorProduction` 只消费内部执行计划
+- HTTP API 链路也复用 `TaskCompiler -> ExecutionPlan`
+- `StateMachineTaskExecutor` 保留为兼容执行器，但内部也可接 `ExecutionPlan`
+- 外部 API / 队列展示模型继续独立保留
+
+适配器边界目前已经收成：
+
+- `core.adapters.adapter_factory` 是唯一工厂真源
+- `core.adapters` 包级导出只是薄转发层
+- `AdapterWrapper` 内部按 `common / canoe / tsmaster` 三层能力拆分
+
+当前任务执行生命周期会按以下阶段流转：
+
+- `received`
+- `validated`
+- `compiled`
+- `queued`
+- `preparing`
+- `executing`
+- `collecting`
+- `reporting`
+- `finished`
+
+监控接口说明：
+
+- `/health`：返回服务健康状态和业务健康摘要，例如当前排队数、活跃任务数、最近失败任务数
+- `/status`：返回运行状态、当前任务信息和业务摘要
+- `/metrics`：返回原始指标、性能报告和业务执行摘要
 
 ## 开发文档
 
