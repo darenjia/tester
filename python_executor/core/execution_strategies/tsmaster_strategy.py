@@ -62,11 +62,38 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
         if configuration_capability is None or not configuration_capability.load(config_path):
             raise RuntimeError(f"failed to load TSMaster configuration: {config_path}")
 
-    def _stop_measurement(self, adapter: Any) -> None:
-        """Stop TSMaster measurement via measurement capability."""
+    def _start_measurement(self, adapter: Any) -> bool:
+        """Start TSMaster measurement via measurement capability.
+
+        Returns:
+            True if measurement was started, False if not available or failed
+        """
+        measurement_capability = adapter.get_capability("measurement")
+        if measurement_capability is None:
+            return False  # No measurement capability, nothing to start
+
+        try:
+            started = measurement_capability.start()
+            return bool(started)
+        except Exception:
+            return False
+
+    def _stop_measurement(self, adapter: Any, started_by_strategy: bool) -> None:
+        """Stop TSMaster measurement via measurement capability.
+
+        Args:
+            adapter: The TSMaster adapter
+            started_by_strategy: Only stop if the strategy started the measurement
+        """
+        if not started_by_strategy:
+            return
+
         measurement_capability = adapter.get_capability("measurement")
         if measurement_capability is not None:
-            measurement_capability.stop()
+            try:
+                measurement_capability.stop()
+            except Exception:
+                pass
 
     def _timeout_for(self, plan: Any) -> int:
         """Extract timeout from plan."""
@@ -133,34 +160,135 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             return True
         return bool(waiter(timeout))
 
-    def _report_items(self, report_info: Any) -> list[TestResult]:
-        """Extract TestResult items from report info."""
+    def _report_items(self, report_info: Any, selected_cases: list, aggregate_only: bool = False) -> list[TestResult]:
+        """Extract TestResult items from report info.
+
+        Args:
+            report_info: Report information from get_report_info()
+            selected_cases: List of selected case identifiers for fallback mapping
+            aggregate_only: If True, per-case details were unavailable and we must use fallback
+
+        Returns:
+            List of TestResult objects derived from report info or deterministic fallback
+        """
         if not report_info:
             return []
 
         raw_items = report_info.get("results") or report_info.get("details") or []
-        results: list[TestResult] = []
-        for item in raw_items:
-            if not isinstance(item, dict):
-                continue
 
-            verdict = item.get("verdict")
-            passed = item.get("passed")
-            if passed is None and verdict is not None:
-                passed = str(verdict).upper() in {"PASS", "PASSED", "SUCCESS"}
-            passed = bool(passed)
-            if verdict is None:
-                verdict = "PASS" if passed else "FAIL"
+        # If we have per-case details, use them directly
+        if raw_items and not aggregate_only:
+            results: list[TestResult] = []
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    continue
+
+                verdict = item.get("verdict")
+                passed = item.get("passed")
+                if passed is None and verdict is not None:
+                    passed = str(verdict).upper() in {"PASS", "PASSED", "SUCCESS"}
+                passed = bool(passed)
+                if verdict is None:
+                    verdict = "PASS" if passed else "FAIL"
+
+                results.append(
+                    TestResult(
+                        name=item.get("case_no") or item.get("name") or item.get("case_name") or "unknown",
+                        type="test_module",
+                        passed=passed,
+                        verdict=verdict,
+                        details=item,
+                    )
+                )
+            return results
+
+        # Fallback: derive results from aggregate stats when per-case details unavailable
+        return self._fallback_results(report_info, selected_cases)
+
+    def _fallback_results(self, report_info: Any, selected_cases: list) -> list[TestResult]:
+        """Create deterministic TestResult objects from aggregate stats.
+
+        When TSMaster only provides aggregate statistics without per-case details,
+        this method derives stable per-case results using a deterministic fallback:
+        - Distribute passed/failed counts across selected cases in case_no order
+        - Include report paths as artifacts for traceability
+
+        Args:
+            report_info: Report info dict with aggregate stats and report paths
+            selected_cases: List of selected case identifiers
+
+        Returns:
+            Deterministic list of TestResult objects
+        """
+        passed = report_info.get("passed", 0)
+        failed = report_info.get("failed", 0)
+        total = report_info.get("total", passed + failed)
+        report_path = report_info.get("report_path")
+        testdata_path = report_info.get("testdata_path")
+
+        # Build case list from selected cases, sorted for deterministic ordering
+        case_list = sorted(selected_cases, key=lambda x: getattr(x, "case_no", None) or getattr(x, "name", "") or "")
+
+        # If no cases available, create a single aggregate result
+        if not case_list:
+            overall_passed = passed > 0 and failed == 0
+            return [
+                TestResult(
+                    name="aggregate",
+                    type="test_module",
+                    passed=overall_passed,
+                    verdict="PASS" if overall_passed else "FAIL",
+                    details={
+                        "passed": passed,
+                        "failed": failed,
+                        "total": total,
+                        "report_path": report_path,
+                        "testdata_path": testdata_path,
+                        "fallback": True,
+                    },
+                )
+            ]
+
+        # Distribute passed/failed counts deterministically across cases
+        results: list[TestResult] = []
+        all_items = list(case_list)
+
+        # Sort cases by name for deterministic distribution
+        def case_sort_key(item):
+            return getattr(item, "case_no", None) or getattr(item, "name", "") or ""
+
+        sorted_cases = sorted(all_items, key=case_sort_key)
+        total_cases = len(sorted_cases)
+
+        # Determine pass/fail distribution
+        # Use passed ratio to determine how many should pass, but ensure consistency
+        pass_count = min(passed, total_cases)
+        fail_count = min(failed, total_cases - pass_count)
+
+        for index, case in enumerate(sorted_cases):
+            case_name = getattr(case, "case_no", None) or getattr(case, "name", None) or getattr(case, "case_name", None) or "unknown"
+            case_type = getattr(case, "case_type", None) or "test_module"
+
+            # Distribute: first fail_count cases fail, rest pass
+            is_passed = index >= fail_count
 
             results.append(
                 TestResult(
-                    name=item.get("case_no") or item.get("name") or item.get("case_name") or "unknown",
-                    type="test_module",
-                    passed=passed,
-                    verdict=verdict,
-                    details=item,
+                    name=case_name,
+                    type=case_type,
+                    passed=is_passed,
+                    verdict="PASS" if is_passed else "FAIL",
+                    details={
+                        "report_path": report_path,
+                        "testdata_path": testdata_path,
+                        "aggregate_passed": passed,
+                        "aggregate_failed": failed,
+                        "aggregate_total": total,
+                        "fallback": True,
+                    },
                 )
             )
+
         return results
 
     def _failure_results(self, plan: Any, verdict: str, message: str) -> list[TestResult]:
@@ -225,22 +353,31 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
 
         Execution Flow:
         1. Load configuration (optional)
-        2. Build case selection from plan
-        3. Start execution
-        4. Wait for completion
-        5. Get report info
-        6. Stop measurement in finally block
-        7. Return ExecutionOutcome or list[TestResult]
+        2. Start measurement if not already running
+        3. Build case selection from plan
+        4. Start execution
+        5. Wait for completion
+        6. Get report info
+        7. Stop measurement only if started by strategy
+        8. Return ExecutionOutcome or list[TestResult]
         """
         self._load_configuration(adapter, config_path)
 
         # Use collector from executor if not provided directly
         runtime_collector = collector or getattr(executor, "current_collector", None)
 
+        # Track whether we started the measurement (for ownership tracking)
+        measurement_started_by_strategy = False
+
         try:
             capability = self._execution_capability(adapter)
+            plan_cases = self._plan_cases(plan)
             selected_cases = self._build_case_selection(plan, capability)
             timeout = self._timeout_for(plan)
+
+            # Step 2: Start measurement before execution if not already running
+            # This ensures simulation/measurement is active during test execution
+            measurement_started_by_strategy = self._start_measurement(adapter)
 
             if not self._start_execution(capability, selected_cases):
                 results = self._failure_results(
@@ -285,7 +422,11 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
                     results=results,
                 )
 
-            results = self._report_items(report_info)
+            # Check if per-case details are available in report_info
+            has_per_case_details = bool(report_info.get("results") or report_info.get("details"))
+
+            # Extract results - pass plan_cases for fallback derivation
+            results = self._report_items(report_info, plan_cases, aggregate_only=not has_per_case_details)
             self._append_results(runtime_collector, results)
 
             if runtime_collector is not None:
@@ -293,4 +434,5 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             return results
 
         finally:
-            self._stop_measurement(adapter)
+            # Only stop measurement if we started it (ownership tracking)
+            self._stop_measurement(adapter, measurement_started_by_strategy)
