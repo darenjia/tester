@@ -168,3 +168,42 @@ def test_delete_task_removes_queued_executor_task_before_deleting_record(task_ap
     assert response.status_code == 200
     assert cancelled == ["queued-delete"]
     assert removed == ["queued-delete"]
+
+
+def test_get_task_reports_tool_type_from_execution_metadata(task_api_client, monkeypatch):
+    class _Task:
+        id = "task-detail-1"
+        name = "Task Detail"
+        status = "pending"
+        priority = 1
+        task_type = "default"
+        created_at = "2026-04-02T09:00:00"
+        created_by = "tester"
+        error_message = None
+        started_at = None
+        completed_at = None
+        timeout = 30
+        retry_count = 0
+        max_retries = 3
+        params = {"tool_type": "tsmaster"}
+        metadata = {"toolType": "TSMASTER"}
+        result = None
+
+        def can_retry(self):
+            return False
+
+        def get_duration(self):
+            return None
+
+        def get_wait_time(self):
+            return 1.0
+
+    monkeypatch.setattr(task_api.task_queue, "get_task", lambda task_id: _Task())
+    monkeypatch.setattr(task_api.task_log_manager, "get_log_stats", lambda task_id: {})
+    monkeypatch.setattr(task_api.task_log_manager, "get_latest_logs", lambda count=20, task_id=None: [])
+
+    response = task_api_client.get("/api/tasks/task-detail-1")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"]["category"] == "tsmaster"

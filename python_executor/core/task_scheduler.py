@@ -160,6 +160,11 @@ class TaskScheduler:
         Returns:
             调度ID
         """
+        if not self._running:
+            logger.warning("调度器未启动，无法创建周期性任务")
+            task_log_manager.error(task.id, "调度器未启动，周期性任务创建失败")
+            return None
+
         scheduler_id = f"periodic_{task.id}"
         
         def periodic_runner():
@@ -178,7 +183,12 @@ class TaskScheduler:
                 )
                 
                 # 提交任务
-                task_executor.submit_task(new_task)
+                if not task_executor.submit_task(new_task):
+                    task_log_manager.error(
+                        task.id,
+                        "周期性任务提交失败",
+                        details={"iteration": iteration, "scheduler_id": scheduler_id},
+                    )
                 
                 iteration += 1
                 time.sleep(interval)

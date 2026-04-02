@@ -355,7 +355,14 @@ def get_task(task_id: str):
                 "metadata": task.metadata,
 
                 # 分类信息（从params或metadata获取）
-                "category": task.params.get('category') or task.metadata.get('category', 'canoe'),
+                "category": (
+                    task.params.get('category')
+                    or task.params.get('tool_type')
+                    or task.metadata.get('category')
+                    or task.metadata.get('toolType')
+                    or task.metadata.get('tool_type')
+                    or 'canoe'
+                ).lower(),
 
                 # 测试结果摘要
                 "result_summary": result_summary,

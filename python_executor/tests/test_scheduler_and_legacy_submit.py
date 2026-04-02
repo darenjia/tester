@@ -175,3 +175,55 @@ def test_submit_task_fails_when_internal_execution_queue_rejects_plan(monkeypatc
     assert executor.submit_task(legacy_task) is False
     assert len(global_add_calls) == 1
     assert removed == ["legacy-queue-full"]
+
+
+def test_schedule_periodic_task_requires_started_scheduler(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    task = Task(id="periodic-not-running", name="Periodic Not Running")
+
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+
+    assert scheduler.schedule_periodic_task(task, interval=1.0, max_iterations=1) is None
+
+
+def test_schedule_periodic_task_logs_failed_submissions_without_stopping(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    task = Task(id="periodic-fail", name="Periodic Fail")
+    submitted = []
+    logs = []
+    sleeps = []
+
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor.submit_task",
+        lambda new_task: submitted.append(new_task.id) or False,
+    )
+    monkeypatch.setattr(
+        "core.task_scheduler.task_log_manager.error",
+        lambda task_id, message, details=None: logs.append((task_id, message)),
+    )
+
+    def _stop_after_two(_seconds):
+        sleeps.append(_seconds)
+        scheduler._running = False
+
+    monkeypatch.setattr("core.task_scheduler.time.sleep", _stop_after_two)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+
+    scheduler_id = scheduler.schedule_periodic_task(task, interval=0.01, max_iterations=2)
+
+    assert scheduler_id == "periodic_periodic-fail"
+    for _ in range(50):
+        if sleeps:
+            break
+        __import__("time").sleep(0.01)
+
+    assert submitted
+    assert logs
+    assert logs[0][0] == "periodic-fail"
