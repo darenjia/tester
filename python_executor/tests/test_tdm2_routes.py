@@ -74,3 +74,20 @@ def test_tdm2_create_task_rejects_empty_case_list(tdm2_client):
     payload = response.get_json()
     assert payload["status"] == "error"
     assert "caseList" in payload["message"]
+
+
+def test_tdm2_create_task_rejects_unsupported_explicit_tool_type(tdm2_client):
+    response = tdm2_client.post(
+        "/api/tdm2/tasks",
+        json={
+            "projectNo": "PROJECT-INVALID-TOOL",
+            "taskNo": "TASK-INVALID-TOOL",
+            "toolType": "not-a-tool",
+            "caseList": [{"caseNo": "CASE-1"}],
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "tool" in payload["message"].lower() or "工具" in payload["message"]

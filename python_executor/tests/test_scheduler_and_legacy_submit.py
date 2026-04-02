@@ -97,3 +97,39 @@ def test_cancel_task_can_remove_queued_execution_plan(monkeypatch):
     assert executor.cancel_task("queued-plan") is True
     assert executor._task_queue.get_queue_size() == 0
     assert status_updates[-1] == ("queued-plan", "cancelled", "任务被用户取消")
+
+
+def test_process_queue_does_not_resubmit_pending_task_already_in_executor(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task, TaskPriority
+
+    scheduler = TaskScheduler()
+    task = Task(id="pending-dup", name="pending-dup", priority=TaskPriority.NORMAL.value)
+    submitted = []
+
+    monkeypatch.setattr("core.task_scheduler.task_queue.get_pending_tasks", lambda: [task])
+    monkeypatch.setattr("core.task_scheduler.task_executor.get_running_count", lambda: 0)
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor.get_stats",
+        lambda: {"running": 0, "queue_size": 1, "max_workers": 1, "is_running": True},
+    )
+    monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", lambda item: submitted.append(item) or True)
+
+    scheduler._process_queue()
+
+    assert submitted == []
+
+
+def test_cancel_scheduled_task_removes_pending_task_from_global_queue(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler._scheduled_tasks["scheduled-cancel"] = datetime.now() + timedelta(seconds=30)
+    removed = []
+
+    monkeypatch.setattr("core.task_scheduler.task_queue.remove", lambda task_id: removed.append(task_id) or True)
+    monkeypatch.setattr("core.task_scheduler.task_executor.cancel_task", lambda task_id: False)
+
+    assert scheduler.cancel_scheduled_task("scheduled-cancel") is True
+    assert removed == ["scheduled-cancel"]
+    assert "scheduled-cancel" not in scheduler._scheduled_tasks

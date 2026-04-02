@@ -76,8 +76,10 @@ class TaskScheduler:
         """处理任务队列"""
         pending_tasks = task_queue.get_pending_tasks()
         running_count = task_executor.get_running_count()
+        executor_stats = task_executor.get_stats()
+        queued_count = executor_stats.get("queue_size", 0) if isinstance(executor_stats, dict) else 0
 
-        if not pending_tasks or running_count >= task_executor.max_workers:
+        if not pending_tasks or running_count >= task_executor.max_workers or queued_count > 0:
             return
 
         ready_task = None
@@ -203,11 +205,18 @@ class TaskScheduler:
         Returns:
             是否取消成功
         """
+        was_scheduled = False
         with self._lock:
             if task_id in self._scheduled_tasks:
                 del self._scheduled_tasks[task_id]
-                
-        # 同时取消队列中的任务
+                was_scheduled = True
+                 
+        # 未到期的定时任务仍在全局队列里，先移除全局 pending 记录
+        if was_scheduled and task_queue.remove(task_id):
+            task_log_manager.info(task_id, "定时任务已取消")
+            return True
+
+        # 否则尝试取消已进入执行器的任务
         return task_executor.cancel_task(task_id)
         
     def get_scheduled_tasks(self) -> List[Dict[str, Any]]:
