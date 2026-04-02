@@ -322,8 +322,9 @@ class StateMachineTaskExecutor:
         if self.message_sender:
             try:
                 self.message_sender({
-                    'type': 'state_change',
-                    'task_id': task_id,
+                    'type': 'LOG_STREAM',
+                    'taskNo': task_id,
+                    'result': f"STATE_CHANGE {from_state.name} -> {to_state.name}",
                     'from_state': from_state.name,
                     'to_state': to_state.name,
                     'timestamp': time.time()
@@ -338,8 +339,8 @@ class StateMachineTaskExecutor:
         if self.message_sender:
             try:
                 self.message_sender({
-                    'type': 'task_status',
-                    'task_id': task_id,
+                    'type': 'TASK_STATUS',
+                    'taskNo': task_id,
                     'status': status.value,
                     'timestamp': time.time()
                 })
@@ -357,10 +358,13 @@ class StateMachineTaskExecutor:
         # 发送完成通知
         if self.message_sender:
             try:
+                summary = result.get('summary') if isinstance(result, dict) else None
+                results = result.get('results', []) if isinstance(result, dict) else []
                 self.message_sender({
-                    'type': 'task_completed',
-                    'task_id': task.task_id,
-                    'result': result,
+                    'type': 'RESULT_REPORT',
+                    'taskNo': task.task_id,
+                    'results': results,
+                    'summary': summary if summary is not None else result,
                     'timestamp': time.time()
                 })
             except Exception as e:
@@ -382,9 +386,9 @@ class StateMachineTaskExecutor:
         if self.message_sender:
             try:
                 self.message_sender({
-                    'type': 'task_failed',
-                    'task_id': task.task_id,
-                    'error': error_msg,
+                    'type': 'LOG_STREAM',
+                    'taskNo': task.task_id,
+                    'result': f"ERROR: {error_msg}",
                     'timestamp': time.time()
                 })
             except Exception as e:

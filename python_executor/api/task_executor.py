@@ -293,6 +293,17 @@ def execute_task_async(task_no: str, task_data: Dict[str, Any]):
             result = executor.execute_plan(execution_plan)
             logger.info(f"[run_task] execute_plan 返回: {result}, task_id={execution_plan.task_no}")
 
+            if not result:
+                error_message = "提交执行计划失败"
+                logger.error(f"[run_task] {error_message}: task_no={task_no}")
+                _update_task_in_queue(
+                    task_no,
+                    status=TaskStatus.FAILED.value,
+                    message=error_message,
+                    error_message=error_message,
+                )
+                return
+
             wait_count = 0
             while True:
                 status = executor.get_current_status()
@@ -345,7 +356,7 @@ def cancel_task_execution(task_no: str):
 
     try:
         executor = _get_executor()
-        executor.cancel_task()
+        executor.cancel_task(task_no)
         logger.info(f"已发送取消任务指令: {task_no}")
     except Exception as e:
         logger.warning(f"通过执行器取消任务失败: {e}")

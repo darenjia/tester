@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.execution_plan import ExecutionPlan, PlannedCase
 from core.state_machine_executor import StateMachineTaskExecutor
-from models.task import Case, Task
+from models.task import Case, Task, TaskStatus
 
 
 def test_state_machine_executor_accepts_execution_plan():
@@ -60,3 +60,38 @@ def test_state_machine_executor_builds_handler_task_view_from_plan():
     assert task_view.base_config_dir == "D:/cfgs"
     assert task_view.config_params == {"speed": 50}
     assert task_view.test_items[0].case_no == "CASE-SM-3"
+
+
+def test_state_machine_executor_emits_shared_task_status_message_format():
+    messages = []
+    executor = StateMachineTaskExecutor(message_sender=messages.append)
+
+    executor._update_task_status("TASK-SM-4", TaskStatus.RUNNING)
+
+    assert messages == [
+        {
+            "type": "TASK_STATUS",
+            "taskNo": "TASK-SM-4",
+            "status": TaskStatus.RUNNING.value,
+            "timestamp": messages[0]["timestamp"],
+        }
+    ]
+
+
+def test_state_machine_executor_emits_shared_result_report_message_format():
+    messages = []
+    executor = StateMachineTaskExecutor(message_sender=messages.append)
+    plan = ExecutionPlan(task_no="TASK-SM-5", device_id="DEVICE-SM-5", tool_type="canoe")
+
+    executor._complete_task(
+        plan,
+        {"summary": {"passed": 1}},
+        collector=None,
+        metrics=None,
+    )
+
+    assert messages[0]["type"] == "TASK_STATUS"
+    assert messages[0]["taskNo"] == "TASK-SM-5"
+    assert messages[1]["type"] == "RESULT_REPORT"
+    assert messages[1]["taskNo"] == "TASK-SM-5"
+    assert messages[1]["summary"] == {"passed": 1}
