@@ -4,7 +4,6 @@ import inspect
 
 MODULES = [
     "core.adapters.canoe.test_engine",
-    "core.state_machine",
     "core.adapters.base_adapter",
     "core.config_manager",
 ]

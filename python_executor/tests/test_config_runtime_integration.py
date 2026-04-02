@@ -420,7 +420,7 @@ def test_readme_mentions_only_config_json():
     assert "collecting" in readme
     assert "TaskCompiler" in readme
     assert "ExecutionPlan" in readme
-    assert "StateMachineTaskExecutor" in readme
+    assert "StateMachineTaskExecutor" not in readme
     assert "adapter_factory" in readme
     assert "/health" in readme
     assert "/metrics" in readme

@@ -1,4 +1,3 @@
-import importlib
 import logging
 import sys
 from pathlib import Path
@@ -32,13 +31,6 @@ def test_get_logger_with_name_returns_child_logger_with_configured_handlers(monk
     assert named_logger.name == f"{base_logger.name}.{child_name}"
     assert named_logger.handlers == [test_handler]
     assert named_logger.propagate is False
-
-
-def test_core_test_state_handlers_imports_cleanly():
-    module = importlib.import_module("core.test_state_handlers")
-
-    assert module is not None
-
 
 def test_memory_logs_preserve_structured_task_context_fields(tmp_path):
     logger_manager.setup(log_dir=str(tmp_path / "logs"))
