@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+
+{% block title %}任务详情 - 测试执行器{% endblock %}
+{% block page_title %}<i class="fas fa-rectangle-list"></i> 任务详情{% endblock %}
+{% set active_page = 'tasks' %}
+
+{% block extra_css %}
+<style>
+    .detail-page {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .detail-hero {
+        background: linear-gradient(135deg, #123a5e 0%, #1f6aa5 55%, #7ac1ff 100%);
+        color: white;
+        border-radius: 14px;
+        padding: 24px;
+        box-shadow: 0 18px 36px rgba(18, 58, 94, 0.16);
+    }
+
+    .detail-hero-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .detail-title {
+        font-size: 30px;
+        font-weight: 700;
+        margin: 10px 0 8px;
+    }
+
+    .detail-subtitle {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.88);
+        max-width: 760px;
+        line-height: 1.6;
+    }
+
+    .hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+    }
+
+    .hero-badge {
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.15);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .hero-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+    }
+
+    .summary-card {
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        padding: 14px 16px;
+    }
+
+    .summary-label {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.74);
+    }
+
+    .summary-value {
+        font-size: 24px;
+        font-weight: 700;
+        margin-top: 6px;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 16px;
+    }
+
+    .content-card {
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .content-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .content-card-title {
+        font-weight: 600;
+    }
+
+    .content-card-body {
+        padding: 20px;
+    }
+
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-chip.running { background: rgba(0, 123, 255, 0.14); color: #007bff; }
+    .status-chip.completed { background: rgba(40, 167, 69, 0.14); color: #28a745; }
+    .status-chip.failed { background: rgba(220, 53, 69, 0.14); color: #dc3545; }
+    .status-chip.pending { background: rgba(108, 117, 125, 0.14); color: #6c757d; }
+    .status-chip.cancelled,
+    .status-chip.timeout { background: rgba(255, 193, 7, 0.18); color: #856404; }
+    .status-chip.default { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .info-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 14px;
+    }
+
+    .info-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+
+    .info-value {
+        font-size: 14px;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .timeline {
+        position: relative;
+        padding-left: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
+
+    .timeline::before {
+        content: "";
+        position: absolute;
+        left: 9px;
+        top: 2px;
+        bottom: 2px;
+        width: 2px;
+        background: var(--border-color);
+    }
+
+    .timeline-item {
+        position: relative;
+    }
+
+    .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -23px;
+        top: 4px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+    }
+
+    .timeline-item.completed::before { background: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.15); }
+    .timeline-item.failed::before { background: #dc3545; box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15); }
+
+    .timeline-time {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .timeline-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 4px;
+    }
+
+    .timeline-desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+
+    .results-table,
+    .attempt-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .results-table th,
+    .results-table td,
+    .attempt-table th,
+    .attempt-table td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .results-table th,
+    .attempt-table th {
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--bg-primary);
+    }
+
+    .code-block {
+        margin: 0;
+        padding: 14px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        overflow: auto;
+        max-height: 280px;
+        font-size: 12px;
+    }
+
+    .recent-log {
+        display: flex;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 12px;
+    }
+
+    .recent-log:last-child {
+        border-bottom: none;
+    }
+
+    .recent-log time {
+        color: var(--text-secondary);
+        min-width: 110px;
+    }
+
+    .page-empty {
+        text-align: center;
+        padding: 48px 20px;
+        color: var(--text-secondary);
+    }
+
+    @media (max-width: 1280px) {
+        .detail-grid,
+        .hero-summary,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="task-detail-root" class="detail-page">
+    <div data-ui-state="loading"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const taskId = {{ task_id|tojson }};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('task-detail-root', 'loading', {
+            message: '正在加载任务详情...'
+        });
+        loadTaskDetail();
+    });
+
+    async function loadTaskDetail() {
+        try {
+            const response = await fetch(`/api/tasks/${taskId}`);
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.message || '获取任务详情失败');
+            }
+
+            renderTaskDetailPage(result.data);
+        } catch (error) {
+            setPanelState('task-detail-root', 'error', {
+                message: `无法加载任务详情：${escapeHtml(error.message)}`,
+                retryJs: 'loadTaskDetail()'
+            });
+        }
+    }
+
+    function renderTaskDetailPage(task) {
+        const root = document.getElementById('task-detail-root');
+        const summary = task.result_summary || {};
+        const execution = task.execution || {};
+        const attempts = task.metadata?.report_attempts || task.metadata?.attempts || [];
+        const recentLogs = task.recent_logs || [];
+
+        root.innerHTML = `
+            <div class="detail-hero">
+                <div class="detail-hero-top">
+                    <div>
+                        <div class="status-chip ${statusClass(task.status)}">
+                            <i class="fas fa-circle"></i>${escapeHtml(getStatusLabel(task.status))}
+                        </div>
+                        <div class="detail-title">${escapeHtml(task.name || task.id || '未命名任务')}</div>
+                        <div class="detail-subtitle">
+                            独立任务详情页，统一展示任务摘要、执行时间线、测试结果、日志和诊断上下文。
+                        </div>
+                        <div class="hero-badges">
+                            <span class="hero-badge">任务 ${escapeHtml(task.id || '-')}</span>
+                            <span class="hero-badge">工具 ${(task.category || task.task_type || '-').toString().toUpperCase()}</span>
+                            <span class="hero-badge">可重试 ${task.can_retry ? '是' : '否'}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="btn btn-secondary" onclick="window.location.href='/tasks'">
+                            <i class="fas fa-arrow-left"></i> 返回任务列表
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-summary">
+                    <div class="summary-card">
+                        <div class="summary-label">通过率</div>
+                        <div class="summary-value">${escapeHtml(summary.pass_rate || '0%')}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">总用例</div>
+                        <div class="summary-value">${summary.total || 0}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">开始时间</div>
+                        <div class="summary-value" style="font-size:16px">${escapeHtml(formatTime(execution.started_at))}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">耗时</div>
+                        <div class="summary-value">${escapeHtml(formatDuration(execution.duration))}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">执行时间线</span>
+                    </div>
+                    <div class="content-card-body">
+                        <div class="timeline">
+                            ${timelineItem(task.created_at, '任务创建', '任务已进入队列', 'completed')}
+                            ${execution.started_at ? timelineItem(execution.started_at, '开始执行', `等待时间 ${execution.wait_time ? execution.wait_time.toFixed(1) : 0} 秒`, 'completed') : ''}
+                            ${execution.completed_at ? timelineItem(execution.completed_at, task.status === 'failed' ? '执行失败' : '执行完成', `总耗时 ${formatDuration(execution.duration)}`, task.status === 'failed' ? 'failed' : 'completed') : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">任务摘要</span>
+                    </div>
+                    <div class="content-card-body">
+                        <div class="info-grid">
+                            ${infoCard('任务编号', task.id)}
+                            ${infoCard('任务类型', task.task_type)}
+                            ${infoCard('分类', task.category)}
+                            ${infoCard('创建者', task.created_by)}
+                            ${infoCard('创建时间', formatTime(task.created_at))}
+                            ${infoCard('结束时间', formatTime(execution.completed_at))}
+                            ${infoCard('重试次数', `${execution.retry_count || 0} / ${execution.max_retries || 0}`)}
+                            ${infoCard('最近错误', task.error_message || '-')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">测试结果</span>
+                    </div>
+                    <div class="content-card-body">
+                        ${renderResultsTable(task.test_results || [])}
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">最近日志</span>
+                    </div>
+                    <div class="content-card-body">
+                        ${renderRecentLogs(recentLogs)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">诊断上下文</span>
+                    </div>
+                    <div class="content-card-body">
+                        <div class="info-grid">
+                            ${infoCard('日志总数', task.log_stats?.total || 0)}
+                            ${infoCard('INFO / ERROR', `${task.log_stats?.INFO || 0} / ${task.log_stats?.ERROR || 0}`)}
+                        </div>
+                        <h4 style="margin:16px 0 10px">任务参数</h4>
+                        <pre class="code-block">${escapeHtml(JSON.stringify(task.params || {}, null, 2))}</pre>
+                        <h4 style="margin:16px 0 10px">任务元数据</h4>
+                        <pre class="code-block">${escapeHtml(JSON.stringify(task.metadata || {}, null, 2))}</pre>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">报告重试上下文</span>
+                    </div>
+                    <div class="content-card-body">
+                        ${renderAttemptsTable(attempts)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderResultsTable(results) {
+        if (!results.length) {
+            return renderEmptyState('暂无测试结果', '当前任务还没有生成结构化测试结果。');
+        }
+
+        return `
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>名称</th>
+                        <th>类型</th>
+                        <th>结果</th>
+                        <th>错误</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${results.map((item, index) => `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${escapeHtml(item.name || '-')}</td>
+                            <td>${escapeHtml(item.type || '-')}</td>
+                            <td>${escapeHtml(item.verdict || (item.passed === true ? 'PASS' : item.passed === false ? 'FAIL' : '-'))}</td>
+                            <td>${escapeHtml(item.error || '-')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function renderRecentLogs(logs) {
+        if (!logs.length) {
+            return renderEmptyState('暂无最近日志', '任务执行后，这里会展示最近采集到的日志片段。');
+        }
+
+        return logs.map(log => `
+            <div class="recent-log">
+                <time>${escapeHtml(formatLogTime(log.timestamp))}</time>
+                <strong>[${escapeHtml(log.level || 'INFO')}]</strong>
+                <span>${escapeHtml(log.message || '')}</span>
+            </div>
+        `).join('');
+    }
+
+    function renderAttemptsTable(attempts) {
+        if (!attempts.length) {
+            return renderEmptyState('暂无结构化 report attempts', '当前任务还没有关联的报告重试历史。');
+        }
+
+        return `
+            <table class="attempt-table">
+                <thead>
+                    <tr>
+                        <th>次数</th>
+                        <th>时间</th>
+                        <th>状态</th>
+                        <th>endpoint</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${attempts.map(item => `
+                        <tr>
+                            <td>${item.attempt_number || item.attemptNumber || '--'}</td>
+                            <td>${escapeHtml(item.attempted_at || item.attemptedAt || '--')}</td>
+                            <td>${escapeHtml(item.status || '--')}</td>
+                            <td>${escapeHtml(item.endpoint || '--')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function timelineItem(time, title, desc, state) {
+        return `
+            <div class="timeline-item ${state}">
+                <div class="timeline-time">${escapeHtml(formatTime(time))}</div>
+                <div class="timeline-title">${escapeHtml(title)}</div>
+                <div class="timeline-desc">${escapeHtml(desc)}</div>
+            </div>
+        `;
+    }
+
+    function infoCard(label, value) {
+        return `
+            <div class="info-card">
+                <div class="info-label">${escapeHtml(label)}</div>
+                <div class="info-value">${escapeHtml(value ?? '-')}</div>
+            </div>
+        `;
+    }
+
+    function getStatusLabel(status) {
+        const labels = {
+            pending: '排队中',
+            running: '进行中',
+            completed: '已完成',
+            failed: '失败',
+            cancelled: '已取消',
+            timeout: '超时'
+        };
+        return labels[status] || status || '未知';
+    }
+
+    function statusClass(status) {
+        return ['pending', 'running', 'completed', 'failed', 'cancelled', 'timeout'].includes(status) ? status : 'default';
+    }
+
+    function formatTime(isoTime) {
+        if (!isoTime) return '-';
+        return new Date(isoTime).toLocaleString('zh-CN');
+    }
+
+    function formatDuration(seconds) {
+        if (seconds === null || seconds === undefined) return '-';
+        if (seconds < 60) return `${Math.round(seconds)}秒`;
+        if (seconds < 3600) return `${Math.round(seconds / 60)}分钟`;
+        return `${Math.round(seconds / 3600 * 10) / 10}小时`;
+    }
+
+    function formatLogTime(isoTime) {
+        if (!isoTime) return '-';
+        const date = new Date(isoTime);
+        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text ?? '';
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}

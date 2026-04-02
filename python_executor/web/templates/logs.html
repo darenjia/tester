@@ -5,70 +5,229 @@
 {% set active_page = 'logs' %}
 
 {% block content %}
-<div class="content-card">
-    <div class="content-card-header">
-        <span class="content-card-title">运行日志</span>
+<div class="runtime-page">
+    <section class="runtime-hero">
         <div>
-            <span id="log-count" style="font-size: 13px; color: var(--text-secondary); margin-right: 12px;">共 0 条</span>
-            <button class="btn btn-sm btn-secondary" onclick="toggleAutoScroll()" id="auto-scroll-btn">
-                <i class="fas fa-arrow-down"></i> 自动滚动
-            </button>
+            <div class="runtime-kicker">Runtime Logs</div>
+            <h2 class="runtime-title">日志流与运行上下文</h2>
+            <p class="runtime-subtitle">
+                统一查看实时日志、服务状态和排障入口，先判断系统是否健康，再决定要不要深入任务详情或失败报告。
+            </p>
         </div>
-    </div>
-    <div class="content-card-body">
-        <!-- 工具栏 -->
-        <div class="logs-toolbar">
-            <div class="logs-filter">
-                <label style="font-size: 14px; color: var(--text-secondary);">级别:</label>
-                <select class="form-select" id="log-level-filter" style="width: 120px;" onchange="loadLogs()">
-                    <option value="">全部</option>
-                    <option value="DEBUG">DEBUG</option>
-                    <option value="INFO" selected>INFO</option>
-                    <option value="WARNING">WARNING</option>
-                    <option value="ERROR">ERROR</option>
-                </select>
-            </div>
-            
-            <div class="logs-filter" style="flex: 1;">
-                <input type="text" class="form-input" id="log-search" placeholder="搜索日志内容..." 
-                       style="width: 250px;" onkeyup="if(event.key==='Enter') loadLogs()">
-                <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
-                    <i class="fas fa-search"></i> 搜索
-                </button>
-            </div>
-            
-            <div>
-                <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
-                    <i class="fas fa-sync-alt"></i> 刷新
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="clearLogs()">
-                    <i class="fas fa-trash"></i> 清空
-                </button>
-                <button class="btn btn-sm btn-primary" onclick="exportLogs()">
-                    <i class="fas fa-download"></i> 导出
-                </button>
-            </div>
+        <div class="runtime-actions">
+            <a href="/dashboard" class="btn btn-secondary btn-sm">
+                <i class="fas fa-chart-pie"></i> 返回首页
+            </a>
+            <a href="/tasks" class="btn btn-secondary btn-sm">
+                <i class="fas fa-tasks"></i> 任务列表
+            </a>
+            <a href="/system-check" class="btn btn-primary btn-sm">
+                <i class="fas fa-stethoscope"></i> 运行诊断
+            </a>
         </div>
-        
-        <!-- 日志容器 -->
-        <div class="logs-container" id="logs-container">
-            <div class="empty-state" style="color: #64748b;">
-                <div class="empty-state-icon">
-                    <i class="fas fa-file-alt"></i>
+    </section>
+
+    <section class="runtime-summary-grid">
+        <article class="summary-card">
+            <div class="summary-label">日志总量</div>
+            <div class="summary-value" id="log-count">0</div>
+            <div class="summary-hint">当前过滤结果中的日志条数</div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-label">错误级别</div>
+            <div class="summary-value" id="error-count">0</div>
+            <div class="summary-hint">帮助判断是否需要联动失败报告页</div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-label">调度器状态</div>
+            <div class="summary-value status-pill neutral" id="scheduler-status">-</div>
+            <div class="summary-hint">来自服务状态汇总</div>
+        </article>
+        <article class="summary-card">
+            <div class="summary-label">执行器状态</div>
+            <div class="summary-value status-pill neutral" id="executor-status">-</div>
+            <div class="summary-hint">便于判断日志是否只是历史噪音</div>
+        </article>
+    </section>
+
+    <div class="logs-layout">
+        <section class="content-card">
+            <div class="content-card-header">
+                <div>
+                    <span class="content-card-title">实时日志流</span>
+                    <div class="section-caption">保留过滤、搜索、自动滚动和导出能力</div>
                 </div>
-                <div class="empty-state-text">暂无日志</div>
+                <div class="header-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="toggleAutoScroll()" id="auto-scroll-btn">
+                        <i class="fas fa-arrow-down"></i> 自动滚动
+                    </button>
+                </div>
             </div>
-        </div>
+            <div class="content-card-body">
+                <div class="logs-toolbar">
+                    <div class="logs-filter">
+                        <label class="toolbar-label">级别</label>
+                        <select class="form-select" id="log-level-filter" onchange="loadLogs()">
+                            <option value="">全部</option>
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO" selected>INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+
+                    <div class="logs-filter logs-search-group">
+                        <input type="text" class="form-input" id="log-search" placeholder="搜索日志内容..."
+                               onkeyup="if(event.key==='Enter') loadLogs()">
+                        <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
+                            <i class="fas fa-search"></i> 搜索
+                        </button>
+                    </div>
+
+                    <div class="toolbar-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="clearLogs()">
+                            <i class="fas fa-trash"></i> 清空
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="exportLogs()">
+                            <i class="fas fa-download"></i> 导出
+                        </button>
+                    </div>
+                </div>
+
+                <div class="logs-container" id="logs-container">
+                    <div class="empty-state" style="color: #64748b;">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="empty-state-text">暂无日志</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="content-card runtime-side-panel">
+            <div class="content-card-header">
+                <span class="content-card-title">运行摘要</span>
+            </div>
+            <div class="content-card-body side-stack">
+                <div class="side-section">
+                    <div class="side-section-title">当前过滤条件</div>
+                    <div class="side-kv">
+                        <span>日志级别</span>
+                        <strong id="active-filter-level">INFO</strong>
+                    </div>
+                    <div class="side-kv">
+                        <span>搜索词</span>
+                        <strong id="active-filter-search">无</strong>
+                    </div>
+                </div>
+
+                <div class="side-section">
+                    <div class="side-section-title">联动入口</div>
+                    <div class="side-links">
+                        <a href="/tasks">查看任务执行</a>
+                        <a href="/report-status">查看失败报告</a>
+                        <a href="/system-check">查看运行诊断</a>
+                    </div>
+                </div>
+
+                <div class="side-section">
+                    <div class="side-section-title">最近提示</div>
+                    <div id="runtime-log-insight" class="side-note">
+                        等待加载日志与服务状态...
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .runtime-page { display: flex; flex-direction: column; gap: 20px; }
+    .runtime-hero {
+        display: flex; justify-content: space-between; gap: 20px; align-items: flex-start;
+        padding: 24px; border-radius: 20px; color: #f8fafc;
+        background: radial-gradient(circle at top right, rgba(59,130,246,0.45), transparent 32%),
+                    linear-gradient(135deg, #0f172a, #10243f 52%, #1d4ed8);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    }
+    .runtime-kicker { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; opacity: .72; margin-bottom: 8px; }
+    .runtime-title { margin: 0; font-size: 28px; line-height: 1.15; }
+    .runtime-subtitle { margin: 12px 0 0; max-width: 760px; color: rgba(226,232,240,.88); line-height: 1.6; }
+    .runtime-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .runtime-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .summary-card {
+        padding: 18px; border: 1px solid var(--border-color); border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.95));
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+    }
+    .summary-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 10px; }
+    .summary-value { font-size: 26px; font-weight: 700; color: var(--text-color); }
+    .summary-hint { margin-top: 8px; font-size: 13px; color: var(--text-secondary); }
+    .status-pill {
+        display: inline-flex; align-items: center; justify-content: center; min-width: 110px;
+        padding: 6px 12px; border-radius: 999px; font-size: 14px;
+    }
+    .status-pill.neutral { background: #e2e8f0; color: #334155; }
+    .status-pill.success { background: #dcfce7; color: #166534; }
+    .status-pill.warning { background: #fef3c7; color: #92400e; }
+    .status-pill.danger { background: #fee2e2; color: #b91c1c; }
+    .logs-layout { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(320px, .95fr); gap: 20px; }
+    .section-caption { margin-top: 6px; font-size: 13px; color: var(--text-secondary); }
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+    .logs-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .logs-filter { display: flex; gap: 8px; align-items: center; }
+    .logs-search-group { flex: 1; min-width: 260px; }
+    .logs-search-group .form-input { flex: 1; }
+    .toolbar-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+    .toolbar-label { font-size: 13px; color: var(--text-secondary); }
+    .logs-container {
+        height: 560px; overflow-y: auto; border-radius: 14px; border: 1px solid var(--border-color);
+        background: #0f172a; color: #e2e8f0; padding: 16px;
+        font-family: Consolas, 'SFMono-Regular', Menlo, Monaco, monospace;
+    }
+    .log-entry {
+        display: grid; grid-template-columns: 168px 96px 1fr; gap: 12px; align-items: start;
+        font-size: 13px; line-height: 1.6; padding: 6px 0; border-bottom: 1px solid rgba(148, 163, 184, .12);
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: #94a3b8; }
+    .log-level { display: inline-flex; align-items: center; justify-content: center; width: 88px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .log-level.DEBUG { background: rgba(59,130,246,.18); color: #93c5fd; }
+    .log-level.INFO { background: rgba(34,197,94,.18); color: #86efac; }
+    .log-level.WARNING { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .log-level.ERROR { background: rgba(239,68,68,.18); color: #fca5a5; }
+    .log-message { word-break: break-word; }
+    .runtime-side-panel { align-self: start; }
+    .side-stack { display: flex; flex-direction: column; gap: 18px; }
+    .side-section { padding: 14px; border: 1px solid var(--border-color); border-radius: 14px; background: var(--bg-color); }
+    .side-section-title { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .side-kv { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 8px; font-size: 14px; }
+    .side-kv:last-child { margin-bottom: 0; }
+    .side-links { display: flex; flex-direction: column; gap: 8px; }
+    .side-links a { color: var(--primary-color); text-decoration: none; font-size: 14px; }
+    .side-note { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    @media (max-width: 1080px) {
+        .runtime-summary-grid, .logs-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+        .runtime-hero { flex-direction: column; }
+        .runtime-actions { justify-content: flex-start; }
+        .log-entry { grid-template-columns: 1fr; gap: 6px; }
+    }
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let autoScroll = true;
     let refreshInterval = null;
-    
-    // 切换自动滚动
+
     function toggleAutoScroll() {
         autoScroll = !autoScroll;
         const btn = document.getElementById('auto-scroll-btn');
@@ -83,17 +242,60 @@
             btn.classList.add('btn-primary');
         }
     }
-    
-    // 滚动到底部
+
     function scrollToBottom() {
-        if (autoScroll) {
-            const container = document.getElementById('logs-container');
-            container.scrollTop = container.scrollHeight;
+        if (!autoScroll) return;
+        const container = document.getElementById('logs-container');
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function updateFilterSummary() {
+        const level = document.getElementById('log-level-filter').value || '全部';
+        const search = document.getElementById('log-search').value.trim() || '无';
+        document.getElementById('active-filter-level').textContent = level;
+        document.getElementById('active-filter-search').textContent = search;
+    }
+
+    function statusClass(status) {
+        const normalized = (status || '').toLowerCase();
+        if (['running', 'connected', 'ready', 'healthy', 'active', 'started'].includes(normalized)) return 'success';
+        if (['warning', 'degraded', 'retrying'].includes(normalized)) return 'warning';
+        if (['stopped', 'error', 'failed', 'blocked', 'not_initialized', 'disconnected'].includes(normalized)) return 'danger';
+        return 'neutral';
+    }
+
+    function setStatusPill(elementId, text) {
+        const el = document.getElementById(elementId);
+        el.textContent = text || '-';
+        el.className = `summary-value status-pill ${statusClass(text)}`;
+    }
+
+    async function loadServiceSummary() {
+        try {
+            const response = await fetch('/api/services/status');
+            const result = await response.json();
+            if (!result.success) return;
+
+            const data = result.data || {};
+            const services = data.services || {};
+            const scheduler = services.scheduler?.status || data.scheduler?.status || '-';
+            const executor = services.executor?.status || data.executor?.status || '-';
+
+            setStatusPill('scheduler-status', scheduler);
+            setStatusPill('executor-status', executor);
+
+            const failedReports = data.runtime_operations?.diagnose?.failedReports?.pendingCount || 0;
+            document.getElementById('runtime-log-insight').textContent =
+                failedReports > 0
+                    ? `当前有 ${failedReports} 条失败报告待处理，建议联动查看失败报告与运行诊断。`
+                    : '当前没有失败报告堆积，可以结合任务列表继续追踪实时日志。';
+        } catch (error) {
+            console.error('加载服务摘要失败:', error);
         }
     }
-    
-    // 加载日志
+
     async function loadLogs() {
+        updateFilterSummary();
         try {
             const level = document.getElementById('log-level-filter').value;
             const search = document.getElementById('log-search').value;
@@ -104,84 +306,62 @@
 
             const response = await fetch(url);
             const result = await response.json();
-
-            if (result.success) {
-                let logs = [];
-                let total = 0;
-
-                // 兼容两种返回格式
-                if (Array.isArray(result.data)) {
-                    // 格式1: {'data': [...], 'total': ...}
-                    logs = result.data;
-                    total = result.total || logs.length;
-                } else if (result.data && result.data.logs) {
-                    // 格式2: {'data': {'logs': [...], 'pagination': {...}}}
-                    logs = result.data.logs;
-                    total = result.data.pagination?.total || logs.length;
-                }
-
-                displayLogs(logs);
-                document.getElementById('log-count').textContent = `共 ${total} 条`;
-            } else {
+            if (!result.success) {
                 showMessage('加载日志失败: ' + result.message, 'error');
+                return;
             }
+
+            let logs = [];
+            let total = 0;
+            if (Array.isArray(result.data)) {
+                logs = result.data;
+                total = result.total || logs.length;
+            } else if (result.data && result.data.logs) {
+                logs = result.data.logs;
+                total = result.data.pagination?.total || logs.length;
+            }
+
+            displayLogs(logs);
+            document.getElementById('log-count').textContent = total;
+            document.getElementById('error-count').textContent = logs.filter(log => log.level === 'ERROR').length;
         } catch (error) {
             console.error('加载日志失败:', error);
+            setPanelState('logs-container', 'error', {
+                message: '日志加载失败，请稍后重试。',
+                retryJs: 'loadLogs()'
+            });
             showMessage('加载日志失败', 'error');
         }
     }
-    
-    // 显示日志
+
     function displayLogs(logs) {
         const container = document.getElementById('logs-container');
-        
-        if (logs.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state" style="color: #64748b;">
-                    <div class="empty-state-icon">
-                        <i class="fas fa-file-alt"></i>
-                    </div>
-                    <div class="empty-state-text">暂无日志</div>
-                </div>
-            `;
+        if (!logs.length) {
+            container.innerHTML = renderEmptyState('暂无日志', '当前筛选条件下没有匹配的日志记录。');
             return;
         }
-        
-        let html = '';
-        logs.forEach(log => {
-            html += `
-                <div class="log-entry">
-                    <span class="log-time">${log.timestamp}</span>
-                    <span class="log-level ${log.level}">${log.level}</span>
-                    <span class="log-message">${escapeHtml(log.message)}</span>
-                </div>
-            `;
-        });
-        
-        container.innerHTML = html;
+
+        container.innerHTML = logs.map(log => `
+            <div class="log-entry">
+                <span class="log-time">${escapeHtml(log.timestamp || '-')}</span>
+                <span class="log-level ${escapeHtml(log.level || 'INFO')}">${escapeHtml(log.level || 'INFO')}</span>
+                <span class="log-message">${escapeHtml(log.message || '')}</span>
+            </div>
+        `).join('');
         scrollToBottom();
     }
-    
-    // 转义 HTML
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
-    
-    // 清空日志
+
     async function clearLogs() {
-        if (!confirm('确定要清空所有日志吗？此操作不可恢复。')) {
-            return;
-        }
-        
+        if (!confirm('确定要清空所有日志吗？此操作不可恢复。')) return;
         try {
-            const response = await fetch('/api/logs/clear', {
-                method: 'POST'
-            });
-            
+            const response = await fetch('/api/logs/clear', { method: 'POST' });
             const result = await response.json();
-            
             if (result.success) {
                 showMessage('日志已清空', 'success');
                 loadLogs();
@@ -193,22 +373,16 @@
             showMessage('清空日志失败', 'error');
         }
     }
-    
-    // 导出日志
+
     async function exportLogs() {
         try {
             const level = document.getElementById('log-level-filter').value;
-            
             const response = await fetch('/api/logs/export', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ level })
             });
-            
             const result = await response.json();
-            
             if (result.success) {
                 showMessage(`日志已导出到: ${result.data.filename}`, 'success');
             } else {
@@ -219,19 +393,19 @@
             showMessage('导出日志失败', 'error');
         }
     }
-    
-    // 页面加载完成后初始化
+
     document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('logs-container', 'loading', { message: '正在加载实时日志...' });
         loadLogs();
-        // 每 2 秒刷新一次日志
-        refreshInterval = setInterval(loadLogs, 2000);
+        loadServiceSummary();
+        refreshInterval = setInterval(function() {
+            loadLogs();
+            loadServiceSummary();
+        }, 2000);
     });
-    
-    // 页面卸载时清理
+
     window.addEventListener('beforeunload', function() {
-        if (refreshInterval) {
-            clearInterval(refreshInterval);
-        }
+        if (refreshInterval) clearInterval(refreshInterval);
     });
 </script>
 {% endblock %}

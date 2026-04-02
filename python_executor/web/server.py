@@ -127,6 +127,11 @@ def register_routes(app: Flask):
     def tasks_page():
         """任务管理页面"""
         return render_template('tasks.html')
+
+    @app.route('/tasks/<task_id>/view')
+    def task_detail_page(task_id: str):
+        """任务详情页面"""
+        return render_template('task_detail.html', task_id=task_id, active_page='tasks')
     
     @app.route('/settings')
     def settings_page():
@@ -182,6 +187,11 @@ def register_routes(app: Flask):
     def report_status_page():
         """上报管理页面"""
         return render_template('report_status.html')
+
+    @app.route('/report-status/<report_id>/view')
+    def report_detail_page(report_id: str):
+        """上报详情页面"""
+        return render_template('report_detail.html', report_id=report_id, active_page='report-status')
     
     # ========== API 路由 ==========
     

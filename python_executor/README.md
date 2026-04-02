@@ -163,6 +163,16 @@ python app.py
 - [docs/release_checklist.md](/C:/Users/deng/.codex/worktrees/can_test/codex-release-runtime-ops/python_executor/docs/release_checklist.md)：发布前检查清单
 - [docs/rollback_checklist.md](/C:/Users/deng/.codex/worktrees/can_test/codex-release-runtime-ops/python_executor/docs/rollback_checklist.md)：回滚检查清单
 
+前端运维视图：
+
+- `/system-check`：现在优先展示 runtime ops 诊断页，聚合 preflight、diagnose、housekeeping 和发布/回滚提示，同时保留详细检测能力
+- `/report-status`：展示失败报告列表、结构化详情和 `attempt-history`，支持单条/批量重试
+- `/report-status/<report_id>/view`：独立失败报告详情页，聚合 `ExecutionOutcome` 摘要、attempt-history 和原始 payload
+- `/tasks`：任务详情统一为摘要、执行、结果、日志、诊断五层结构，列表入口默认跳转独立详情页
+- `/tasks/<task_id>/view`：独立任务详情页，统一展示时间线、测试结果、最近日志、诊断上下文和报告重试上下文
+- `/logs`：运行日志页已升级为“日志流 + 运行摘要 + 联动入口”，会同步展示 scheduler / executor 状态
+- `/settings`：设置页顶部新增运行总览层，先展示 preflight、diagnose、上报链路和缓存状态，再进入具体配置分区
+
 ## 开发文档
 
 详见各模块源码中的docstring说明。

@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}失败报告详情 - 测试执行器{% endblock %}
+{% block page_title %}<i class="fas fa-file-waveform"></i> 失败报告详情{% endblock %}
+{% set active_page = 'report-status' %}
+
+{% block extra_css %}
+<style>
+    .report-detail-page {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .hero {
+        background: linear-gradient(135deg, #4b1626 0%, #8a213f 52%, #d5577e 100%);
+        color: white;
+        border-radius: 14px;
+        padding: 24px;
+        box-shadow: 0 18px 36px rgba(75, 22, 38, 0.18);
+    }
+
+    .hero-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .hero-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.14);
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .hero-title {
+        margin: 10px 0 8px;
+        font-size: 30px;
+        font-weight: 700;
+    }
+
+    .hero-desc {
+        max-width: 780px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: rgba(255,255,255,0.88);
+    }
+
+    .hero-meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+    }
+
+    .hero-card {
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 10px;
+        padding: 14px 16px;
+    }
+
+    .hero-label {
+        font-size: 12px;
+        color: rgba(255,255,255,0.75);
+    }
+
+    .hero-value {
+        font-size: 24px;
+        font-weight: 700;
+        margin-top: 6px;
+    }
+
+    .report-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        gap: 16px;
+    }
+
+    .content-card {
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .content-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .content-card-body {
+        padding: 20px;
+    }
+
+    .content-card-title {
+        font-weight: 600;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .info-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 14px;
+    }
+
+    .info-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+
+    .info-value {
+        font-size: 14px;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .attempt-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .attempt-table th,
+    .attempt-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .attempt-table th {
+        background: var(--bg-primary);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .status-badge.pending { background: rgba(255, 193, 7, 0.18); color: #856404; }
+    .status-badge.retrying { background: rgba(23, 162, 184, 0.18); color: #17a2b8; }
+    .status-badge.failed { background: rgba(220, 53, 69, 0.16); color: #dc3545; }
+    .status-badge.success { background: rgba(40, 167, 69, 0.16); color: #28a745; }
+    .status-badge.default { background: rgba(108, 117, 125, 0.14); color: #6c757d; }
+
+    .code-block {
+        margin: 0;
+        padding: 14px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        overflow: auto;
+        max-height: 320px;
+        font-size: 12px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 48px 20px;
+        color: var(--text-secondary);
+    }
+
+    @media (max-width: 1280px) {
+        .hero-meta,
+        .report-grid,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="report-detail-root" class="report-detail-page">
+    <div data-ui-state="loading"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const reportId = {{ report_id|tojson }};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('report-detail-root', 'loading', {
+            message: '正在加载失败报告详情...'
+        });
+        loadReportDetail();
+    });
+
+    async function loadReportDetail() {
+        try {
+            const response = await fetch(`/api/report-retry/${reportId}`);
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.message || '获取失败报告详情失败');
+            }
+
+            renderReportDetailPage(result.data);
+        } catch (error) {
+            setPanelState('report-detail-root', 'error', {
+                message: `无法加载失败报告详情：${escapeHtml(error.message)}`,
+                retryJs: 'loadReportDetail()'
+            });
+        }
+    }
+
+    function renderReportDetailPage(report) {
+        const metadata = report.metadata || {};
+        const reportData = report.report_data || {};
+        const taskInfo = report.task_info || {};
+        const attempts = report.attempts || [];
+        const latestAttempt = attempts.length ? attempts[attempts.length - 1] : null;
+
+        document.getElementById('report-detail-root').innerHTML = `
+            <div class="hero">
+                <div class="hero-top">
+                    <div>
+                        <div class="hero-status">
+                            <i class="fas fa-triangle-exclamation"></i>${escapeHtml(getStatusText(report.status))}
+                        </div>
+                        <div class="hero-title">${escapeHtml(report.task_no || report.report_id || '失败报告')}</div>
+                        <div class="hero-desc">
+                            失败报告独立详情页，统一展示上报状态、ExecutionOutcome 摘要、attempt-history 和原始 payload。
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" onclick="window.location.href='/report-status'">
+                            <i class="fas fa-arrow-left"></i> 返回上报管理
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-meta">
+                    <div class="hero-card">
+                        <div class="hero-label">状态</div>
+                        <div class="hero-value">${escapeHtml(getStatusText(report.status))}</div>
+                    </div>
+                    <div class="hero-card">
+                        <div class="hero-label">重试次数</div>
+                        <div class="hero-value">${report.retry_count || 0}/${report.max_retries || 0}</div>
+                    </div>
+                    <div class="hero-card">
+                        <div class="hero-label">最近 endpoint</div>
+                        <div class="hero-value" style="font-size:14px">${escapeHtml(latestAttempt?.endpoint || metadata.endpoint || '--')}</div>
+                    </div>
+                    <div class="hero-card">
+                        <div class="hero-label">下次重试</div>
+                        <div class="hero-value" style="font-size:14px">${escapeHtml(report.next_retry_time || '--')}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-grid">
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">ExecutionOutcome 摘要</span>
+                    </div>
+                    <div class="content-card-body">
+                        <div class="info-grid">
+                            ${infoCard('任务名称', metadata.task_name || metadata.taskName || reportData.taskName || '--')}
+                            ${infoCard('项目编号', metadata.project_no || metadata.projectNo || taskInfo.projectNo || '--')}
+                            ${infoCard('设备', metadata.device_id || metadata.deviceId || taskInfo.deviceId || '--')}
+                            ${infoCard('工具类型', metadata.tool_type || metadata.toolType || '--')}
+                            ${infoCard('创建时间', report.created_at || '--')}
+                            ${infoCard('最后失败原因', report.last_error || metadata.failure_reason || '--')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">report 元数据</span>
+                    </div>
+                    <div class="content-card-body">
+                        <div class="info-grid">
+                            ${infoCard('report_id', report.report_id || '--')}
+                            ${infoCard('payload_hash', metadata.payload_hash || '--')}
+                            ${infoCard('source', metadata.report_source || metadata.source || '--')}
+                            ${infoCard('priority', report.priority ?? '--')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-grid">
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">attempt-history</span>
+                    </div>
+                    <div class="content-card-body">
+                        ${renderAttempts(attempts)}
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="content-card-header">
+                        <span class="content-card-title">原始 payload</span>
+                    </div>
+                    <div class="content-card-body">
+                        <pre class="code-block">${escapeHtml(JSON.stringify(reportData, null, 2))}</pre>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderAttempts(attempts) {
+        if (!attempts.length) {
+            return renderEmptyState('暂无结构化尝试历史', '失败报告还没有生成可展示的 attempt-history。');
+        }
+
+        return `
+            <table class="attempt-table">
+                <thead>
+                    <tr>
+                        <th>次数</th>
+                        <th>时间</th>
+                        <th>状态</th>
+                        <th>endpoint</th>
+                        <th>错误</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${attempts.map(item => `
+                        <tr>
+                            <td>${item.attempt_number || '--'}</td>
+                            <td>${escapeHtml(item.attempted_at || '--')}</td>
+                            <td><span class="status-badge ${statusClass(item.status)}">${escapeHtml(getStatusText(item.status))}</span></td>
+                            <td>${escapeHtml(item.endpoint || '--')}</td>
+                            <td>${escapeHtml(item.error_message || '--')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function infoCard(label, value) {
+        return `
+            <div class="info-card">
+                <div class="info-label">${escapeHtml(label)}</div>
+                <div class="info-value">${escapeHtml(value ?? '--')}</div>
+            </div>
+        `;
+    }
+
+    function getStatusText(status) {
+        const texts = {
+            pending: '待重试',
+            failed: '已失败',
+            success: '已成功',
+            retrying: '重试中'
+        };
+        return texts[status] || status || '未知';
+    }
+
+    function statusClass(status) {
+        return ['pending', 'failed', 'success', 'retrying'].includes(status) ? status : 'default';
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text ?? '';
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}

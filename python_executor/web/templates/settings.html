@@ -5,6 +5,65 @@
 {% set active_page = 'settings' %}
 
 {% block content %}
+<div class="settings-overview">
+    <div id="settings-overview-feedback"></div>
+    <section class="settings-hero">
+        <div>
+            <div class="settings-kicker">Configuration Control</div>
+            <h2 class="settings-title">统一设置与运行配置</h2>
+            <p class="settings-subtitle">
+                先看运行 readiness、上报链路和缓存状态，再进入网络、系统和上报配置分区修改，减少“改完才发现环境不健康”的来回切换。
+            </p>
+        </div>
+        <div class="settings-actions">
+            <a href="/system-check" class="btn btn-secondary btn-sm">
+                <i class="fas fa-stethoscope"></i> 运行诊断
+            </a>
+            <a href="/dashboard" class="btn btn-secondary btn-sm">
+                <i class="fas fa-chart-pie"></i> 返回首页
+            </a>
+        </div>
+    </section>
+
+    <section class="settings-summary-grid">
+        <article class="settings-summary-card">
+            <div class="summary-label">Preflight</div>
+            <div class="summary-value summary-neutral" id="settings-preflight-status">-</div>
+            <div class="summary-hint" id="settings-preflight-message">等待检查结果</div>
+        </article>
+        <article class="settings-summary-card">
+            <div class="summary-label">诊断状态</div>
+            <div class="summary-value summary-neutral" id="settings-diagnose-status">-</div>
+            <div class="summary-hint" id="settings-diagnose-message">等待运行摘要</div>
+        </article>
+        <article class="settings-summary-card">
+            <div class="summary-label">上报链路</div>
+            <div class="summary-value summary-neutral" id="settings-report-status">-</div>
+            <div class="summary-hint" id="settings-report-message">等待上报配置</div>
+        </article>
+        <article class="settings-summary-card">
+            <div class="summary-label">配置缓存</div>
+            <div class="summary-value summary-neutral" id="settings-cache-status">-</div>
+            <div class="summary-hint" id="settings-cache-message">等待缓存状态</div>
+        </article>
+    </section>
+
+    <section class="settings-quick-links">
+        <a href="#network-tab" onclick="switchMainTab('network')">
+            <i class="fas fa-network-wired"></i> 网络服务
+        </a>
+        <a href="#system-tab" onclick="switchMainTab('system')">
+            <i class="fas fa-cogs"></i> 系统配置
+        </a>
+        <a href="#report-tab" onclick="switchMainTab('report')">
+            <i class="fas fa-cloud-upload-alt"></i> 上报配置
+        </a>
+        <a href="/logs">
+            <i class="fas fa-file-alt"></i> 查看日志
+        </a>
+    </section>
+</div>
+
 <div class="content-card">
     <div class="content-card-header">
         <span class="content-card-title">配置管理</span>
@@ -491,6 +550,133 @@
         display: block;
     }
 
+    .settings-overview {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        margin-bottom: 20px;
+    }
+
+    .settings-hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        padding: 24px;
+        border-radius: 20px;
+        color: #f8fafc;
+        background:
+            radial-gradient(circle at top right, rgba(16, 185, 129, 0.38), transparent 30%),
+            linear-gradient(135deg, #0f172a, #15314b 52%, #0f766e);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    }
+
+    .settings-kicker {
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.72;
+        margin-bottom: 8px;
+    }
+
+    .settings-title {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+    }
+
+    .settings-subtitle {
+        margin: 12px 0 0;
+        max-width: 780px;
+        color: rgba(226, 232, 240, 0.88);
+        line-height: 1.6;
+    }
+
+    .settings-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .settings-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .settings-summary-card {
+        padding: 18px;
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .summary-label {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 10px;
+    }
+
+    .summary-value {
+        font-size: 24px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 110px;
+        padding: 6px 12px;
+        border-radius: 999px;
+    }
+
+    .summary-hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+    }
+
+    .summary-success {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .summary-warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .summary-danger {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .summary-neutral {
+        background: #e2e8f0;
+        color: #334155;
+    }
+
+    .settings-quick-links {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .settings-quick-links a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border-color);
+        background: white;
+        color: var(--text-color);
+        text-decoration: none;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    }
+
     .sub-tabs {
         display: flex;
         gap: 8px;
@@ -526,6 +712,22 @@
     .sub-tab-content.active {
         display: block;
     }
+
+    @media (max-width: 1080px) {
+        .settings-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 768px) {
+        .settings-hero {
+            flex-direction: column;
+        }
+
+        .settings-summary-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -536,8 +738,83 @@
 
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('settings-overview-feedback', 'loading', { message: '正在加载设置总览...' });
         loadAllConfig();
+        loadSettingsOverview();
     });
+
+    function statusClass(status) {
+        const normalized = (status || '').toLowerCase();
+        if (['ready', 'healthy', 'running', 'enabled', 'ok', 'passed'].includes(normalized)) return 'summary-success';
+        if (['warning', 'degraded', 'retrying'].includes(normalized)) return 'summary-warning';
+        if (['blocked', 'failed', 'error', 'disabled', 'stopped', 'not_initialized'].includes(normalized)) return 'summary-danger';
+        return 'summary-neutral';
+    }
+
+    function setOverviewValue(id, value, className) {
+        const el = document.getElementById(id);
+        el.textContent = value || '-';
+        el.className = `summary-value ${className || 'summary-neutral'}`;
+    }
+
+    async function loadSettingsOverview() {
+        try {
+            const [preflight, diagnose, serviceStatus, reportStatus, cacheStatus] = await Promise.allSettled([
+                fetch('/api/runtime/preflight').then(response => response.json()),
+                fetch('/api/runtime/diagnose').then(response => response.json()),
+                fetch('/api/services/status').then(response => response.json()),
+                fetch('/api/report/status').then(response => response.json()),
+                fetch('/api/config/cache/status').then(response => response.json())
+            ]);
+
+            const preflightData = preflight.status === 'fulfilled' ? (preflight.value.data || {}) : {};
+            const diagnoseData = diagnose.status === 'fulfilled' ? (diagnose.value.data || {}) : {};
+            const runtimeOps = serviceStatus.status === 'fulfilled' ? (serviceStatus.value.data?.runtime_operations || {}) : {};
+            const reportData = reportStatus.status === 'fulfilled' ? (reportStatus.value.data || {}) : {};
+            const cacheData = cacheStatus.status === 'fulfilled' ? (cacheStatus.value.data || {}) : {};
+
+            const preflightState = preflight.status === 'fulfilled' ? (preflightData.status || '-') : 'warning';
+            setOverviewValue('settings-preflight-status', preflightState, statusClass(preflightState));
+            document.getElementById('settings-preflight-message').textContent =
+                preflight.status === 'fulfilled'
+                    ? (preflightData.summary || '未获取到发布前检查摘要')
+                    : '发布前检查接口暂时不可用';
+
+            const diagnoseState = diagnose.status === 'fulfilled' ? (diagnoseData.status || '-') : 'warning';
+            setOverviewValue('settings-diagnose-status', diagnoseState, statusClass(diagnoseState));
+            document.getElementById('settings-diagnose-message').textContent =
+                diagnose.status === 'fulfilled'
+                    ? (runtimeOps.diagnose?.summary || diagnoseData.summary || '未获取到运行诊断摘要')
+                    : '运行诊断接口暂时不可用';
+
+            const reportEnabled = reportStatus.status === 'fulfilled'
+                ? (reportData.enabled ? 'enabled' : 'disabled')
+                : 'warning';
+            setOverviewValue('settings-report-status', reportEnabled, statusClass(reportEnabled));
+            document.getElementById('settings-report-message').textContent =
+                reportStatus.status === 'fulfilled'
+                    ? (reportData.enabled ? `结果接口 ${reportData.api_url || '未配置'}` : '当前未启用结果上报')
+                    : '上报状态接口暂时不可用';
+
+            const cacheEnabled = cacheStatus.status === 'fulfilled'
+                ? (cacheData.enabled ? 'enabled' : 'disabled')
+                : 'warning';
+            setOverviewValue('settings-cache-status', cacheEnabled, statusClass(cacheEnabled));
+            document.getElementById('settings-cache-message').textContent =
+                cacheStatus.status === 'fulfilled'
+                    ? (cacheData.enabled
+                        ? `${cacheData.stats?.cache_count || 0} 个缓存文件 / ${(cacheData.stats?.total_size_mb || 0)} MB`
+                        : '缓存功能未启用')
+                    : '缓存状态接口暂时不可用';
+            clearPanelState('settings-overview-feedback');
+        } catch (error) {
+            console.error('加载设置概览失败:', error);
+            setPanelState('settings-overview-feedback', 'error', {
+                message: '设置总览加载失败，请稍后重试。',
+                retryJs: 'loadSettingsOverview()'
+            });
+        }
+    }
 
     // 切换主标签页
     function switchMainTab(tab) {

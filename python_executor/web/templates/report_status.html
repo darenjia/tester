@@ -44,6 +44,8 @@
     </div>
 </div>
 
+<div id="report-status-feedback"></div>
+
 <!-- 操作按钮 -->
 <div class="content-card">
     <div class="content-card-header">
@@ -77,47 +79,47 @@
 </div>
 
 <!-- 报告列表 -->
-<div class="content-card">
-    <div class="content-card-header">
-        <span class="content-card-title">失败报告列表</span>
-        <span id="list-info" style="font-size: 12px; color: var(--text-secondary);"></span>
-    </div>
-    <div class="content-card-body">
-        <div id="reports-table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>任务编号</th>
-                        <th>状态</th>
-                        <th>重试次数</th>
-                        <th>最后错误</th>
-                        <th>创建时间</th>
-                        <th>下次重试</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="reports-tbody">
-                    <tr>
-                        <td colspan="7" class="empty-state">加载中...</td>
-                    </tr>
-                </tbody>
-            </table>
+<div class="report-layout">
+    <div class="content-card">
+        <div class="content-card-header">
+            <span class="content-card-title">失败报告列表</span>
+            <span id="list-info" style="font-size: 12px; color: var(--text-secondary);"></span>
         </div>
+        <div class="content-card-body">
+            <div id="reports-table-feedback"></div>
+            <div id="reports-table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>任务编号</th>
+                            <th>状态</th>
+                            <th>重试次数</th>
+                            <th>最后错误</th>
+                            <th>创建时间</th>
+                            <th>下次重试</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reports-tbody">
+                        <tr>
+                            <td colspan="7" class="empty-state">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-        <!-- 分页 -->
-        <div id="pagination" class="pagination" style="margin-top: 15px;"></div>
+            <!-- 分页 -->
+            <div id="pagination" class="pagination" style="margin-top: 15px;"></div>
+        </div>
     </div>
-</div>
 
-<!-- 报告详情模态框 -->
-<div id="detail-modal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 800px;">
-        <div class="modal-header">
-            <h3>报告详情</h3>
-            <span class="modal-close" onclick="closeModal()">&times;</span>
+    <div class="content-card">
+        <div class="content-card-header">
+            <span class="content-card-title">报告详情</span>
+            <span id="detail-hint" style="font-size: 12px; color: var(--text-secondary);">选择一条失败报告查看详情</span>
         </div>
         <div class="modal-body">
-            <pre id="detail-content" style="max-height: 400px; overflow: auto; background: var(--card-bg); padding: 15px; border-radius: 4px;"></pre>
+            <div id="report-detail-panel" class="report-detail-empty"></div>
         </div>
     </div>
 </div>
@@ -127,6 +129,7 @@
 <script>
     let currentPage = 1;
     const pageSize = 20;
+    let currentReportId = null;
 
     // 加载状态统计
     async function loadStatus() {
@@ -135,6 +138,7 @@
             const result = await response.json();
 
             if (result.success) {
+                clearPanelState('report-status-feedback');
                 const stats = result.data;
                 document.getElementById('pending-count').textContent = stats.pending || 0;
                 document.getElementById('failed-count').textContent = stats.failed || 0;
@@ -143,6 +147,10 @@
             }
         } catch (error) {
             console.error('加载状态失败:', error);
+            setPanelState('report-status-feedback', 'error', {
+                message: '上报统计暂时不可用，请稍后重试。',
+                retryJs: 'loadStatus()'
+            });
         }
     }
 
@@ -161,6 +169,7 @@
             const result = await response.json();
 
             if (result.success) {
+                clearPanelState('reports-table-feedback');
                 renderReports(result.data.reports);
                 renderPagination(result.data.pagination);
                 document.getElementById('list-info').textContent =
@@ -168,6 +177,10 @@
             }
         } catch (error) {
             console.error('加载报告列表失败:', error);
+            setPanelState('reports-table-feedback', 'error', {
+                message: '失败报告列表加载失败，请稍后重试。',
+                retryJs: 'loadReports(currentPage)'
+            });
             document.getElementById('reports-tbody').innerHTML =
                 '<tr><td colspan="7" class="empty-state" style="color: var(--danger-color);">加载失败</td></tr>';
         }
@@ -187,7 +200,7 @@
             const statusText = getStatusText(report.status);
 
             return `
-                <tr>
+                <tr class="${currentReportId === report.report_id ? 'is-selected' : ''}" onclick="showDetail('${report.report_id}')">
                     <td><strong>${report.task_no || '--'}</strong></td>
                     <td><span class="badge ${statusClass}">${statusText}</span></td>
                     <td>${report.retry_count}/${report.max_retries}</td>
@@ -195,13 +208,13 @@
                     <td>${report.created_at || '--'}</td>
                     <td>${report.next_retry_time || '--'}</td>
                     <td>
-                        <button class="btn btn-sm btn-primary" onclick="retryReport('${report.report_id}')" title="重试">
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryReport('${report.report_id}')" title="重试">
                             <i class="fas fa-redo"></i>
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="showDetail('${report.report_id}')" title="详情">
+                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); window.location.href='/report-status/${report.report_id}/view'" title="详情">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteReport('${report.report_id}')" title="删除">
+                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteReport('${report.report_id}')" title="删除">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -237,6 +250,12 @@
         if (!text) return '--';
         if (text.length <= maxLength) return text;
         return text.substring(0, maxLength) + '...';
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text ?? '';
+        return div.innerHTML;
     }
 
     // 渲染分页
@@ -358,35 +377,117 @@
     // 显示详情
     async function showDetail(reportId) {
         try {
+            currentReportId = reportId;
+            setPanelState('report-detail-panel', 'loading', { message: '正在加载报告详情...' });
             const response = await fetch(`/api/report-retry/${reportId}`);
             const result = await response.json();
 
             if (result.success) {
-                document.getElementById('detail-content').textContent =
-                    JSON.stringify(result.data, null, 2);
-                document.getElementById('detail-modal').style.display = 'flex';
+                renderReportDetail(result.data);
+                loadReports(currentPage);
             } else {
+                setPanelState('report-detail-panel', 'error', {
+                    message: '获取报告详情失败，请稍后重试。',
+                    retryJs: `showDetail('${reportId}')`
+                });
                 showMessage('获取详情失败', 'error');
             }
         } catch (error) {
+            setPanelState('report-detail-panel', 'error', {
+                message: '报告详情加载失败，请稍后重试。',
+                retryJs: `showDetail('${reportId}')`
+            });
             showMessage('请求失败', 'error');
         }
     }
 
-    // 关闭模态框
-    function closeModal() {
-        document.getElementById('detail-modal').style.display = 'none';
-    }
+    function renderReportDetail(report) {
+        document.getElementById('detail-hint').textContent = report.report_id || '详情';
 
-    // 点击模态框外部关闭
-    document.getElementById('detail-modal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeModal();
-        }
-    });
+        const metadata = report.metadata || {};
+        const taskInfo = report.task_info || {};
+        const reportData = report.report_data || {};
+        const attempts = report.attempts || [];
+
+        document.getElementById('report-detail-panel').className = 'report-detail-panel';
+        document.getElementById('report-detail-panel').innerHTML = `
+            <div class="detail-summary-grid">
+                <div class="detail-summary-card">
+                    <div class="detail-label">任务编号</div>
+                    <div class="detail-value">${escapeHtml(report.task_no || '--')}</div>
+                </div>
+                <div class="detail-summary-card">
+                    <div class="detail-label">状态</div>
+                    <div class="detail-value">
+                        <span class="badge ${getStatusClass(report.status)}">${getStatusText(report.status)}</span>
+                    </div>
+                </div>
+                <div class="detail-summary-card">
+                    <div class="detail-label">重试次数</div>
+                    <div class="detail-value">${report.retry_count || 0}/${report.max_retries || 0}</div>
+                </div>
+                <div class="detail-summary-card">
+                    <div class="detail-label">工具类型</div>
+                    <div class="detail-value">${escapeHtml(metadata.tool_type || metadata.toolType || '--')}</div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>任务与上报摘要</h4>
+                <div class="detail-info-grid">
+                    <div><span class="detail-label">任务名称</span><span class="detail-inline-value">${escapeHtml(metadata.task_name || metadata.taskName || reportData.taskName || '--')}</span></div>
+                    <div><span class="detail-label">项目编号</span><span class="detail-inline-value">${escapeHtml(metadata.project_no || metadata.projectNo || taskInfo.projectNo || '--')}</span></div>
+                    <div><span class="detail-label">设备</span><span class="detail-inline-value">${escapeHtml(metadata.device_id || metadata.deviceId || taskInfo.deviceId || '--')}</span></div>
+                    <div><span class="detail-label">Endpoint</span><span class="detail-inline-value">${escapeHtml(metadata.endpoint || '--')}</span></div>
+                    <div><span class="detail-label">创建时间</span><span class="detail-inline-value">${escapeHtml(report.created_at || '--')}</span></div>
+                    <div><span class="detail-label">下次重试</span><span class="detail-inline-value">${escapeHtml(report.next_retry_time || '--')}</span></div>
+                    <div class="span-2"><span class="detail-label">最近失败原因</span><span class="detail-inline-value error-text">${escapeHtml(report.last_error || metadata.failure_reason || '--')}</span></div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>attempt-history</h4>
+                ${attempts.length ? `
+                <table class="data-table attempt-history-table" id="attempt-history">
+                    <thead>
+                        <tr>
+                            <th>次数</th>
+                            <th>时间</th>
+                            <th>状态</th>
+                            <th>endpoint</th>
+                            <th>错误</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${attempts.map(attempt => `
+                        <tr>
+                            <td>${attempt.attempt_number || '--'}</td>
+                            <td>${escapeHtml(attempt.attempted_at || '--')}</td>
+                            <td><span class="badge ${getStatusClass(attempt.status)}">${getStatusText(attempt.status)}</span></td>
+                            <td title="${escapeHtml(attempt.endpoint || '--')}">${truncate(attempt.endpoint, 24)}</td>
+                            <td title="${escapeHtml(attempt.error_message || '--')}">${truncate(attempt.error_message, 28)}</td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ` : '<div id="attempt-history" class="inline-empty">还没有结构化重试历史。</div>'}
+            </div>
+
+            <div class="detail-section">
+                <h4>原始上报视图</h4>
+                <pre class="detail-json">${escapeHtml(JSON.stringify(reportData, null, 2))}</pre>
+            </div>
+        `;
+    }
 
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('report-status-feedback', 'loading', { message: '正在加载上报统计...' });
+        setPanelState('reports-table-feedback', 'loading', { message: '正在加载失败报告列表...' });
+        setPanelState('report-detail-panel', 'empty', {
+            title: '选择一条失败报告',
+            message: '左侧列表选中记录后，这里会显示任务摘要、上报元数据和重试历史。'
+        });
         loadStatus();
         loadReports();
 
@@ -400,6 +501,13 @@
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
+    }
+
+    .report-layout {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 16px;
+        align-items: start;
     }
 
     .filter-group {
@@ -436,6 +544,10 @@
 
     .data-table tbody tr:hover {
         background: rgba(255, 255, 255, 0.05);
+    }
+
+    .data-table tbody tr.is-selected {
+        background: rgba(23, 162, 184, 0.12);
     }
 
     .empty-state {
@@ -478,51 +590,105 @@
         justify-content: center;
     }
 
-    .modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+    .report-detail-empty {
+        min-height: 240px;
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 1000;
-    }
-
-    .modal-content {
-        background: var(--card-bg);
-        border-radius: 8px;
-        width: 90%;
-        max-height: 80vh;
-        overflow: auto;
-    }
-
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px 20px;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .modal-header h3 {
-        margin: 0;
-    }
-
-    .modal-close {
-        font-size: 24px;
-        cursor: pointer;
         color: var(--text-secondary);
+        text-align: center;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px dashed var(--border-color);
+        border-radius: 10px;
+        padding: 24px;
     }
 
-    .modal-close:hover {
+    .report-detail-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .detail-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .detail-summary-card,
+    .detail-section {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 16px;
+    }
+
+    .detail-section h4 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+    }
+
+    .detail-label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+
+    .detail-value {
+        font-size: 20px;
+        font-weight: 600;
+    }
+
+    .detail-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .detail-inline-value {
+        display: block;
+        font-size: 14px;
         color: var(--text-primary);
     }
 
-    .modal-body {
-        padding: 20px;
+    .span-2 {
+        grid-column: span 2;
+    }
+
+    .error-text {
+        color: #dc3545;
+    }
+
+    .attempt-history-table {
+        font-size: 12px;
+    }
+
+    .detail-json {
+        margin: 0;
+        padding: 14px;
+        background: var(--bg-primary);
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 240px;
+        font-size: 12px;
+    }
+
+    .inline-empty {
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+
+    @media (max-width: 1280px) {
+        .report-layout,
+        .detail-summary-grid,
+        .detail-info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .span-2 {
+            grid-column: auto;
+        }
     }
 </style>
 {% endblock %}

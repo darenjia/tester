@@ -61,6 +61,49 @@
     </div>
 </div>
 
+<!-- 运行就绪度 -->
+<div class="content-card">
+    <div class="content-card-header">
+        <span class="content-card-title">运行就绪度</span>
+        <span id="runtime-overview-status" class="badge badge-secondary">检查中</span>
+    </div>
+    <div class="content-card-body">
+        <div id="runtime-overview-feedback"></div>
+        <div class="resource-grid" style="margin-bottom: 16px;">
+            <div class="resource-item">
+                <div id="preflight-overview-value" class="resource-value">--</div>
+                <div class="resource-label">Preflight</div>
+            </div>
+            <div class="resource-item">
+                <div id="diagnose-overview-value" class="resource-value">--</div>
+                <div class="resource-label">Diagnose</div>
+            </div>
+            <div class="resource-item">
+                <div id="failed-report-queue-value" class="resource-value">--</div>
+                <div class="resource-label">失败报告队列</div>
+            </div>
+            <div class="resource-item">
+                <div id="runtime-tool-ready-value" class="resource-value">--</div>
+                <div class="resource-label">可用工具</div>
+            </div>
+        </div>
+        <div id="runtime-overview-message" style="margin-bottom: 16px; color: var(--text-secondary);">
+            正在汇总运行就绪信息...
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="/system-check" class="btn btn-primary">
+                <i class="fas fa-stethoscope"></i> 打开运行诊断
+            </a>
+            <a href="/report-status" class="btn btn-secondary">
+                <i class="fas fa-exclamation-triangle"></i> 打开失败报告
+            </a>
+            <a href="/tasks" class="btn btn-secondary">
+                <i class="fas fa-tasks"></i> 打开任务列表
+            </a>
+        </div>
+    </div>
+</div>
+
 <!-- 当前任务详情 -->
 <div class="content-card">
     <div class="content-card-header">
@@ -68,14 +111,7 @@
         <span id="task-badge" class="badge" style="display: none;"></span>
     </div>
     <div class="content-card-body">
-        <div id="task-details">
-            <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-clipboard-list"></i>
-                </div>
-                <div class="empty-state-text">当前没有正在执行的任务</div>
-            </div>
-        </div>
+        <div id="task-details"><div data-ui-state="loading"></div></div>
     </div>
 </div>
 
@@ -325,14 +361,7 @@
         } else {
             indicator.className = 'status-indicator idle';
             desc.textContent = '等待任务下发';
-            details.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                        <i class="fas fa-clipboard-list"></i>
-                    </div>
-                    <div class="empty-state-text">当前没有正在执行的任务</div>
-                </div>
-            `;
+            details.innerHTML = renderEmptyState('当前没有正在执行的任务', '任务执行后，这里会展示实时摘要和进度。');
         }
     }
     
@@ -433,6 +462,80 @@
         }
     }
 
+    function updateRuntimeOverview(runtimeOps) {
+        if (!runtimeOps) return;
+
+        const preflightStatus = normalizeRuntimeStatus(runtimeOps.preflight?.status);
+        const diagnoseStatus = normalizeRuntimeStatus(runtimeOps.diagnose?.status);
+        const services = runtimeOps.diagnose?.services || {};
+        const software = runtimeOps.diagnose?.software || {};
+        const failedQueue = (services.failed_reports?.pending || 0) + (services.failed_reports?.failed || 0);
+        const toolReadyCount = Object.values(software).filter(item => item && item.ready).length;
+        const overall = resolveRuntimeOverviewStatus(preflightStatus, diagnoseStatus);
+
+        const badge = document.getElementById('runtime-overview-status');
+        if (badge) {
+            badge.className = `badge ${badgeClassForRuntimeStatus(overall)}`;
+            badge.textContent = runtimeStatusLabel(overall);
+        }
+
+        const preflightValue = document.getElementById('preflight-overview-value');
+        const diagnoseValue = document.getElementById('diagnose-overview-value');
+        const failedQueueValue = document.getElementById('failed-report-queue-value');
+        const toolReadyValue = document.getElementById('runtime-tool-ready-value');
+        const message = document.getElementById('runtime-overview-message');
+
+        if (preflightValue) preflightValue.textContent = runtimeStatusLabel(preflightStatus);
+        if (diagnoseValue) diagnoseValue.textContent = runtimeStatusLabel(diagnoseStatus);
+        if (failedQueueValue) failedQueueValue.textContent = String(failedQueue);
+        if (toolReadyValue) toolReadyValue.textContent = String(toolReadyCount);
+        if (message) {
+            message.textContent = overall === 'blocked'
+                ? '当前存在阻塞项，建议先进入运行诊断页处理后再继续接任务。'
+                : overall === 'warning'
+                    ? '系统可运行，但有风险项需要尽快处理，重点关注失败报告和服务状态。'
+                    : '当前整体就绪，可从这里快速进入运行诊断、失败报告和任务列表。';
+        }
+    }
+
+    function normalizeRuntimeStatus(status) {
+        const value = String(status || 'unknown').toLowerCase();
+        if (['ready', 'warning', 'blocked', 'online', 'success', 'failed', 'offline'].includes(value)) {
+            return value;
+        }
+        return 'unknown';
+    }
+
+    function resolveRuntimeOverviewStatus(preflightStatus, diagnoseStatus) {
+        const values = [preflightStatus, diagnoseStatus];
+        if (values.includes('blocked') || values.includes('failed') || values.includes('offline')) return 'blocked';
+        if (values.includes('warning')) return 'warning';
+        if (values.includes('ready') || values.includes('online') || values.includes('success')) return 'ready';
+        return 'unknown';
+    }
+
+    function badgeClassForRuntimeStatus(status) {
+        return {
+            ready: '',
+            warning: 'badge-warning',
+            blocked: 'badge-danger',
+            unknown: 'badge-secondary'
+        }[status] || 'badge-secondary';
+    }
+
+    function runtimeStatusLabel(status) {
+        return {
+            ready: 'ready',
+            warning: 'warning',
+            blocked: 'blocked',
+            online: '在线',
+            success: '成功',
+            failed: '失败',
+            offline: '离线',
+            unknown: '未知'
+        }[status] || status || '未知';
+    }
+
     // 更新配置缓存状态
     function updateCacheStatus(cacheData) {
         if (!cacheData) return;
@@ -476,6 +579,10 @@
                 if (data.report) {
                     updateReportStatus(data.report);
                 }
+                if (data.runtime_operations) {
+                    updateRuntimeOverview(data.runtime_operations);
+                }
+                clearPanelState('runtime-overview-feedback');
             }
 
             // 获取上报队列状态（独立请求，也有超时保护）
@@ -487,6 +594,10 @@
             } else {
                 console.error('加载Dashboard状态失败:', error);
             }
+            setPanelState('runtime-overview-feedback', 'error', {
+                message: '运行就绪度摘要加载失败，请重试。',
+                retryJs: 'loadDashboardStatus()'
+            });
         }
     }
 
@@ -517,6 +628,14 @@
     
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('runtime-overview-feedback', 'loading', {
+            message: '正在汇总运行就绪度...',
+            variant: 'compact'
+        });
+        setPanelState('task-details', 'loading', {
+            message: '正在加载当前任务摘要...'
+        });
+
         // 页面加载时，HTTP 服务肯定是正常的（因为页面能加载）
         // 所以先设置为运行中
         updateHttpStatus(true);
