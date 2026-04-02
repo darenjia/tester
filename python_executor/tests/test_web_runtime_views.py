@@ -67,6 +67,8 @@ def test_system_check_page_exposes_runtime_and_detailed_views():
     assert "runtime-services-grid" in html
     assert "可观测链路" in html
     assert "failed-report-traceability" in html
+    assert "trace-lookup-link" in html
+    assert "/api/trace/query" in html
 
 
 def test_report_status_page_exposes_list_and_detail_views():
@@ -100,6 +102,9 @@ def test_report_detail_page_exposes_report_and_attempt_sections():
     assert "error_category" in html
     assert "report-detail-root" in html
     assert "data-ui-state" in html
+    assert "view-trace-action" in html
+    assert "report-trace-query-panel" in html
+    assert "/api/trace/query" in html
 
 
 def test_dashboard_page_exposes_runtime_overview_links():
@@ -151,6 +156,9 @@ def test_task_detail_page_exposes_standalone_runtime_sections():
     assert "trace_id" in html
     assert "task-detail-root" in html
     assert "data-ui-state" in html
+    assert "view-trace-action" in html
+    assert "task-trace-query-panel" in html
+    assert "/api/trace/query" in html
 
 
 def test_logs_page_exposes_runtime_summary_and_log_stream():
@@ -166,6 +174,11 @@ def test_logs_page_exposes_runtime_summary_and_log_stream():
     assert "运行摘要" in html
     assert "scheduler-status" in html
     assert "logs-container" in html
+    assert "log-query-mode" in html
+    assert "trace_id" in html
+    assert "attempt_id" in html
+    assert "task_no" in html
+    assert "/api/trace/query" in html
 
 
 def test_settings_page_exposes_overview_and_configuration_sections():

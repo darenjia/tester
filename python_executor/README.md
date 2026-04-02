@@ -151,6 +151,7 @@ python app.py
 - `/health`：返回服务健康状态和业务健康摘要，例如当前排队数、活跃任务数、最近失败任务数
 - `/status`：返回运行状态、当前任务信息和业务摘要
 - `/metrics`：返回原始指标、性能报告和业务执行摘要
+- `/api/trace/query`：统一链路检索入口，支持按 `trace_id`、`attempt_id`、`task_no`、`report_id` 查询执行与补报关联上下文
 - `/api/runtime/preflight`：返回发布前自检结果，状态分为 `ready / warning / blocked`
 - `/api/runtime/diagnose`：返回运行时诊断摘要，聚合服务、队列、失败报告和业务指标
 - `/api/runtime/housekeeping`：执行低风险运维清理，补齐关键目录并清理过期失败报告
@@ -170,8 +171,14 @@ python app.py
 - `/report-status/<report_id>/view`：独立失败报告详情页，聚合 `ExecutionOutcome` 摘要、attempt-history 和原始 payload
 - `/tasks`：任务详情统一为摘要、执行、结果、日志、诊断五层结构，列表入口默认跳转独立详情页
 - `/tasks/<task_id>/view`：独立任务详情页，统一展示时间线、测试结果、最近日志、诊断上下文和报告重试上下文
-- `/logs`：运行日志页已升级为“日志流 + 运行摘要 + 联动入口”，会同步展示 scheduler / executor 状态
+- `/logs`：运行日志页已升级为“日志流 + 运行摘要 + 联动入口”，会同步展示 scheduler / executor 状态，并支持按 `trace_id / attempt_id / task_no` 切换查询模式
 - `/settings`：设置页顶部新增运行总览层，先展示 preflight、diagnose、上报链路和缓存状态，再进入具体配置分区
+
+可观测链路检索：
+
+- `TraceQueryService` 负责聚合内存日志、失败报告、任务运行时摘要和运行诊断里的 observability 上下文
+- `task_detail`、`report_detail`、`system-check`、`logs` 现在都已经接入统一的 trace 查询入口
+- 页面不再各自拼 task/report/log 关联关系，而是统一复用 `/api/trace/query`
 
 ## 开发文档
 

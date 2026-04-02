@@ -23,6 +23,7 @@ from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp  # TDM2.0 任务接口
 from api.system_check_api import system_check_bp
 from api.report_retry_api import report_retry_bp  # 报告重试API
+from api.trace_query_api import trace_query_bp
 
 
 def initialize_retry_system():
@@ -93,6 +94,7 @@ def create_app() -> Flask:
     app.register_blueprint(case_mapping_bp)
     app.register_blueprint(api_bp)  # TDM2.0 任务接口
     app.register_blueprint(system_check_bp)
+    app.register_blueprint(trace_query_bp)
 
     # 初始化检测项（导入触发注册）
     from api.system_check_api import register_system_check_api

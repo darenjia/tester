@@ -1205,9 +1205,26 @@ function renderFailedReportTraceability(summary) {
                     trace_id=${escapeHtml(item.trace_id || '--')} · attempt_id=${escapeHtml(item.attempt_id || '--')} · error_category=${escapeHtml(item.error_category || '--')}
                 </div>
             </div>
-            <span class="status-chip ${normalizeStatusClass(item.status || 'unknown')}">${escapeHtml(labelForRuntimeStatus(item.status || 'unknown'))}</span>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <a
+                    class="btn btn-secondary btn-sm trace-lookup-link"
+                    href="${buildTraceLookupHref(item)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    <i class="fas fa-route"></i> 查看链路
+                </a>
+                <span class="status-chip ${normalizeStatusClass(item.status || 'unknown')}">${escapeHtml(labelForRuntimeStatus(item.status || 'unknown'))}</span>
+            </div>
         </div>
     `).join('');
+}
+
+function buildTraceLookupHref(item) {
+    if (item.trace_id) return `/api/trace/query?trace_id=${encodeURIComponent(item.trace_id)}`;
+    if (item.attempt_id) return `/api/trace/query?attempt_id=${encodeURIComponent(item.attempt_id)}`;
+    if (item.report_id) return `/api/trace/query?report_id=${encodeURIComponent(item.report_id)}`;
+    return `/api/trace/query?task_no=${encodeURIComponent(item.task_no || '')}`;
 }
 
 async function runHousekeeping() {

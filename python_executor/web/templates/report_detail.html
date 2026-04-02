@@ -238,6 +238,11 @@
         const attemptId = report.attempt_id || metadata.attempt_id || metadata.attemptId || latestAttempt?.attempt_id || '--';
         const errorCategory = report.error_category || metadata.error_category || metadata.errorCategory || latestAttempt?.error_category || '--';
         const reportErrorCategory = report.report_error_category || metadata.report_error_category || metadata.reportErrorCategory || '--';
+        window.__reportTraceQuery__ = {
+            trace_id: traceId !== '--' ? traceId : '',
+            attempt_id: attemptId !== '--' ? attemptId : '',
+            report_id: report.report_id || reportId
+        };
 
         document.getElementById('report-detail-root').innerHTML = `
             <div class="hero">
@@ -252,6 +257,9 @@
                         </div>
                     </div>
                     <div>
+                        <button class="btn btn-primary" id="view-trace-action" onclick="loadReportTraceQuery()">
+                            <i class="fas fa-route"></i> 查看链路
+                        </button>
                         <button class="btn btn-secondary" onclick="window.location.href='/report-status'">
                             <i class="fas fa-arrow-left"></i> 返回上报管理
                         </button>
@@ -332,6 +340,17 @@
                     </div>
                 </div>
             </div>
+
+            <div class="content-card">
+                <div class="content-card-header">
+                    <span class="content-card-title">链路检索</span>
+                </div>
+                <div class="content-card-body">
+                    <div id="report-trace-query-panel" data-trace-query-panel="report">
+                        ${renderEmptyState('尚未查询链路', '点击“查看链路”后，这里会展示与失败报告相关的 task / attempt / trace 关联。')}
+                    </div>
+                </div>
+            </div>
         `;
     }
 
@@ -391,6 +410,81 @@
 
     function statusClass(status) {
         return ['pending', 'failed', 'success', 'retrying'].includes(status) ? status : 'default';
+    }
+
+    async function loadReportTraceQuery() {
+        const panelId = 'report-trace-query-panel';
+        const query = window.__reportTraceQuery__ || {};
+        const queryUrl = query.trace_id
+            ? `/api/trace/query?trace_id=${encodeURIComponent(query.trace_id)}`
+            : `/api/trace/query?report_id=${encodeURIComponent(query.report_id || reportId)}`;
+
+        setPanelState(panelId, 'loading', {
+            message: '正在加载链路检索结果...',
+            variant: 'compact'
+        });
+
+        try {
+            const response = await fetch(queryUrl);
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error?.message || result.message || '链路检索失败');
+            }
+            renderTraceQueryPanel(panelId, result.data || {});
+        } catch (error) {
+            setPanelState(panelId, 'error', {
+                message: `链路检索失败：${escapeHtml(error.message)}`,
+                retryJs: 'loadReportTraceQuery()'
+            });
+        }
+    }
+
+    function renderTraceQueryPanel(panelId, traceResult) {
+        const panel = document.getElementById(panelId);
+        const meta = traceResult.meta || {};
+        const events = traceResult.events || [];
+        clearPanelState(panelId);
+        panel.innerHTML = `
+            <div class="info-grid">
+                ${infoCard('query_type', meta.lookup?.field || '--')}
+                ${infoCard('trace_id', meta.trace_id || '--')}
+                ${infoCard('attempt_id', meta.attempt_id || '--')}
+                ${infoCard('report_id', meta.report_id || '--')}
+                ${infoCard('result_type', meta.result_type || '--')}
+                ${infoCard('matched_sources', (meta.matched_sources || []).join(', ') || '--')}
+            </div>
+            <h4 style="margin:16px 0 10px">链路事件</h4>
+            ${renderTraceEvents(events)}
+        `;
+    }
+
+    function renderTraceEvents(events) {
+        if (!events.length) {
+            return renderEmptyState('暂无链路事件', '当前查询没有返回可展示的结构化事件。');
+        }
+
+        return `
+            <table class="attempt-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>事件</th>
+                        <th>来源</th>
+                        <th>消息</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${events.map(event => `
+                        <tr>
+                            <td>${escapeHtml(event.timestamp || '--')}</td>
+                            <td>${escapeHtml(event.name || event.event || '--')}</td>
+                            <td>${escapeHtml(event.source || '--')}</td>
+                            <td>${escapeHtml(event.message || '--')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
     }
 
     function escapeHtml(text) {

@@ -77,6 +77,12 @@
                     </div>
 
                     <div class="logs-filter logs-search-group">
+                        <select class="form-select" id="log-query-mode" onchange="updateLogSearchHint(); loadLogs()">
+                            <option value="text">文本搜索</option>
+                            <option value="trace_id">trace_id</option>
+                            <option value="attempt_id">attempt_id</option>
+                            <option value="task_no">task_no</option>
+                        </select>
                         <input type="text" class="form-input" id="log-search" placeholder="搜索日志内容..."
                                onkeyup="if(event.key==='Enter') loadLogs()">
                         <button class="btn btn-sm btn-secondary" onclick="loadLogs()">
@@ -251,9 +257,23 @@
 
     function updateFilterSummary() {
         const level = document.getElementById('log-level-filter').value || '全部';
+        const mode = document.getElementById('log-query-mode')?.value || 'text';
         const search = document.getElementById('log-search').value.trim() || '无';
         document.getElementById('active-filter-level').textContent = level;
-        document.getElementById('active-filter-search').textContent = search;
+        document.getElementById('active-filter-search').textContent = mode === 'text' ? search : `${mode}: ${search}`;
+    }
+
+    function updateLogSearchHint() {
+        const mode = document.getElementById('log-query-mode')?.value || 'text';
+        const search = document.getElementById('log-search');
+        if (!search) return;
+        const placeholders = {
+            text: '搜索日志内容...',
+            trace_id: '输入 trace_id...',
+            attempt_id: '输入 attempt_id...',
+            task_no: '输入 task_no...'
+        };
+        search.placeholder = placeholders[mode] || placeholders.text;
     }
 
     function statusClass(status) {
@@ -298,32 +318,45 @@
         updateFilterSummary();
         try {
             const level = document.getElementById('log-level-filter').value;
+            const mode = document.getElementById('log-query-mode').value || 'text';
             const search = document.getElementById('log-search').value;
 
-            let url = '/api/logs?limit=500';
-            if (level) url += `&level=${level}`;
-            if (search) url += `&search=${encodeURIComponent(search)}`;
+            if (mode !== 'text' && search.trim()) {
+                const traceResponse = await fetch(`/api/trace/query?${mode}=${encodeURIComponent(search.trim())}`);
+                const traceResult = await traceResponse.json();
+                if (!traceResult.success) {
+                    throw new Error(traceResult.error?.message || traceResult.message || '链路检索失败');
+                }
 
-            const response = await fetch(url);
-            const result = await response.json();
-            if (!result.success) {
-                showMessage('加载日志失败: ' + result.message, 'error');
-                return;
+                displayTraceQueryResult(traceResult.data || {});
+                document.getElementById('log-count').textContent = (traceResult.data?.events || []).length;
+                document.getElementById('error-count').textContent = (traceResult.data?.events || []).filter(event => (event.level || '').toUpperCase() === 'ERROR').length;
+            } else {
+                let url = '/api/logs?limit=500';
+                if (level) url += `&level=${level}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+
+                const response = await fetch(url);
+                const result = await response.json();
+                if (!result.success) {
+                    showMessage('加载日志失败: ' + result.message, 'error');
+                    return;
+                }
+
+                let logs = [];
+                let total = 0;
+                if (Array.isArray(result.data)) {
+                    logs = result.data;
+                    total = result.total || logs.length;
+                } else if (result.data && result.data.logs) {
+                    logs = result.data.logs;
+                    total = result.data.pagination?.total || logs.length;
+                }
+
+                displayLogs(logs);
+                document.getElementById('log-count').textContent = total;
+                document.getElementById('error-count').textContent = logs.filter(log => log.level === 'ERROR').length;
             }
-
-            let logs = [];
-            let total = 0;
-            if (Array.isArray(result.data)) {
-                logs = result.data;
-                total = result.total || logs.length;
-            } else if (result.data && result.data.logs) {
-                logs = result.data.logs;
-                total = result.data.pagination?.total || logs.length;
-            }
-
-            displayLogs(logs);
-            document.getElementById('log-count').textContent = total;
-            document.getElementById('error-count').textContent = logs.filter(log => log.level === 'ERROR').length;
         } catch (error) {
             console.error('加载日志失败:', error);
             setPanelState('logs-container', 'error', {
@@ -349,6 +382,32 @@
             </div>
         `).join('');
         scrollToBottom();
+    }
+
+    function displayTraceQueryResult(traceResult) {
+        const container = document.getElementById('logs-container');
+        const meta = traceResult.meta || {};
+        const events = traceResult.events || [];
+        if (!events.length) {
+            container.innerHTML = renderEmptyState('暂无链路事件', '当前 trace 查询没有返回结构化日志事件。');
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="info-grid" style="margin-bottom: 16px;">
+                <div class="info-card"><div class="info-label">query_type</div><div class="info-value">${escapeHtml(meta.lookup?.field || '--')}</div></div>
+                <div class="info-card"><div class="info-label">trace_id</div><div class="info-value">${escapeHtml(meta.trace_id || '--')}</div></div>
+                <div class="info-card"><div class="info-label">attempt_id</div><div class="info-value">${escapeHtml(meta.attempt_id || '--')}</div></div>
+                <div class="info-card"><div class="info-label">report_id</div><div class="info-value">${escapeHtml(meta.report_id || '--')}</div></div>
+            </div>
+            ${events.map(event => `
+                <div class="log-entry trace-query-result">
+                    <span class="log-time">${escapeHtml(event.timestamp || '-')}</span>
+                    <span class="log-level ${escapeHtml((event.level || event.source || 'INFO').toUpperCase())}">${escapeHtml(event.name || event.event || event.source || 'trace')}</span>
+                    <span class="log-message">${escapeHtml(event.message || '--')}</span>
+                </div>
+            `).join('')}
+        `;
     }
 
     function escapeHtml(text) {
@@ -396,6 +455,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         setPanelState('logs-container', 'loading', { message: '正在加载实时日志...' });
+        updateLogSearchHint();
         loadLogs();
         loadServiceSummary();
         refreshInterval = setInterval(function() {

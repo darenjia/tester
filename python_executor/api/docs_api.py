@@ -285,6 +285,27 @@ API_ENDPOINTS = {
                 }
             }
         }
+    },
+    "/api/trace/query": {
+        "GET": {
+            "summary": "查询 Trace 详情",
+            "description": "通过 trace_id、attempt_id、task_no 或 report_id 中的一个定位统一 trace 结果",
+            "params": {
+                "trace_id": {"type": "string", "required": False, "description": "Trace 标识"},
+                "attempt_id": {"type": "string", "required": False, "description": "尝试标识"},
+                "task_no": {"type": "string", "required": False, "description": "任务编号"},
+                "report_id": {"type": "string", "required": False, "description": "报告编号"}
+            },
+            "response_example": {
+                "success": True,
+                "data": {
+                    "meta": {
+                        "lookup": {"field": "task_no", "value": "TASK-001"},
+                        "result_type": "full"
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -402,6 +423,8 @@ def get_category(path: str) -> str:
     elif "/config" in path:
         return "配置管理"
     elif "/services" in path or "/system" in path:
+        return "系统服务"
+    elif "/trace" in path:
         return "系统服务"
     elif "/logs" in path:
         return "日志管理"

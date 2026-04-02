@@ -315,6 +315,8 @@
         const attempts = task.metadata?.report_attempts || task.metadata?.attempts || [];
         const recentLogs = task.recent_logs || [];
         const observability = extractTaskObservability(task, attempts);
+        root.dataset.traceId = observability.traceId !== '--' ? observability.traceId : '';
+        root.dataset.attemptId = observability.attemptId !== '--' ? observability.attemptId : '';
 
         root.innerHTML = `
             <div class="detail-hero">
@@ -334,6 +336,9 @@
                         </div>
                     </div>
                     <div style="text-align:right;">
+                        <button class="btn btn-primary" id="view-trace-action" onclick="loadTaskTraceQuery()">
+                            <i class="fas fa-route"></i> 查看链路
+                        </button>
                         <button class="btn btn-secondary" onclick="window.location.href='/tasks'">
                             <i class="fas fa-arrow-left"></i> 返回任务列表
                         </button>
@@ -442,6 +447,17 @@
                     </div>
                 </div>
             </div>
+
+            <div class="content-card">
+                <div class="content-card-header">
+                    <span class="content-card-title">链路检索</span>
+                </div>
+                <div class="content-card-body">
+                    <div id="task-trace-query-panel" data-trace-query-panel="task">
+                        ${renderEmptyState('尚未查询链路', '点击“查看链路”后，这里会汇总 trace_id / attempt_id / report_id 关联结果。')}
+                    </div>
+                </div>
+            </div>
         `;
     }
 
@@ -528,6 +544,93 @@
             errorCategory: metadata.error_category || metadata.errorCategory || task.error_category || '--',
             executionErrorCategory: metadata.execution_error_category || metadata.executionErrorCategory || task.execution_error_category || '--'
         };
+    }
+
+    function buildTaskTraceLookup(taskIdValue, observability) {
+        const traceId = observability.traceId && observability.traceId !== '--' ? observability.traceId : null;
+        const attemptId = observability.attemptId && observability.attemptId !== '--' ? observability.attemptId : null;
+        if (traceId) return `/api/trace/query?trace_id=${encodeURIComponent(traceId)}`;
+        if (attemptId) return `/api/trace/query?attempt_id=${encodeURIComponent(attemptId)}`;
+        return `/api/trace/query?task_no=${encodeURIComponent(taskIdValue)}`;
+    }
+
+    async function loadTaskTraceQuery() {
+        const panelId = 'task-trace-query-panel';
+        const traceId = document.getElementById('task-detail-root')?.dataset?.traceId || '';
+        const attemptId = document.getElementById('task-detail-root')?.dataset?.attemptId || '';
+        const fallbackTaskId = taskId;
+        const queryUrl = traceId
+            ? `/api/trace/query?trace_id=${encodeURIComponent(traceId)}`
+            : (attemptId
+                ? `/api/trace/query?attempt_id=${encodeURIComponent(attemptId)}`
+                : `/api/trace/query?task_no=${encodeURIComponent(fallbackTaskId)}`);
+
+        setPanelState(panelId, 'loading', {
+            message: '正在加载链路检索结果...',
+            variant: 'compact'
+        });
+
+        try {
+            const response = await fetch(queryUrl);
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error?.message || result.message || '链路检索失败');
+            }
+            renderTraceQueryPanel(panelId, result.data || {});
+        } catch (error) {
+            setPanelState(panelId, 'error', {
+                message: `链路检索失败：${escapeHtml(error.message)}`,
+                retryJs: 'loadTaskTraceQuery()'
+            });
+        }
+    }
+
+    function renderTraceQueryPanel(panelId, traceResult) {
+        const panel = document.getElementById(panelId);
+        const meta = traceResult.meta || {};
+        const events = traceResult.events || [];
+        clearPanelState(panelId);
+        panel.innerHTML = `
+            <div class="info-grid">
+                ${infoCard('query_type', meta.lookup?.field || '--')}
+                ${infoCard('trace_id', meta.trace_id || '--')}
+                ${infoCard('attempt_id', meta.attempt_id || '--')}
+                ${infoCard('report_id', meta.report_id || '--')}
+                ${infoCard('result_type', meta.result_type || '--')}
+                ${infoCard('matched_sources', (meta.matched_sources || []).join(', ') || '--')}
+            </div>
+            <h4 style="margin:16px 0 10px">链路事件</h4>
+            ${renderTraceEvents(events)}
+        `;
+    }
+
+    function renderTraceEvents(events) {
+        if (!events.length) {
+            return renderEmptyState('暂无链路事件', '当前查询没有返回可展示的结构化事件。');
+        }
+
+        return `
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>事件</th>
+                        <th>来源</th>
+                        <th>消息</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${events.map(event => `
+                        <tr>
+                            <td>${escapeHtml(event.timestamp || '--')}</td>
+                            <td>${escapeHtml(event.name || event.event || '--')}</td>
+                            <td>${escapeHtml(event.source || '--')}</td>
+                            <td>${escapeHtml(event.message || '--')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
     }
 
     function timelineItem(time, title, desc, state) {

@@ -50,6 +50,7 @@ from api.routes import api_bp
 from api.system_check_api import system_check_bp
 from api.report_retry_api import report_retry_bp
 from api.runtime_operations_api import runtime_ops_bp
+from api.trace_query_api import trace_query_bp
 
 print("正在设置日志...")
 setup_logging()
@@ -129,6 +130,7 @@ class PythonExecutorProduction:
         self.app.register_blueprint(system_check_bp)
         self.app.register_blueprint(report_retry_bp)
         self.app.register_blueprint(runtime_ops_bp)
+        self.app.register_blueprint(trace_query_bp)
         logger.info("API蓝图注册完成")
 
     def _setup_routes(self):
