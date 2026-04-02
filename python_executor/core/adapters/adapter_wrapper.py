@@ -1,7 +1,7 @@
 """
 适配器包装器
 
-兼容层只保留仍在主链路中使用的通用方法和 TSMaster 控制方法。
+兼容层只保留最小通用控制方法和 TSMaster 控制方法。
 CANoe 的配置驱动/系统变量 facade 已彻底移除，执行语义交给 strategy + capability。
 """
 from __future__ import annotations
@@ -62,23 +62,6 @@ class _CommonAdapterControl(_AdapterCapabilityBase):
     def start_simulation(self, timeout: int = None) -> bool:
         return self.adapter.start_test()
 
-    def get_signal(self, signal_name: str) -> Optional[float]:
-        result = self._invoke_supported(
-            "get_signal",
-            signal_name,
-            warn_message="适配器不支持get_signal方法",
-        )
-        return result if result is not None else None
-
-    def set_signal(self, signal_name: str, value: float) -> bool:
-        result = self._invoke_supported(
-            "set_signal",
-            signal_name,
-            value,
-            warn_message="适配器不支持set_signal方法",
-        )
-        return bool(result) if result is not None else False
-
     def run_test_module(self, test_name: str) -> Dict[str, Any]:
         result = self._invoke_supported("run_test_module", test_name)
         if result is not None:
@@ -88,7 +71,13 @@ class _CommonAdapterControl(_AdapterCapabilityBase):
         if result is not None:
             return result
 
-        return self.adapter.execute_test_item({"type": "test_module", "name": test_name})
+        self.logger.warning("适配器不支持TestModule兼容执行入口")
+        return {
+            "success": False,
+            "verdict": "ERROR",
+            "error": "适配器不支持TestModule兼容执行入口",
+            "module": test_name,
+        }
 
     def get_test_modules(self) -> List[str]:
         result = self._invoke_supported("get_test_modules")
@@ -107,8 +96,13 @@ class _CommonAdapterControl(_AdapterCapabilityBase):
         if result is not None:
             return result
 
-        item = {"type": "test_module", "name": module_name, "timeout": timeout}
-        return self.adapter.execute_test_item(item)
+        self.logger.warning("适配器不支持execute_test_module兼容入口")
+        return {
+            "success": False,
+            "verdict": "ERROR",
+            "error": "适配器不支持execute_test_module兼容入口",
+            "module": module_name,
+        }
 
 
 class _TSMasterExecutionControl(_AdapterCapabilityBase):
@@ -202,12 +196,6 @@ class AdapterWrapper:
 
     def start_simulation(self, timeout: int = None) -> bool:
         return self.common.start_simulation(timeout)
-
-    def get_signal(self, signal_name: str) -> Optional[float]:
-        return self.common.get_signal(signal_name)
-
-    def set_signal(self, signal_name: str, value: float) -> bool:
-        return self.common.set_signal(signal_name, value)
 
     def run_test_module(self, test_name: str) -> Dict[str, Any]:
         return self.common.run_test_module(test_name)

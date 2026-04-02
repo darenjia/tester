@@ -274,11 +274,16 @@ class TaskExecutorProduction:
         return "未知错误"
 
     def _controller_execute_test_module(self, module_name: str, timeout: int | None = None) -> Dict[str, Any]:
+        test_module_capability = None
+        if hasattr(self.controller, "get_capability"):
+            test_module_capability = self.controller.get_capability("test_module")
+        if test_module_capability is not None:
+            return test_module_capability.execute_module(module_name, timeout=timeout)
         if hasattr(self.controller, "execute_test_module_direct"):
             return self.controller.execute_test_module_direct(module_name, timeout)
         if hasattr(self.controller, "run_test_module"):
             return self.controller.run_test_module(module_name)
-        return self.controller.execute_test_item({"type": "test_module", "name": module_name, "timeout": timeout})
+        raise ToolException("当前适配器不支持TestModule执行")
     
     def start(self):
         """启动执行器"""

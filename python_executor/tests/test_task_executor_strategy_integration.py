@@ -256,3 +256,30 @@ def test_task_executor_no_longer_exposes_legacy_signal_execution_helpers():
     assert not hasattr(executor, "_controller_set_signal")
     assert not hasattr(executor, "_execute_test_items")
     assert not hasattr(executor, "_execute_single_item")
+
+
+def test_controller_execute_test_module_prefers_capability_and_never_falls_back_to_execute_test_item():
+    executor = TaskExecutorProduction(message_sender=lambda _: None)
+    calls = []
+
+    class _Capability:
+        @staticmethod
+        def execute_module(module_name, timeout=None):
+            calls.append((module_name, timeout))
+            return {"verdict": "PASS", "module": module_name, "timeout": timeout}
+
+    class _Controller:
+        def get_capability(self, name, default=None):
+            if name == "test_module":
+                return _Capability()
+            return default
+
+        def execute_test_item(self, item):
+            raise AssertionError("legacy execute_test_item fallback should not be used")
+
+    executor.controller = _Controller()
+
+    result = executor._controller_execute_test_module("SmokeModule", timeout=15)
+
+    assert result["module"] == "SmokeModule"
+    assert calls == [("SmokeModule", 15)]

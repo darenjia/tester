@@ -72,6 +72,8 @@ def test_adapter_wrapper_removes_canoe_config_driven_facade():
     assert not hasattr(wrapper, "start_test_case")
     assert not hasattr(wrapper, "check_test_case_complete")
     assert not hasattr(wrapper, "run_test_case_with_config")
+    assert not hasattr(wrapper, "get_signal")
+    assert not hasattr(wrapper, "set_signal")
 
 
 def test_adapter_wrapper_exposes_tsmaster_capabilities():
