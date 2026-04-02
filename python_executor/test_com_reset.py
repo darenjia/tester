@@ -15,6 +15,10 @@ import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
+pytestmark = pytest.mark.skip(reason="manual script; run directly instead of under pytest")
+
 # 配置日志
 logging.basicConfig(
     level=logging.DEBUG,

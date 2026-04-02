@@ -32,15 +32,15 @@ class TestExecutorApp:
     def start_server(self):
         """在后台线程启动 Flask 服务器"""
         try:
-            from werkzeug.serving import make_server
-            
+            from werkzeug.serving import make_server, ThreadedWSGIServer
+
             # 从配置获取端口
             config = get_config()
             self.server_port = config.get('http.port', 8180)
             host = config.get('http.host', '127.0.0.1')
-            
-            # 创建服务器
-            self.server = make_server(host, self.server_port, flask_app)
+
+            # 创建多线程服务器（Windows 上默认是单线程，需要显式指定）
+            self.server = make_server(host, self.server_port, flask_app, ThreadedWSGIServer)
             self.server_running = True
             
             # 初始化日志

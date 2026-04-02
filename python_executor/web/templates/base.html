@@ -9,6 +9,69 @@
     <title>{% block title %}测试执行器{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
+    <style>
+        .ui-state-block {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            min-height: 120px;
+            padding: 18px;
+            border-radius: 12px;
+            border: 1px dashed var(--border-color);
+            background: var(--bg-primary);
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .ui-state-block.compact {
+            min-height: 72px;
+            padding: 14px;
+        }
+
+        .ui-state-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .ui-state-message {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .ui-state-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .ui-skeleton {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ui-skeleton-line {
+            height: 12px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(226,232,240,0.9), rgba(241,245,249,0.96), rgba(226,232,240,0.9));
+            background-size: 200% 100%;
+            animation: ui-skeleton-shimmer 1.2s ease-in-out infinite;
+        }
+
+        .ui-skeleton-line.short { width: 38%; }
+        .ui-skeleton-line.medium { width: 62%; }
+        .ui-skeleton-line.long { width: 100%; }
+
+        @keyframes ui-skeleton-shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -51,10 +114,6 @@
                 <a href="/case-mapping" class="nav-item {% if active_page == 'case-mapping' %}active{% endif %}">
                     <i class="fas fa-link"></i>
                     <span>用例映射</span>
-                </a>
-                <a href="/report-config" class="nav-item {% if active_page == 'report-config' %}active{% endif %}">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <span>上报配置</span>
                 </a>
                 <a href="/report-status" class="nav-item {% if active_page == 'report-status' %}active{% endif %}">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -129,6 +188,79 @@
                 uptimeEl.textContent = `运行时间: ${uptime}`;
             }
         }
+
+        function renderLoadingState(message = '加载中...', variant = 'default') {
+            return `
+                <div class="ui-state-block ${variant === 'compact' ? 'compact' : ''}" data-ui-state="loading">
+                    <div class="ui-skeleton">
+                        <div class="ui-skeleton-line short"></div>
+                        <div class="ui-skeleton-line long"></div>
+                        <div class="ui-skeleton-line medium"></div>
+                    </div>
+                    <div class="ui-state-message">${message}</div>
+                </div>
+            `;
+        }
+
+        function renderErrorState(message = '加载失败', retryJs = '') {
+            const action = retryJs
+                ? `<div class="ui-state-actions"><button class="btn btn-secondary btn-sm" onclick="${retryJs}"><i class="fas fa-rotate"></i> 重新加载</button></div>`
+                : '';
+            return `
+                <div class="ui-state-block" data-ui-state="error">
+                    <div class="ui-state-title">数据暂时不可用</div>
+                    <div class="ui-state-message">${message}</div>
+                    ${action}
+                </div>
+            `;
+        }
+
+        function renderEmptyState(title = '暂无数据', message = '当前区域没有可展示内容。') {
+            return `
+                <div class="ui-state-block compact" data-ui-state="empty">
+                    <div class="ui-state-title">${title}</div>
+                    <div class="ui-state-message">${message}</div>
+                </div>
+            `;
+        }
+
+        function clearPanelState(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = '';
+        }
+
+        function setPanelState(containerId, state, options = {}) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            if (state === 'ready') {
+                clearPanelState(containerId);
+                return;
+            }
+
+            if (state === 'loading') {
+                container.innerHTML = renderLoadingState(options.message || '加载中...', options.variant || 'default');
+                return;
+            }
+
+            if (state === 'error') {
+                container.innerHTML = renderErrorState(options.message || '加载失败', options.retryJs || '');
+                return;
+            }
+
+            if (state === 'empty') {
+                container.innerHTML = renderEmptyState(options.title || '暂无数据', options.message || '当前区域没有可展示内容。');
+            }
+        }
+
+        window.uiStateHelpers = {
+            renderLoadingState,
+            renderErrorState,
+            renderEmptyState,
+            clearPanelState,
+            setPanelState
+        };
         
         // 获取状态
         async function fetchStatus() {

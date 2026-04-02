@@ -15,6 +15,7 @@ from .result import (
     StatusUpdate,
     Message,
     CaseResult,
+    ExecutionOutcome,
     ExecutionResult,
     TDM2Response
 )
@@ -40,6 +41,7 @@ __all__ = [
     'StatusUpdate',
     'Message',
     'CaseResult',
+    'ExecutionOutcome',
     'ExecutionResult',
     'TDM2Response',
     # CaseMapping模型

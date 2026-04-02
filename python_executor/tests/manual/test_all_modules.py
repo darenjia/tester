@@ -5,8 +5,13 @@ import os
 import sys
 import tempfile
 import shutil
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pytest
+
+pytestmark = pytest.mark.skip(reason="manual script; run directly instead of under pytest")
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils.logger import get_logger
 

@@ -54,17 +54,240 @@
     display: block;
 }
 
-/* 快速检测 */
-.quick-check-section {
+/* 运行诊断 */
+.runtime-ops-section {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-.check-actions {
+.runtime-hero {
+    background: linear-gradient(135deg, #133a5e 0%, #1f6aa5 55%, #6bb6ff 100%);
+    color: white;
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 18px 36px rgba(18, 58, 94, 0.18);
+}
+
+.runtime-hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.runtime-hero-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.runtime-hero-title {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 12px 0 8px;
+}
+
+.runtime-hero-message {
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 760px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.runtime-hero-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.runtime-meta-card {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.runtime-meta-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.runtime-meta-value {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 6px;
+}
+
+.runtime-actions {
     display: flex;
     gap: 12px;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+.runtime-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 16px;
+}
+
+.ops-panel {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.ops-panel h3 {
+    margin: 0 0 14px;
+    font-size: 16px;
+}
+
+.ops-status-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.ops-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ops-list-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+}
+
+.ops-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ops-item-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.ops-item-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.runtime-services {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.runtime-service-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.runtime-service-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.runtime-service-name {
+    font-weight: 600;
+}
+
+.runtime-service-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.runtime-guidance {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.guidance-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+}
+
+.guidance-list li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.inline-note {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-chip.ready,
+.status-chip.online,
+.status-chip.passed,
+.status-chip.success {
+    background: rgba(76, 175, 80, 0.12);
+    color: var(--success-color);
+}
+
+.status-chip.warning {
+    background: rgba(255, 152, 0, 0.12);
+    color: var(--warning-color);
+}
+
+.status-chip.blocked,
+.status-chip.failed,
+.status-chip.offline {
+    background: rgba(244, 67, 54, 0.12);
+    color: var(--danger-color);
+}
+
+.status-chip.pending,
+.status-chip.idle,
+.status-chip.unknown,
+.status-chip.not_initialized {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+}
+
+.housekeeping-output {
+    margin-top: 14px;
+    background: var(--bg-primary);
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
 }
 
 .btn-primary {
@@ -495,6 +718,15 @@
     margin-bottom: 16px;
     opacity: 0.5;
 }
+
+@media (max-width: 1200px) {
+    .runtime-grid,
+    .runtime-guidance,
+    .runtime-hero-meta,
+    .runtime-services {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 {% endblock %}
 
@@ -502,62 +734,131 @@
 <div class="check-container">
     <!-- Tab 切换 -->
     <div class="tab-container">
-        <button class="tab-btn active" data-tab="quick">
-            <i class="fas fa-bolt"></i> 快速检测
+        <button class="tab-btn active" data-tab="runtime">
+            <i class="fas fa-shield-heart"></i> 运行诊断
         </button>
         <button class="tab-btn" data-tab="detailed">
-            <i class="fas fa-list-check"></i> 详细测试
+            <i class="fas fa-list-check"></i> 详细检测
         </button>
     </div>
 
-    <!-- 快速检测 Tab -->
-    <div id="quick-tab" class="tab-content active">
-        <div class="quick-check-section">
-            <!-- 操作按钮 -->
-            <div class="check-actions">
-                <button id="quick-check-btn" class="btn-primary" onclick="startQuickCheck()">
-                    <i class="fas fa-play"></i> 一键检测
-                </button>
-                <span id="quick-status" class="status-badge pending">等待检测</span>
+    <!-- 运行诊断 Tab -->
+    <div id="runtime-tab" class="tab-content active">
+        <div class="runtime-ops-section">
+            <div class="runtime-hero">
+                <div class="runtime-hero-top">
+                    <div>
+                        <div id="runtime-overall-status" class="runtime-hero-status">
+                            <i class="fas fa-signal"></i>
+                            <span>检查中...</span>
+                        </div>
+                        <div class="runtime-hero-title">执行器运行诊断</div>
+                        <div id="runtime-overall-message" class="runtime-hero-message">
+                            正在汇总 preflight、diagnose 和服务摘要...
+                        </div>
+                    </div>
+                    <div class="runtime-actions">
+                        <button class="btn-primary" onclick="loadRuntimeOperations()">
+                            <i class="fas fa-rotate"></i> 刷新诊断
+                        </button>
+                        <button class="btn-secondary" onclick="runHousekeeping()">
+                            <i class="fas fa-broom"></i> housekeeping
+                        </button>
+                    </div>
+                </div>
+                <div class="runtime-hero-meta">
+                    <div class="runtime-meta-card">
+                        <div class="runtime-meta-label">Preflight</div>
+                        <div class="runtime-meta-value" id="runtime-preflight-value">--</div>
+                    </div>
+                    <div class="runtime-meta-card">
+                        <div class="runtime-meta-label">Diagnose</div>
+                        <div class="runtime-meta-value" id="runtime-diagnose-value">--</div>
+                    </div>
+                    <div class="runtime-meta-card">
+                        <div class="runtime-meta-label">待处理失败上报</div>
+                        <div class="runtime-meta-value" id="runtime-failed-report-value">--</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- 进度条 -->
-            <div class="progress-section" id="progress-section" style="display: none;">
-                <div class="progress-bar-container">
-                    <div class="progress-bar" id="progress-bar"></div>
+            <div class="runtime-grid">
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-list-check"></i> 发布前检查</h3>
+                        <span id="preflight-status-chip" class="status-chip pending">检查中</span>
+                    </div>
+                    <div class="inline-note" id="preflight-summary">正在加载检查摘要...</div>
+                    <div class="ops-list" id="preflight-list" style="margin-top: 14px;"></div>
                 </div>
-                <div class="progress-text" id="progress-text">准备中...</div>
-            </div>
 
-            <!-- 结果汇总 -->
-            <div class="summary-cards" id="summary-cards" style="display: none;">
-                <div class="summary-card">
-                    <div class="value" id="summary-total">0</div>
-                    <div class="label">总计</div>
-                </div>
-                <div class="summary-card passed">
-                    <div class="value" id="summary-passed">0</div>
-                    <div class="label">通过</div>
-                </div>
-                <div class="summary-card failed">
-                    <div class="value" id="summary-failed">0</div>
-                    <div class="label">失败</div>
-                </div>
-                <div class="summary-card warning">
-                    <div class="value" id="summary-warning">0</div>
-                    <div class="label">警告</div>
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-heart-pulse"></i> 运行态服务</h3>
+                        <span id="diagnose-status-chip" class="status-chip pending">检查中</span>
+                    </div>
+                    <div class="runtime-services" id="runtime-services-grid"></div>
                 </div>
             </div>
 
-            <!-- 结果列表 -->
-            <div class="results-section" id="results-section" style="display: none;">
-                <div class="results-header">
-                    <h3>检测结果</h3>
-                    <button class="btn-secondary" onclick="showQuickHistory()">
-                        <i class="fas fa-history"></i> 历史记录
-                    </button>
+            <div class="runtime-grid">
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-microchip"></i> 工具与软件 readiness</h3>
+                        <span class="inline-note">来自 runtime diagnose 真源</span>
+                    </div>
+                    <div class="runtime-services" id="runtime-software-grid"></div>
                 </div>
-                <div class="results-list" id="results-list"></div>
+
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-broom-ball"></i> 低风险维护</h3>
+                        <span class="inline-note">只做可安全自动恢复的动作</span>
+                    </div>
+                    <div class="inline-note">
+                        会清理明显无效的运行残留，并整理失败上报记录目录状态，不会偷偷修改业务配置。
+                    </div>
+                    <div id="housekeeping-output" class="housekeeping-output">
+                        还没有执行 housekeeping。
+                    </div>
+                </div>
+            </div>
+
+            <div class="runtime-grid">
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-route"></i> 可观测链路</h3>
+                        <span class="inline-note">trace_id / attempt_id / error_category</span>
+                    </div>
+                    <div class="runtime-services" id="runtime-observability-grid"></div>
+                </div>
+
+                <div class="ops-panel">
+                    <div class="ops-status-line">
+                        <h3><i class="fas fa-file-circle-exclamation"></i> failed-report-traceability</h3>
+                        <span class="inline-note">失败上报与运行链路关联</span>
+                    </div>
+                    <div class="ops-list" id="failed-report-traceability"></div>
+                </div>
+            </div>
+
+            <div class="runtime-guidance">
+                <div class="ops-panel">
+                    <h3><i class="fas fa-rocket"></i> 发布前建议</h3>
+                    <ul class="guidance-list">
+                        <li>先确认 preflight 不是 <strong>blocked</strong>，再开始接任务。</li>
+                        <li>重点看目录可写、上报地址、工具 readiness 和失败报告堆积。</li>
+                        <li>如果 diagnose 仍是 warning，优先处理失败上报与队列堆积。</li>
+                    </ul>
+                </div>
+                <div class="ops-panel">
+                    <h3><i class="fas fa-life-ring"></i> 回滚提示</h3>
+                    <ul class="guidance-list">
+                        <li>先停止接收新任务，再处理当前失败报告和运行残留。</li>
+                        <li>只对低风险问题执行 housekeeping，配置错误和工具异常需要人工介入。</li>
+                        <li>回滚后再次执行 preflight 和 diagnose，确认状态恢复到 ready 或 warning。</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -652,7 +953,7 @@
 {% block extra_js %}
 <script>
 // 状态
-let currentTab = 'quick';
+let currentTab = 'runtime';
 let currentCategory = 'all';
 let allChecks = [];
 let categories = [];
@@ -660,6 +961,27 @@ let checkResults = {};
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
+    setPanelState('preflight-list', 'loading', {
+        message: '正在加载 preflight 结果...',
+        variant: 'compact'
+    });
+    setPanelState('runtime-services-grid', 'loading', {
+        message: '正在加载服务诊断...',
+        variant: 'compact'
+    });
+    setPanelState('runtime-software-grid', 'loading', {
+        message: '正在加载软件 readiness...',
+        variant: 'compact'
+    });
+    setPanelState('runtime-observability-grid', 'loading', {
+        message: '正在加载可观测链路...',
+        variant: 'compact'
+    });
+    setPanelState('failed-report-traceability', 'loading', {
+        message: '正在加载失败上报关联...',
+        variant: 'compact'
+    });
+    loadRuntimeOperations();
     initTabs();
     loadCategories();
     loadChecks();
@@ -687,6 +1009,300 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.id === `${tab}-tab`);
     });
+}
+
+async function loadRuntimeOperations() {
+    try {
+        const [preflightResponse, diagnoseResponse, servicesResponse] = await Promise.all([
+            fetch('/api/runtime/preflight'),
+            fetch('/api/runtime/diagnose'),
+            fetch('/api/services/status')
+        ]);
+
+        const preflightPayload = await preflightResponse.json();
+        const diagnosePayload = await diagnoseResponse.json();
+        const servicesPayload = await servicesResponse.json();
+
+        const preflight = preflightPayload.data || {};
+        const diagnose = diagnosePayload.data || {};
+        const serviceSummary = servicesPayload.data?.runtime_operations || {};
+
+        renderRuntimeOverview(preflight, diagnose, serviceSummary);
+        clearPanelState('preflight-list');
+        clearPanelState('runtime-services-grid');
+        clearPanelState('runtime-software-grid');
+        clearPanelState('runtime-observability-grid');
+        clearPanelState('failed-report-traceability');
+    } catch (error) {
+        console.error('加载运行诊断失败:', error);
+        document.getElementById('runtime-overall-status').innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>加载失败</span>';
+        document.getElementById('runtime-overall-status').className = 'runtime-hero-status status-chip failed';
+        document.getElementById('runtime-overall-message').textContent = `无法获取运行诊断信息: ${error.message}`;
+        setPanelState('preflight-list', 'error', {
+            message: 'preflight 数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('runtime-services-grid', 'error', {
+            message: '服务诊断数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('runtime-software-grid', 'error', {
+            message: '软件 readiness 数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('runtime-observability-grid', 'error', {
+            message: '可观测链路数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+        setPanelState('failed-report-traceability', 'error', {
+            message: '失败上报链路数据加载失败。',
+            retryJs: 'loadRuntimeOperations()'
+        });
+    }
+}
+
+function renderRuntimeOverview(preflight, diagnose, serviceSummary) {
+    const overallStatus = resolveOverallRuntimeStatus(
+        diagnose.status,
+        preflight.status,
+        serviceSummary.preflight?.status,
+        serviceSummary.diagnose?.status
+    );
+    const hero = document.getElementById('runtime-overall-status');
+    hero.className = `runtime-hero-status status-chip ${normalizeStatusClass(overallStatus)}`;
+    hero.innerHTML = `<i class="fas fa-${iconForStatus(overallStatus)}"></i><span>${labelForRuntimeStatus(overallStatus)}</span>`;
+
+    const blockedReasons = [];
+    if (overallStatus === 'blocked') {
+        if (diagnose.services?.scheduler?.running === false) blockedReasons.push('scheduler 未运行');
+        if (preflight.items?.some(item => item.status === 'blocked')) blockedReasons.push('preflight 存在阻塞项');
+        if (!hasReadySoftware(diagnose.software)) blockedReasons.push('无可用测试工具');
+    }
+
+    document.getElementById('runtime-overall-message').textContent =
+        blockedReasons.length > 0
+            ? `当前不建议接新任务：${blockedReasons.join('，')}。`
+            : overallStatus === 'warning'
+                ? '系统可以继续运行，但存在需要尽快处理的风险项。'
+                : '系统当前处于可接任务状态，建议继续关注失败上报与队列波动。';
+
+    document.getElementById('runtime-preflight-value').textContent = labelForRuntimeStatus(preflight.status || serviceSummary.preflight?.status || 'unknown');
+    document.getElementById('runtime-diagnose-value').textContent = labelForRuntimeStatus(diagnose.status || serviceSummary.diagnose?.status || 'unknown');
+    document.getElementById('runtime-failed-report-value').textContent = String(
+        (diagnose.failed_reports?.pending || 0) + (diagnose.failed_reports?.failed || 0)
+    );
+
+    const preflightChip = document.getElementById('preflight-status-chip');
+    preflightChip.className = `status-chip ${normalizeStatusClass(preflight.status || 'unknown')}`;
+    preflightChip.textContent = labelForRuntimeStatus(preflight.status || 'unknown');
+    document.getElementById('preflight-summary').textContent = preflight.summary
+        ? `ready ${preflight.summary.ready || 0} · warning ${preflight.summary.warning || 0} · blocked ${preflight.summary.blocked || 0}`
+        : '暂无 preflight 摘要';
+
+    const diagnoseChip = document.getElementById('diagnose-status-chip');
+    diagnoseChip.className = `status-chip ${normalizeStatusClass(diagnose.status || 'unknown')}`;
+    diagnoseChip.textContent = labelForRuntimeStatus(diagnose.status || 'unknown');
+
+    renderPreflightItems(preflight.items || []);
+    renderRuntimeServices(diagnose.services || {});
+    renderRuntimeSoftware(diagnose.software || {});
+    renderRuntimeObservability(diagnose.observability || {});
+    renderFailedReportTraceability(diagnose.failed_report_traceability || {});
+}
+
+function renderPreflightItems(items) {
+    const container = document.getElementById('preflight-list');
+    if (!items.length) {
+        container.innerHTML = '<div class="inline-note">暂无 preflight 结果。</div>';
+        return;
+    }
+
+    container.innerHTML = items.map(item => `
+        <div class="ops-list-item">
+            <div class="ops-item-main">
+                <div class="ops-item-title">${escapeHtml(item.name || item.check_id || '未命名检查')}</div>
+                <div class="ops-item-message">${escapeHtml(item.message || '无附加说明')}</div>
+            </div>
+            <span class="status-chip ${normalizeStatusClass(item.status || 'unknown')}">${labelForRuntimeStatus(item.status || 'unknown')}</span>
+        </div>
+    `).join('');
+}
+
+function renderRuntimeServices(services) {
+    const container = document.getElementById('runtime-services-grid');
+    const entries = Object.entries(services);
+    if (!entries.length) {
+        container.innerHTML = '<div class="inline-note">暂无服务诊断数据。</div>';
+        return;
+    }
+
+    container.innerHTML = entries.map(([name, info]) => `
+        <div class="runtime-service-card">
+            <div class="runtime-service-header">
+                <div class="runtime-service-name">${escapeHtml(name)}</div>
+                <span class="status-chip ${normalizeStatusClass(serviceStatusOf(info))}">${labelForRuntimeStatus(serviceStatusOf(info))}</span>
+            </div>
+            <div class="runtime-service-meta">${escapeHtml(serviceMetaOf(name, info))}</div>
+        </div>
+    `).join('');
+}
+
+function renderRuntimeSoftware(software) {
+    const container = document.getElementById('runtime-software-grid');
+    const entries = Object.entries(software);
+    if (!entries.length) {
+        container.innerHTML = '<div class="inline-note">暂无软件 readiness 数据。</div>';
+        return;
+    }
+
+    container.innerHTML = entries.map(([name, info]) => `
+        <div class="runtime-service-card">
+            <div class="runtime-service-header">
+                <div class="runtime-service-name">${escapeHtml(name)}</div>
+                <span class="status-chip ${normalizeStatusClass(info.ready ? 'ready' : info.status || 'unknown')}">${info.ready ? '就绪' : labelForRuntimeStatus(info.status || 'unknown')}</span>
+            </div>
+            <div class="runtime-service-meta">${escapeHtml(info.status_display || info.status || (info.ready ? 'ready' : 'unknown'))}</div>
+        </div>
+    `).join('');
+}
+
+function renderRuntimeObservability(observability) {
+    const container = document.getElementById('runtime-observability-grid');
+    const currentTasks = observability.current_tasks || [];
+    if (!currentTasks.length) {
+        container.innerHTML = '<div class="inline-note">暂无运行中的可观测链路上下文。</div>';
+        return;
+    }
+
+    container.innerHTML = currentTasks.map(task => `
+        <div class="runtime-service-card">
+            <div class="runtime-service-header">
+                <span class="runtime-service-name">${escapeHtml(task.task_no || '--')}</span>
+                <span class="status-chip ${normalizeStatusClass(task.current_stage || task.stage || 'unknown')}">${escapeHtml(task.current_stage || task.stage || 'unknown')}</span>
+            </div>
+            <div class="runtime-service-meta">
+                trace_id=${escapeHtml(task.trace_id || '--')}<br>
+                attempt_id=${escapeHtml(task.attempt_id || task.attempt || '--')}<br>
+                error_category=${escapeHtml(task.error_category || '--')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderFailedReportTraceability(summary) {
+    const container = document.getElementById('failed-report-traceability');
+    const items = summary.recent || [];
+    if (!items.length) {
+        container.innerHTML = '<div class="inline-note">暂无失败上报关联链路。</div>';
+        return;
+    }
+
+    container.innerHTML = items.map(item => `
+        <div class="ops-list-item">
+            <div class="ops-item-main">
+                <div class="ops-item-title">${escapeHtml(item.task_no || item.report_id || '--')}</div>
+                <div class="ops-item-message">
+                    trace_id=${escapeHtml(item.trace_id || '--')} · attempt_id=${escapeHtml(item.attempt_id || '--')} · error_category=${escapeHtml(item.error_category || '--')}
+                </div>
+            </div>
+            <span class="status-chip ${normalizeStatusClass(item.status || 'unknown')}">${escapeHtml(labelForRuntimeStatus(item.status || 'unknown'))}</span>
+        </div>
+    `).join('');
+}
+
+async function runHousekeeping() {
+    const output = document.getElementById('housekeeping-output');
+    output.textContent = '正在执行 housekeeping...';
+
+    try {
+        const response = await fetch('/api/runtime/housekeeping', { method: 'POST' });
+        const payload = await response.json();
+        if (!payload.success) {
+            throw new Error(payload.message || 'housekeeping 失败');
+        }
+
+        const data = payload.data || {};
+        output.textContent = [
+            `状态: ${labelForRuntimeStatus(data.status || 'ready')}`,
+            `清理失败上报: ${data.cleanedFailedReports ?? 0}`,
+            `日志目录: ${data.logDir || '-'}`,
+            `数据目录: ${data.dataDir || '-'}`
+        ].join(' | ');
+        showMessage('housekeeping 执行完成', 'success');
+        await loadRuntimeOperations();
+    } catch (error) {
+        output.textContent = `housekeeping 执行失败: ${error.message}`;
+        showMessage(`housekeeping 执行失败: ${error.message}`, 'error');
+    }
+}
+
+function resolveOverallRuntimeStatus(...statuses) {
+    const normalized = statuses.filter(Boolean).map(normalizeStatusClass);
+    if (normalized.includes('blocked') || normalized.includes('failed') || normalized.includes('offline')) return 'blocked';
+    if (normalized.includes('warning')) return 'warning';
+    if (normalized.includes('ready') || normalized.includes('online') || normalized.includes('passed') || normalized.includes('success')) return 'ready';
+    return 'unknown';
+}
+
+function serviceStatusOf(info) {
+    if (!info || typeof info !== 'object') return 'unknown';
+    if (info.status) return info.status;
+    if (info.running === false || info.connected === false) return 'blocked';
+    if (info.running === true || info.connected === true) return 'ready';
+    return 'unknown';
+}
+
+function serviceMetaOf(name, info) {
+    if (!info || typeof info !== 'object') return '暂无数据';
+    if (name === 'executor') return `running_count=${info.running_count ?? 0} · queue_size=${info.queue_size ?? 0}`;
+    if (name === 'scheduler') return `running=${info.running ?? false} · scheduled_count=${info.scheduled_count ?? 0}`;
+    if (name === 'failed_reports') return `pending=${info.pending ?? 0} · failed=${info.failed ?? 0}`;
+    return JSON.stringify(info);
+}
+
+function hasReadySoftware(software) {
+    return Object.values(software || {}).some(item => item && item.ready);
+}
+
+function normalizeStatusClass(status) {
+    const value = String(status || 'unknown').toLowerCase();
+    if (['ready', 'online', 'passed', 'success'].includes(value)) return value;
+    if (['warning', 'blocked', 'failed', 'offline', 'pending', 'idle', 'unknown', 'not_initialized'].includes(value)) return value;
+    return 'unknown';
+}
+
+function labelForRuntimeStatus(status) {
+    const labels = {
+        ready: 'ready',
+        online: '在线',
+        warning: 'warning',
+        blocked: 'blocked',
+        failed: '失败',
+        offline: '离线',
+        pending: '等待中',
+        idle: '空闲',
+        unknown: '未知',
+        not_initialized: '未初始化',
+        passed: '通过',
+        success: '成功'
+    };
+    return labels[normalizeStatusClass(status)] || String(status || '未知');
+}
+
+function iconForStatus(status) {
+    const icons = {
+        ready: 'circle-check',
+        online: 'circle-check',
+        warning: 'triangle-exclamation',
+        blocked: 'octagon-exclamation',
+        failed: 'octagon-exclamation',
+        offline: 'plug-circle-xmark',
+        pending: 'clock',
+        idle: 'moon',
+        unknown: 'circle-question',
+        not_initialized: 'circle-question'
+    };
+    return icons[normalizeStatusClass(status)] || 'circle-question';
 }
 
 // 加载分类
@@ -1157,6 +1773,12 @@ function formatTime(isoString) {
         minute: '2-digit',
         second: '2-digit'
     });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
 }
 
 // 点击模态框外部关闭

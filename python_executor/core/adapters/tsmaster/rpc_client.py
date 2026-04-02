@@ -7,6 +7,7 @@ TSMaster RPC客户端封装
 import logging
 import time
 import threading
+from ctypes import c_double
 from typing import Optional, List, Tuple, Callable, Dict, Any
 
 try:
@@ -50,6 +51,7 @@ class TSMasterRPCClient:
         self.simulation_running = False
         self._initialized = False
         self._master_form_started = False
+        self._monitoring_enabled = False  # 控制是否启用状态监控读取
 
         # 超时配置
         self.connect_timeout = self.DEFAULT_CONNECT_TIMEOUT
@@ -60,7 +62,8 @@ class TSMasterRPCClient:
         self._monitor_thread: Optional[threading.Thread] = None
         self._stop_monitor = threading.Event()
 
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        from utils.logger import get_logger
+        self.logger = get_logger(f"adapters.tsmaster.TSMasterRPCClient")
         
     def initialize(self) -> bool:
         """
@@ -186,6 +189,7 @@ class TSMasterRPCClient:
                     self.logger.warning(f"停用RPC客户端失败，错误码: {ret}")
 
                 self.connected = False
+                self._monitoring_enabled = False
                 self.logger.info("RPC连接已断开")
 
             return True
@@ -237,9 +241,10 @@ class TSMasterRPCClient:
         try:
             self.logger.info("正在启动总线仿真...")
             ret = rpc_tsmaster_cmd_start_simulation(self.rpchandle)
-            
+
             if ret == 0:
                 self.simulation_running = True
+                self._monitoring_enabled = True  # 启用状态监控
                 self.logger.info("总线仿真已启动")
                 return True
             else:
@@ -264,9 +269,10 @@ class TSMasterRPCClient:
         try:
             self.logger.info("正在停止总线仿真...")
             ret = rpc_tsmaster_cmd_stop_simulation(self.rpchandle)
-            
+
             if ret == 0:
                 self.simulation_running = False
+                self._monitoring_enabled = False  # 禁用状态监控
                 self.logger.info("总线仿真已停止")
                 return True
             else:
@@ -437,11 +443,36 @@ class TSMasterRPCClient:
             else:
                 self.logger.warning(f"写系统变量失败: {var_name}, 错误码: {ret}")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"写系统变量时发生异常: {str(e)}")
             return False
-    
+
+    def write_var(self, var_name: str, value: str) -> bool:
+        """
+        写系统变量的便捷方法
+
+        Args:
+            var_name: 系统变量名称
+            value: 变量值（字符串格式）
+
+        Returns:
+            写入成功返回True，否则返回False
+        """
+        return self.write_system_var(var_name, value)
+
+    def read_var(self, var_name: str) -> Optional[str]:
+        """
+        读系统变量的便捷方法
+
+        Args:
+            var_name: 系统变量名称
+
+        Returns:
+            变量值（字符串格式），失败返回None
+        """
+        return self.read_system_var(var_name)
+
     def read_system_var(self, var_name: str) -> Optional[str]:
         """
         读系统变量
@@ -457,21 +488,21 @@ class TSMasterRPCClient:
             return None
         
         try:
-            value = pchar()
+            value = c_double()
             ret = rpc_tsmaster_cmd_read_system_var(
                 self.rpchandle,
                 var_name.encode(),
                 value
             )
-            
+
             if ret == 0:
-                result = value.value.decode()
+                result = str(value.value)
                 self.logger.debug(f"读系统变量成功: {var_name} = {result}")
                 return result
             else:
                 self.logger.warning(f"读系统变量失败: {var_name}, 错误码: {ret}")
                 return None
-                
+
         except Exception as e:
             self.logger.error(f"读系统变量时发生异常: {str(e)}")
             return None
@@ -598,16 +629,118 @@ class TSMasterRPCClient:
     def stop_form(self, form_name: str, encoding: str = 'gbk') -> bool:
         """
         停止TSMaster小程序
-        
+
         Args:
             form_name: 小程序名称，如 "C 代码编辑器 [Master]"
             encoding: 编码方式，默认'gbk'
-            
+
         Returns:
             停止成功返回True，否则返回False
         """
         self.logger.info(f"正在停止小程序: {form_name}")
         return self.call_system_api("app.stop_form", [form_name], encoding=encoding)
+
+    def initialize_master(self, timeout: int = 5) -> bool:
+        """
+        初始化Master设备
+
+        通过设置 Master.Init = 1 并等待系统变量变为 "1" 来完成初始化
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            初始化成功返回True，否则返回False
+        """
+        self.logger.info("正在初始化Master设备...")
+        if not self.write_system_var("Master.Init", "1"):
+            self.logger.error("设置 Master.Init 失败")
+            return False
+
+        if self.wait_for_var("Master.Init", "1", timeout):
+            self.logger.info("Master设备初始化成功")
+            return True
+        else:
+            self.logger.error(f"Master设备初始化超时！Master.Init != 1")
+            return False
+
+    def enable_auto_report(self, enabled: bool = True) -> bool:
+        """
+        开启或关闭自动报告
+
+        Args:
+            enabled: 是否开启自动报告
+
+        Returns:
+            设置成功返回True，否则返回False
+        """
+        value = "1" if enabled else "0"
+        self.logger.info(f"设置自动报告: {value}")
+        return self.write_system_var("Master.AutoReport", value)
+
+    def compile_test_cases(self, timeout: int = 10) -> bool:
+        """
+        强制编译测试用例（防呆关键步骤！）
+
+        通过设置 TestSystem.GenCode = 1 触发编译，并等待编译完成
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            编译成功返回True，否则返回False
+        """
+        self.logger.info("正在编译测试用例...")
+
+        # 触发编译
+        if not self.write_system_var("TestSystem.GenCode", "1"):
+            self.logger.error("触发测试用例编译失败")
+            return False
+
+        # 等待编译完成
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            status = self.read_system_var("TestSystem.GenCodeStatus")
+            if status == "0":
+                self.logger.info("测试用例编译成功")
+                return True
+            time.sleep(0.5)
+
+        self.logger.error(f"测试用例编译超时！TestSystem.GenCodeStatus = {status}")
+        return False
+
+    def generate_report(self, timeout: int = 10) -> bool:
+        """
+        生成测试报告
+
+        通过设置 Master.GenReport = 1 触发报告生成
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            生成成功返回True，否则返回False
+        """
+        self.logger.info("正在生成测试报告...")
+
+        if not self.write_system_var("Master.GenReport", "1"):
+            self.logger.error("触发报告生成失败")
+            return False
+
+        # 等待报告生成完成
+        time.sleep(1)
+
+        # 检查报告路径是否有效（可选）
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            report_path = self.read_system_var("Master.ReportPath")
+            if report_path and report_path.strip():
+                self.logger.info(f"测试报告已生成: {report_path}")
+                return True
+            time.sleep(0.5)
+
+        self.logger.warning("报告生成完成但路径可能未更新")
+        return True  # 报告生成命令已发送，不算失败
     
     def select_test_cases(self, cases: str) -> bool:
         """
@@ -622,12 +755,41 @@ class TSMasterRPCClient:
         self.logger.info(f"选择测试用例: {cases}")
         return self.write_system_var("TestSystem.SelectCases", cases)
     
+    def wait_for_var(self, var_name: str, expect: str, timeout: int = 10) -> bool:
+        """
+        轮询等待系统变量变成指定值
+
+        Args:
+            var_name: 系统变量名称
+            expect: 期望值
+            timeout: 超时时间（秒）
+
+        Returns:
+            等待成功返回True，超时返回False
+        """
+        import ctypes
+
+        start = time.time()
+        buf = ctypes.create_string_buffer(256)
+
+        while time.time() - start < timeout:
+            ret = rpc_tsmaster_cmd_read_system_var(self.rpchandle, var_name.encode(), buf)
+            if ret == 0:
+                val = buf.value.decode(errors="ignore")
+                if val == expect:
+                    self.logger.debug(f"系统变量 {var_name} 已变为 {expect}")
+                    return True
+            time.sleep(0.2)
+
+        self.logger.warning(f"等待系统变量 {var_name} 变为 {expect} 超时")
+        return False
+
     def start_test(self) -> bool:
         """
         开始测试
-        
+
         通过设置系统变量 TestSystem.Controller = 1 启动测试
-        
+
         Returns:
             设置成功返回True，否则返回False
         """
@@ -645,7 +807,56 @@ class TSMasterRPCClient:
         """
         self.logger.info("停止测试")
         return self.write_system_var("TestSystem.Controller", "0")
-    
+
+    def is_test_finished(self) -> bool:
+        """
+        检查测试是否已完成
+
+        通过读取 TestSystem.RunningStatus 变量的值来判断测试是否完成。
+        当 TestSystem.RunningStatus 的值变为 "0" 时，表示测试已完成。
+
+        Returns:
+            测试完成返回True，否则返回False
+        """
+        if not self.connected:
+            return False
+
+        try:
+            # 优先使用 RunningStatus 判断
+            running_status = self.read_system_var("TestSystem.RunningStatus")
+            if running_status is not None:
+                return running_status == "0"
+            # 回退到 Controller 判断
+            controller_value = self.read_system_var("TestSystem.Controller")
+            if controller_value is not None:
+                return controller_value == "0"
+            return False
+        except Exception as e:
+            self.logger.debug(f"检查测试状态异常: {str(e)}")
+            return False
+
+    def is_test_running(self) -> bool:
+        """
+        检查测试是否正在运行
+
+        通过读取 TestSystem.RunningStatus 变量的值来判断测试是否正在运行。
+        当 TestSystem.RunningStatus 的值变为 "1" 时，表示测试正在运行。
+
+        Returns:
+            测试正在运行返回True，否则返回False
+        """
+        if not self.connected:
+            return False
+
+        try:
+            running_status = self.read_system_var("TestSystem.RunningStatus")
+            if running_status is not None:
+                return running_status == "1"
+            return False
+        except Exception as e:
+            self.logger.debug(f"检查测试运行状态异常: {str(e)}")
+            return False
+
     def execute_test_sequence(self, sequence_name: str) -> Optional[str]:
         """
         执行测试序列
@@ -777,6 +988,46 @@ class TSMasterRPCClient:
             self.logger.error(f"获取测试结果异常: {str(e)}")
             return None
 
+    def get_report_path(self) -> Optional[str]:
+        """
+        获取测试报告目录路径
+
+        Returns:
+            报告目录路径，失败返回None
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法获取报告路径")
+            return None
+
+        try:
+            path = self.read_system_var("Master.ReportPath")
+            if path:
+                self.logger.info(f"获取报告路径成功: {path}")
+            return path
+        except Exception as e:
+            self.logger.error(f"获取报告路径异常: {str(e)}")
+            return None
+
+    def get_testdata_path(self) -> Optional[str]:
+        """
+        获取测试数据目录路径
+
+        Returns:
+            测试数据目录路径，失败返回None
+        """
+        if not self.connected:
+            self.logger.error("RPC客户端未连接，无法获取测试数据路径")
+            return None
+
+        try:
+            path = self.read_system_var("Master.TestDataLogPath")
+            if path:
+                self.logger.info(f"获取测试数据路径成功: {path}")
+            return path
+        except Exception as e:
+            self.logger.error(f"获取测试数据路径异常: {str(e)}")
+            return None
+
     def get_test_case_count(self) -> Tuple[int, int]:
         """
         获取测试用例统计
@@ -809,14 +1060,9 @@ class TSMasterRPCClient:
         """状态监控循环"""
         while not self._stop_monitor.is_set():
             try:
-                if self.connected:
-                    # 获取当前仿真状态
-                    sim_status = self.read_system_var("TestSystem.SimulationStatus")
-                    if sim_status:
-                        if self._status_callback:
-                            self._status_callback("simulation_status", {"status": sim_status})
-
-                    # 获取测试进度
+                # 只有在启用监控时才读取系统变量（仿真启动后）
+                if self.connected and self._monitoring_enabled:
+                    # 获取测试进度（仅在仿真运行时）
                     if self.simulation_running:
                         test_status = self.read_system_var("TestSystem.TestStatus")
                         if test_status and self._status_callback:

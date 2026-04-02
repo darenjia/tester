@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from enum import Enum
 
+from config.settings import get_config as get_runtime_config
+
 
 class ConnectionStatus(Enum):
     """连接状态"""
@@ -36,6 +38,11 @@ class SoftwareStatus(Enum):
     READY = "ready"
     BUSY = "busy"
     ERROR = "error"
+
+
+def _get_config_manager():
+    """Return the active facade-backed config manager."""
+    return get_runtime_config()
 
 
 class StatusMonitor:
@@ -144,6 +151,11 @@ class StatusMonitor:
     def update_system_stats(self):
         """更新系统资源统计"""
         try:
+            config_manager = _get_config_manager()
+            workspace_path = config_manager.get('software.workspace_path', '.')
+            if not workspace_path or not os.path.exists(workspace_path):
+                workspace_path = '.'
+
             # CPU使用率
             self._system_stats['cpu_percent'] = psutil.cpu_percent(interval=0.1)
             
@@ -154,7 +166,7 @@ class StatusMonitor:
             self._system_stats['memory_total_gb'] = round(memory.total / (1024**3), 2)
             
             # 磁盘信息（使用当前目录）
-            disk = psutil.disk_usage('.')
+            disk = psutil.disk_usage(workspace_path)
             self._system_stats['disk_percent'] = disk.percent
             
             self._last_update = time.time()

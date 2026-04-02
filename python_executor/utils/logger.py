@@ -5,8 +5,23 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from collections import deque
+
+from utils.observability_context import (
+    OBSERVABILITY_LOG_FIELDS,
+    build_observability_log_extra,
+)
+
+
+class TaskContextAdapter(logging.LoggerAdapter):
+    """Logger adapter that injects task-scoped context."""
+
+    def process(self, msg, kwargs):
+        extra = dict(self.extra)
+        extra.update(kwargs.get("extra", {}))
+        kwargs["extra"] = extra
+        return msg, kwargs
 
 
 class MemoryLogHandler(logging.Handler):
@@ -28,8 +43,10 @@ class MemoryLogHandler(logging.Handler):
                 'timestamp': datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S'),
                 'level': record.levelname,
                 'message': self.format(record),
-                'levelno': record.levelno
+                'levelno': record.levelno,
             }
+            for field_name in OBSERVABILITY_LOG_FIELDS:
+                log_entry[field_name] = getattr(record, field_name, None)
             self.log_entries.append(log_entry)
         except Exception:
             self.handleError(record)
@@ -147,9 +164,27 @@ class LoggerManager:
         self._setup_done = True
         self.logger.info("日志系统初始化完成")
     
-    def get_logger(self) -> logging.Logger:
+    def get_logger(self, name: str = None) -> logging.Logger:
         """获取日志记录器"""
-        return self.logger
+        if not name:
+            return self.logger
+
+        child_logger = self.logger.getChild(name)
+
+        if self.logger.handlers:
+            child_logger.handlers.clear()
+            for handler in self.logger.handlers:
+                child_logger.addHandler(handler)
+            child_logger.setLevel(self.logger.level)
+            child_logger.propagate = False
+
+        return child_logger
+
+    def bind_task_context(self, logger: logging.Logger, **context: Any) -> TaskContextAdapter:
+        """Bind task context to a logger without changing the logging stack."""
+        normalized_context = dict(context)
+        normalized_context.update(build_observability_log_extra(context))
+        return TaskContextAdapter(logger, normalized_context)
     
     def get_memory_logs(self, level: str = None, limit: int = None, search: str = None) -> List[Dict]:
         """获取内存中的日志"""
@@ -190,14 +225,22 @@ logger_manager = LoggerManager()
 
 def get_logger(name: str = None) -> logging.Logger:
     """获取日志记录器
-    
+
     Args:
         name: 日志记录器名称（可选）
-        
+
     Returns:
         logging.Logger: 日志记录器实例
     """
-    return logger_manager.get_logger()
+    logger = logger_manager.get_logger(name)
+    # 如果尚未初始化日志系统，添加基础配置防止日志丢失
+    if not logger.handlers and not logger_manager._setup_done:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+    return logger
 
 
 def setup_logging(log_dir: str = 'logs', level: str = 'INFO'):

@@ -345,6 +345,7 @@
     
     <!-- 任务列表 -->
     <div class="task-table">
+        <div id="task-list-feedback"></div>
         <table>
             <thead>
                 <tr>
@@ -359,7 +360,9 @@
                 </tr>
             </thead>
             <tbody id="task-list">
-                <!-- 任务列表将在这里动态生成 -->
+                <tr>
+                    <td colspan="8" class="empty-state">加载中...</td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -434,10 +437,11 @@
             <button class="detail-tab" data-tab="execution" onclick="switchDetailTab('execution')">执行过程</button>
             <button class="detail-tab" data-tab="results" onclick="switchDetailTab('results')">测试结果</button>
             <button class="detail-tab" data-tab="logs" onclick="switchDetailTab('logs')">日志</button>
+            <button class="detail-tab" data-tab="diagnosis" onclick="switchDetailTab('diagnosis')">诊断</button>
         </div>
 
         <div class="modal-body" id="task-detail-body" style="max-height: 60vh; overflow-y: auto;">
-            <!-- 任务详情将在这里动态生成 -->
+            <div data-ui-state="empty"></div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="hideDetailModal()">关闭</button>
@@ -475,6 +479,65 @@
     }
     .detail-panel.active {
         display: block;
+    }
+
+    .detail-hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        padding: 18px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #123a5e 0%, #1f6aa5 55%, #7ac1ff 100%);
+        color: white;
+        margin-bottom: 16px;
+    }
+    .detail-hero h4 {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+    }
+    .detail-hero p {
+        margin: 0;
+        color: rgba(255,255,255,0.88);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .detail-pill-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .detail-pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.14);
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .diagnosis-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+    }
+    .diagnosis-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 14px;
+    }
+    .diagnosis-card h5 {
+        margin: 0 0 10px 0;
+        font-size: 13px;
+    }
+    .json-block {
+        margin: 0;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 12px;
+        overflow: auto;
+        max-height: 240px;
     }
 
     /* 信息网格 */
@@ -651,9 +714,24 @@
     let currentPage = 1;
     let totalPages = 1;
     const perPage = 20;
+
+    function renderTaskTableLoading() {
+        document.getElementById('task-list').innerHTML =
+            '<tr><td colspan="8" class="empty-state">加载任务列表中...</td></tr>';
+    }
+
+    function renderTaskTableError(message = '加载任务列表失败') {
+        document.getElementById('task-list').innerHTML = `
+            <tr>
+                <td colspan="8" class="empty-state" style="color: #dc3545;">${escapeHtml(message)}</td>
+            </tr>
+        `;
+    }
     
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
+        setPanelState('task-list-feedback', 'loading', { message: '正在加载任务列表与最新状态...' });
+        renderTaskTableLoading();
         loadTasks();
         loadStats();
         
@@ -682,12 +760,18 @@
             const result = await response.json();
             
             if (result.success) {
+                clearPanelState('task-list-feedback');
                 renderTasks(result.data.tasks);
                 totalPages = result.data.pagination.total_pages;
                 renderPagination();
             }
         } catch (error) {
             console.error('加载任务失败:', error);
+            setPanelState('task-list-feedback', 'error', {
+                message: '任务列表加载失败，请检查网络或服务状态。',
+                retryJs: 'loadTasks()'
+            });
+            renderTaskTableError();
         }
     }
     
@@ -737,7 +821,7 @@
                 <td>${formatDuration(task.duration)}</td>
                 <td>
                     <div class="action-btns">
-                        <button class="action-btn view" onclick="viewTask('${task.id}')" title="查看详情">
+                        <button class="action-btn view" onclick="window.location.href='/tasks/${task.id}/view'" title="查看详情">
                             <i class="fas fa-eye"></i>
                         </button>
                         <button class="action-btn logs" onclick="viewLogs('${task.id}')" title="查看日志">
@@ -883,6 +967,8 @@
 
     async function viewTask(taskId) {
         currentTaskId = taskId;
+        document.getElementById('detail-modal').classList.add('active');
+        setPanelState('task-detail-body', 'loading', { message: '正在加载任务详情...' });
         try {
             const response = await fetch(`/api/tasks/${taskId}`);
             const result = await response.json();
@@ -890,14 +976,21 @@
             if (result.success) {
                 const task = result.data;
                 renderTaskDetail(task);
-                document.getElementById('detail-modal').classList.add('active');
                 // 默认显示基本信息
                 switchDetailTab('basic');
             } else {
+                setPanelState('task-detail-body', 'error', {
+                    message: '获取任务详情失败，请稍后重试。',
+                    retryJs: `viewTask('${taskId}')`
+                });
                 showMessage('获取任务详情失败: ' + result.message, 'error');
             }
         } catch (error) {
             console.error('获取任务详情失败:', error);
+            setPanelState('task-detail-body', 'error', {
+                message: '任务详情加载失败，请稍后重试。',
+                retryJs: `viewTask('${taskId}')`
+            });
             showMessage('获取任务详情失败', 'error');
         }
     }
@@ -909,6 +1002,21 @@
         detailBody.innerHTML = `
             <!-- 基本信息面板 -->
             <div class="detail-panel active" id="panel-basic">
+                <div class="detail-hero">
+                    <div>
+                        <h4>${escapeHtml(task.name || task.id || '未命名任务')}</h4>
+                        <p>统一任务详情视图，汇总执行状态、结果摘要、日志和诊断上下文。</p>
+                        <div class="detail-pill-group">
+                            <span class="detail-pill">任务 ${escapeHtml(task.id || '-')}</span>
+                            <span class="detail-pill">工具 ${escapeHtml((task.category || task.task_type || '-').toString().toUpperCase())}</span>
+                            <span class="detail-pill">状态 ${escapeHtml(getStatusLabel(task.status || '-'))}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right; min-width: 180px;">
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.72);">通过率</div>
+                        <div style="font-size: 28px; font-weight: 700;">${escapeHtml(task.result_summary?.pass_rate || '0%')}</div>
+                    </div>
+                </div>
                 <div class="info-grid">
                     <div class="info-item">
                         <div class="info-label">任务ID</div>
@@ -1167,6 +1275,64 @@
                 </div>
                 ` : ''}
                 ` : '<p style="color: #666; text-align: center; padding: 20px;">暂无日志</p>'}
+            </div>
+
+            <div class="detail-panel" id="panel-diagnosis">
+                <div class="diagnosis-grid">
+                    <div class="diagnosis-card">
+                        <h5>执行上下文</h5>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">任务类型</div>
+                                <div class="info-value">${task.task_type || '-'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">分类</div>
+                                <div class="info-value">${task.category || '-'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">创建者</div>
+                                <div class="info-value">${task.created_by || '-'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">最近错误</div>
+                                <div class="info-value">${task.error_message || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diagnosis-card">
+                        <h5>运行判定</h5>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">是否可重试</div>
+                                <div class="info-value">${task.can_retry ? '是' : '否'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">日志条数</div>
+                                <div class="info-value">${task.log_stats?.total || 0}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">最近 INFO</div>
+                                <div class="info-value">${task.log_stats?.INFO || 0}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">最近 ERROR</div>
+                                <div class="info-value">${task.log_stats?.ERROR || 0}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diagnosis-card">
+                        <h5>任务参数</h5>
+                        <pre class="json-block">${escapeHtml(JSON.stringify(task.params || {}, null, 2))}</pre>
+                    </div>
+
+                    <div class="diagnosis-card">
+                        <h5>任务元数据</h5>
+                        <pre class="json-block">${escapeHtml(JSON.stringify(task.metadata || {}, null, 2))}</pre>
+                    </div>
+                </div>
             </div>
         `;
 

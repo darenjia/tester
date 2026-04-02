@@ -2,24 +2,79 @@
 配置管理API
 提供配置相关的RESTful接口
 """
-from flask import Blueprint, request, jsonify
-from typing import Dict, Any
+import json
 import logging
-
-import sys
 import os
+import sys
+from datetime import datetime
+from flask import Blueprint, request, jsonify
+from typing import Any
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.config_manager import get_runtime_config
-from config.config_manager import config_manager
+from config.settings import get_config as get_runtime_config
 
 logger = logging.getLogger(__name__)
 
 # 创建蓝图
 config_bp = Blueprint('config', __name__, url_prefix='/api')
 
-# 获取运行时配置管理器
-runtime_config = get_runtime_config()
+
+def _get_config_manager():
+    """Return the active facade-backed config manager."""
+    return get_runtime_config()
+
+
+def _get_http_config() -> dict[str, Any]:
+    config_manager = _get_config_manager()
+    return {
+        "port": config_manager.get("http.port", 8180),
+        "host": config_manager.get("http.host", "0.0.0.0"),
+        "debug": config_manager.get("http.debug", False),
+    }
+
+
+def _get_websocket_config() -> dict[str, Any]:
+    config_manager = _get_config_manager()
+    return {
+        "enabled": config_manager.get("websocket.enabled", False),
+        "port": config_manager.get("websocket.port", 8080),
+        "host": config_manager.get("websocket.host", "0.0.0.0"),
+    }
+
+
+def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
+    errors = _get_config_manager().validate_config(config)
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+    }
+
+
+def _update_config_snapshot(config: dict[str, Any]) -> dict[str, Any]:
+    config_manager = _get_config_manager()
+    config_manager.update(config, persist=True)
+    return config_manager.get_all()
+
+
+def _import_config_snapshot(config: dict[str, Any], *, merge: bool) -> dict[str, Any]:
+    config_manager = _get_config_manager()
+    if not merge:
+        config_manager.reset_to_default()
+    if config:
+        config_manager.update(config, persist=True)
+    return config_manager.get_all()
+
+
+def _coerce_merge_flag(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(value)
 
 
 @config_bp.route('/config/http', methods=['GET'])
@@ -28,7 +83,7 @@ def get_http_config():
     获取HTTP服务配置
     """
     try:
-        config = runtime_config.get_http_config()
+        config = _get_http_config()
         return jsonify({
             "success": True,
             "data": config
@@ -55,7 +110,7 @@ def set_http_config():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
         
         # 验证配置
-        validation = runtime_config.validate_config({"http": data})
+        validation = _validate_config({"http": data})
         if not validation["valid"]:
             return jsonify({
                 "success": False,
@@ -63,15 +118,16 @@ def set_http_config():
                 "errors": validation["errors"]
             }), 400
         
-        # 更新配置
-        if runtime_config.set_http_config(data):
-            return jsonify({
-                "success": True,
-                "message": "HTTP配置已更新",
-                "data": runtime_config.get_http_config()
-            })
-        else:
-            return jsonify({"success": False, "message": "更新配置失败"}), 500
+        updated_config = _update_config_snapshot({"http": data})
+        return jsonify({
+            "success": True,
+            "message": "HTTP配置已更新",
+            "data": {
+                "port": updated_config.get("http", {}).get("port", 8180),
+                "host": updated_config.get("http", {}).get("host", "0.0.0.0"),
+                "debug": updated_config.get("http", {}).get("debug", False),
+            }
+        })
             
     except Exception as e:
         return jsonify({"success": False, "message": f"更新HTTP配置失败: {str(e)}"}), 500
@@ -83,7 +139,7 @@ def get_websocket_config():
     获取WebSocket服务配置
     """
     try:
-        config = runtime_config.get_websocket_config()
+        config = _get_websocket_config()
         return jsonify({
             "success": True,
             "data": config
@@ -110,7 +166,7 @@ def set_websocket_config():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
         
         # 验证配置
-        validation = runtime_config.validate_config({"websocket": data})
+        validation = _validate_config({"websocket": data})
         if not validation["valid"]:
             return jsonify({
                 "success": False,
@@ -118,15 +174,16 @@ def set_websocket_config():
                 "errors": validation["errors"]
             }), 400
         
-        # 更新配置
-        if runtime_config.set_websocket_config(data):
-            return jsonify({
-                "success": True,
-                "message": "WebSocket配置已更新",
-                "data": runtime_config.get_websocket_config()
-            })
-        else:
-            return jsonify({"success": False, "message": "更新配置失败"}), 500
+        updated_config = _update_config_snapshot({"websocket": data})
+        return jsonify({
+            "success": True,
+            "message": "WebSocket配置已更新",
+            "data": {
+                "enabled": updated_config.get("websocket", {}).get("enabled", False),
+                "port": updated_config.get("websocket", {}).get("port", 8080),
+                "host": updated_config.get("websocket", {}).get("host", "0.0.0.0"),
+            }
+        })
             
     except Exception as e:
         return jsonify({"success": False, "message": f"更新WebSocket配置失败: {str(e)}"}), 500
@@ -138,7 +195,7 @@ def get_all_config():
     获取所有配置
     """
     try:
-        config = runtime_config.get_all_config()
+        config = _get_config_manager().get_all()
         return jsonify({
             "success": True,
             "data": config
@@ -164,7 +221,7 @@ def update_config():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
         
         # 验证配置
-        validation = runtime_config.validate_config(data)
+        validation = _validate_config(data)
         if not validation["valid"]:
             return jsonify({
                 "success": False,
@@ -172,15 +229,11 @@ def update_config():
                 "errors": validation["errors"]
             }), 400
         
-        # 更新配置
-        if runtime_config.update_config(data):
-            return jsonify({
-                "success": True,
-                "message": "配置已更新",
-                "data": runtime_config.get_all_config()
-            })
-        else:
-            return jsonify({"success": False, "message": "更新配置失败"}), 500
+        return jsonify({
+            "success": True,
+            "message": "配置已更新",
+            "data": _update_config_snapshot(data)
+        })
             
     except Exception as e:
         return jsonify({"success": False, "message": f"更新配置失败: {str(e)}"}), 500
@@ -195,16 +248,15 @@ def export_config():
     - download: 是否下载文件，默认false（返回JSON）
     """
     try:
-        config = runtime_config.get_all_config()
+        config = _get_config_manager().get_all()
         export_data = {
-            "export_time": __import__('datetime').datetime.now().isoformat(),
+            "export_time": datetime.now().isoformat(),
             "config": config
         }
         
         download = request.args.get('download', 'false').lower() == 'true'
         
         if download:
-            import json
             from flask import Response
             
             response = Response(
@@ -244,6 +296,7 @@ def import_config():
             file = request.files['file']
             if file.filename == '':
                 return jsonify({"success": False, "message": "未选择文件"}), 400
+            merge = _coerce_merge_flag(request.form.get("merge"), default=True)
             
             import json
             import tempfile
@@ -254,14 +307,21 @@ def import_config():
                 temp_path = temp.name
             
             try:
-                if runtime_config.import_config(temp_path, merge=merge):
+                with open(temp_path, 'r', encoding='utf-8') as handle:
+                    imported_data = json.load(handle)
+                config = imported_data.get("config", {})
+                validation = _validate_config(config)
+                if not validation["valid"]:
                     return jsonify({
-                        "success": True,
-                        "message": "配置已导入",
-                        "data": runtime_config.get_all_config()
-                    })
-                else:
-                    return jsonify({"success": False, "message": "导入配置失败"}), 500
+                        "success": False,
+                        "message": "配置验证失败",
+                        "errors": validation["errors"]
+                    }), 400
+                return jsonify({
+                    "success": True,
+                    "message": "配置已导入",
+                    "data": _import_config_snapshot(config, merge=merge)
+                })
             finally:
                 os.remove(temp_path)
         else:
@@ -270,11 +330,11 @@ def import_config():
             if not data or "config" not in data:
                 return jsonify({"success": False, "message": "请求体必须包含config字段"}), 400
             
-            merge = data.get("merge", True)
+            merge = _coerce_merge_flag(data.get("merge"), default=True)
             config = data["config"]
             
             # 验证配置
-            validation = runtime_config.validate_config(config)
+            validation = _validate_config(config)
             if not validation["valid"]:
                 return jsonify({
                     "success": False,
@@ -282,14 +342,11 @@ def import_config():
                     "errors": validation["errors"]
                 }), 400
             
-            if runtime_config.update_config(config):
-                return jsonify({
-                    "success": True,
-                    "message": "配置已导入",
-                    "data": runtime_config.get_all_config()
-                })
-            else:
-                return jsonify({"success": False, "message": "导入配置失败"}), 500
+            return jsonify({
+                "success": True,
+                "message": "配置已导入",
+                "data": _import_config_snapshot(config, merge=merge)
+            })
                 
     except Exception as e:
         return jsonify({"success": False, "message": f"导入配置失败: {str(e)}"}), 500
@@ -303,14 +360,13 @@ def reset_config():
     警告: 此操作会清除所有自定义配置
     """
     try:
-        if runtime_config.reset_to_default():
-            return jsonify({
-                "success": True,
-                "message": "配置已重置为默认值",
-                "data": runtime_config.get_all_config()
-            })
-        else:
-            return jsonify({"success": False, "message": "重置配置失败"}), 500
+        config_manager = _get_config_manager()
+        config_manager.reset_to_default()
+        return jsonify({
+            "success": True,
+            "message": "配置已重置为默认值",
+            "data": config_manager.get_all()
+        })
             
     except Exception as e:
         return jsonify({"success": False, "message": f"重置配置失败: {str(e)}"}), 500
@@ -467,7 +523,7 @@ def get_category_ini_config_rules():
     获取 category_ini_config_rules 配置
     """
     try:
-        rules = config_manager.get('category_ini_config_rules', {})
+        rules = _get_config_manager().get('category_ini_config_rules', {})
         return jsonify({
             "success": True,
             "data": rules
@@ -499,8 +555,7 @@ def update_category_ini_config_rules():
             return jsonify({"success": False, "message": "请求体不能为空"}), 400
 
         # 更新配置
-        config_manager.set('category_ini_config_rules', data)
-        config_manager.save()
+        _get_config_manager().set('category_ini_config_rules', data, persist=True)
 
         return jsonify({
             "success": True,

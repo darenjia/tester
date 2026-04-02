@@ -9,9 +9,12 @@ from enum import Enum, auto
 from typing import Optional, Dict, Any, List
 import logging
 
+from .capabilities import CapabilityRegistryMixin
+
 
 class TestToolType(Enum):
     """测试工具类型枚举"""
+    __test__ = False
     CANOE = "canoe"
     TSMASTER = "tsmaster"
     TTWORKBENCH = "ttworkbench"
@@ -27,7 +30,7 @@ class AdapterStatus(Enum):
     DISCONNECTED = auto()   # 已断开
 
 
-class BaseTestAdapter(ABC):
+class BaseTestAdapter(CapabilityRegistryMixin, ABC):
     """
     测试工具适配器基类
     
@@ -43,7 +46,9 @@ class BaseTestAdapter(ABC):
         """
         self.config = config or {}
         self.status = AdapterStatus.IDLE
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self._capabilities: Dict[str, Any] = {}
+        from utils.logger import get_logger
+        self.logger = get_logger(f"adapters.{self.__class__.__name__}")
         self._last_error: Optional[str] = None
         
     @property
@@ -120,10 +125,12 @@ class BaseTestAdapter(ABC):
         """
         pass
     
-    @abstractmethod
     def execute_test_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行单个测试项
+        Legacy compatibility API for direct test-item execution.
+
+        New execution paths should go through strategy + capability instead of
+        invoking high-level test items on adapters directly.
         
         Args:
             item: 测试项配置
@@ -131,7 +138,18 @@ class BaseTestAdapter(ABC):
         Returns:
             测试结果字典
         """
-        pass
+        item_type = item.get("type")
+        item_name = item.get("name", "unnamed")
+        self.logger.warning(
+            "execute_test_item 已退化为兼容接口，不建议在新执行链路中直接调用: %s",
+            item_type,
+        )
+        return {
+            "name": item_name,
+            "type": item_type,
+            "status": "error",
+            "error": f"适配器层不再支持直接执行测试项: {item_type}",
+        }
     
     def get_status(self) -> Dict[str, Any]:
         """

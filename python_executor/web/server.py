@@ -23,6 +23,7 @@ from api.case_mapping_api import case_mapping_bp
 from api.routes import api_bp  # TDM2.0 任务接口
 from api.system_check_api import system_check_bp
 from api.report_retry_api import report_retry_bp  # 报告重试API
+from api.runtime_operations_api import runtime_ops_bp
 
 
 def initialize_retry_system():
@@ -98,6 +99,7 @@ def create_app() -> Flask:
     from api.system_check_api import register_system_check_api
     register_system_check_api(app, skip_blueprint=True)
     app.register_blueprint(report_retry_bp)  # 报告重试API
+    app.register_blueprint(runtime_ops_bp)
 
     # 注册路由
     register_routes(app)
@@ -127,6 +129,11 @@ def register_routes(app: Flask):
     def tasks_page():
         """任务管理页面"""
         return render_template('tasks.html')
+
+    @app.route('/tasks/<task_id>/view')
+    def task_detail_page(task_id: str):
+        """任务详情页面"""
+        return render_template('task_detail.html', task_id=task_id, active_page='tasks')
     
     @app.route('/settings')
     def settings_page():
@@ -182,6 +189,11 @@ def register_routes(app: Flask):
     def report_status_page():
         """上报管理页面"""
         return render_template('report_status.html')
+
+    @app.route('/report-status/<report_id>/view')
+    def report_detail_page(report_id: str):
+        """上报详情页面"""
+        return render_template('report_detail.html', report_id=report_id, active_page='report-status')
     
     # ========== API 路由 ==========
     
@@ -393,7 +405,7 @@ def register_routes(app: Flask):
             # 获取上报状态
             try:
                 report_client = get_report_client()
-                report_client.reload_config()
+                # report_client.reload_config()  # 注释掉：每次dashboard/status请求都会重新加载配置，造成性能问题
                 report_enabled = config.get('report_server.enabled', False)
                 report_status = {
                     'enabled': report_enabled,
@@ -497,4 +509,5 @@ def register_routes(app: Flask):
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    # use_reloader=False 禁用自动重载，避免 Windows 上的 socket 错误
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
