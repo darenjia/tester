@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timedelta
 
 
@@ -227,3 +228,84 @@ def test_schedule_periodic_task_logs_failed_submissions_without_stopping(monkeyp
     assert submitted
     assert logs
     assert logs[0][0] == "periodic-fail"
+
+
+def test_schedule_task_rolls_back_scheduled_registry_when_queue_add_fails(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    task = Task(id="scheduled-add-fail", name="Scheduled Add Fail")
+
+    monkeypatch.setattr("core.task_scheduler.task_queue.add", lambda task: False)
+
+    assert scheduler.schedule_task(task, delay=30) is False
+    assert "scheduled-add-fail" not in scheduler._scheduled_tasks
+
+
+def test_schedule_periodic_task_deep_copies_nested_task_payload(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    source_task = Task(
+        id="periodic-deepcopy",
+        name="Periodic Deepcopy",
+        params={"variables": {"count": 1}, "list": [{"value": "a"}]},
+        metadata={"nested": {"flag": True}},
+    )
+    captured = []
+
+    def _submit(new_task):
+        new_task.params["variables"]["count"] = 99
+        new_task.params["list"][0]["value"] = "mutated"
+        new_task.metadata["nested"]["flag"] = False
+        captured.append(copy.deepcopy(new_task.to_dict()))
+        scheduler._running = False
+        return True
+
+    monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", _submit)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.time.sleep", lambda _seconds: None)
+
+    scheduler.schedule_periodic_task(source_task, interval=0.01, max_iterations=1)
+
+    for _ in range(50):
+        if captured:
+            break
+        __import__("time").sleep(0.01)
+
+    assert captured
+    assert source_task.params["variables"]["count"] == 1
+    assert source_task.params["list"][0]["value"] == "a"
+    assert source_task.metadata["nested"]["flag"] is True
+
+
+def test_schedule_periodic_task_registers_scheduler_id(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    task = Task(id="periodic-registered", name="Periodic Registered")
+    started = []
+
+    class _FakeThread:
+        def __init__(self, target, daemon=True):
+            self._target = target
+
+        def start(self):
+            started.append(True)
+
+    monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", lambda new_task: True)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.threading.Thread", _FakeThread)
+
+    scheduler_id = scheduler.schedule_periodic_task(task, interval=0.01, max_iterations=1)
+
+    assert scheduler_id == "periodic_periodic-registered"
+    assert scheduler_id in scheduler._periodic_tasks
+    assert started == [True]

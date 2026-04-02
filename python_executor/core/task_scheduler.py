@@ -5,6 +5,7 @@
 import threading
 import time
 import logging
+import copy
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from enum import Enum
@@ -36,6 +37,7 @@ class TaskScheduler:
         self._scheduler_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._scheduled_tasks: Dict[str, datetime] = {}  # task_id -> scheduled_time
+        self._periodic_tasks: Dict[str, threading.Thread] = {}
         
     def start(self):
         """启动调度器"""
@@ -141,6 +143,8 @@ class TaskScheduler:
                     details={"delay": delay, "scheduled_time": scheduled_time.isoformat()}
                 )
                 return True
+            with self._lock:
+                self._scheduled_tasks.pop(task.id, None)
         else:
             # 立即执行
             return task_executor.submit_task(task)
@@ -169,32 +173,38 @@ class TaskScheduler:
         
         def periodic_runner():
             iteration = 0
-            while self._running and (max_iterations is None or iteration < max_iterations):
-                # 创建新任务实例
-                new_task = Task(
-                    name=f"{task.name} #{iteration + 1}",
-                    task_type=task.task_type,
-                    priority=task.priority,
-                    params=task.params.copy(),
-                    timeout=task.timeout,
-                    max_retries=task.max_retries,
-                    created_by=task.created_by,
-                    metadata={**task.metadata, "periodic": True, "iteration": iteration}
-                )
-                
-                # 提交任务
-                if not task_executor.submit_task(new_task):
-                    task_log_manager.error(
-                        task.id,
-                        "周期性任务提交失败",
-                        details={"iteration": iteration, "scheduler_id": scheduler_id},
+            try:
+                while self._running and (max_iterations is None or iteration < max_iterations):
+                    # 创建新任务实例
+                    new_task = Task(
+                        name=f"{task.name} #{iteration + 1}",
+                        task_type=task.task_type,
+                        priority=task.priority,
+                        params=copy.deepcopy(task.params),
+                        timeout=task.timeout,
+                        max_retries=task.max_retries,
+                        created_by=task.created_by,
+                        metadata={**copy.deepcopy(task.metadata), "periodic": True, "iteration": iteration}
                     )
-                
-                iteration += 1
-                time.sleep(interval)
+                    
+                    # 提交任务
+                    if not task_executor.submit_task(new_task):
+                        task_log_manager.error(
+                            task.id,
+                            "周期性任务提交失败",
+                            details={"iteration": iteration, "scheduler_id": scheduler_id},
+                        )
+                    
+                    iteration += 1
+                    time.sleep(interval)
+            finally:
+                with self._lock:
+                    self._periodic_tasks.pop(scheduler_id, None)
                 
         # 启动周期性任务线程
         thread = threading.Thread(target=periodic_runner, daemon=True)
+        with self._lock:
+            self._periodic_tasks[scheduler_id] = thread
         thread.start()
         
         task_log_manager.info(
