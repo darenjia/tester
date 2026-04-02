@@ -206,6 +206,10 @@ def test_schedule_periodic_task_logs_failed_submissions_without_stopping(monkeyp
         lambda new_task: submitted.append(new_task.id) or False,
     )
     monkeypatch.setattr(
+        "core.task_scheduler.task_executor._build_execution_plan_from_queue_task",
+        lambda task: object(),
+    )
+    monkeypatch.setattr(
         "core.task_scheduler.task_log_manager.error",
         lambda task_id, message, details=None: logs.append((task_id, message)),
     )
@@ -265,6 +269,10 @@ def test_schedule_periodic_task_deep_copies_nested_task_payload(monkeypatch):
         scheduler._running = False
         return True
 
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor._build_execution_plan_from_queue_task",
+        lambda task: object(),
+    )
     monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", _submit)
     monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
     monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
@@ -299,6 +307,10 @@ def test_schedule_periodic_task_registers_scheduler_id(monkeypatch):
         def start(self):
             started.append(True)
 
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor._build_execution_plan_from_queue_task",
+        lambda task: object(),
+    )
     monkeypatch.setattr("core.task_scheduler.task_executor.submit_task", lambda new_task: True)
     monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
     monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
@@ -309,3 +321,33 @@ def test_schedule_periodic_task_registers_scheduler_id(monkeypatch):
     assert scheduler_id == "periodic_periodic-registered"
     assert scheduler_id in scheduler._periodic_tasks
     assert started == [True]
+
+
+def test_schedule_periodic_task_validates_task_before_starting_thread(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+    from models.executor_task import Task
+    from core.task_compiler import TaskCompileError
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    task = Task(id="periodic-invalid", name="Periodic Invalid")
+    started = []
+
+    class _FakeThread:
+        def __init__(self, target, daemon=True):
+            self._target = target
+
+        def start(self):
+            started.append(True)
+
+    monkeypatch.setattr(
+        "core.task_scheduler.task_executor._build_execution_plan_from_queue_task",
+        lambda task: (_ for _ in ()).throw(TaskCompileError("periodic invalid")),
+    )
+    monkeypatch.setattr("core.task_scheduler.threading.Thread", _FakeThread)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.error", lambda *args, **kwargs: None)
+
+    assert scheduler.schedule_periodic_task(task, interval=1.0, max_iterations=1) is None
+    assert started == []
+    assert scheduler._periodic_tasks == {}

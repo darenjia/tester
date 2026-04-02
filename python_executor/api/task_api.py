@@ -470,12 +470,14 @@ def get_task_stats():
     try:
         queue_stats = task_queue.get_stats()
         executor_stats = task_executor.get_stats()
+        scheduler_stats = task_scheduler.get_stats()
         
         return jsonify({
             "success": True,
             "data": {
                 "queue": queue_stats,
-                "executor": executor_stats
+                "executor": executor_stats,
+                "scheduler": scheduler_stats,
             }
         })
         

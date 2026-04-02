@@ -169,6 +169,13 @@ class TaskScheduler:
             task_log_manager.error(task.id, "调度器未启动，周期性任务创建失败")
             return None
 
+        try:
+            task_executor._build_execution_plan_from_queue_task(task)
+        except Exception as exc:
+            logger.warning(f"周期性任务预校验失败: {exc}")
+            task_log_manager.error(task.id, f"周期性任务预校验失败: {exc}")
+            return None
+
         scheduler_id = f"periodic_{task.id}"
         
         def periodic_runner():
@@ -261,6 +268,17 @@ class TaskScheduler:
                         "scheduled_time": scheduled_time.isoformat(),
                         "status": task.status
                     })
+            for scheduler_id, thread in self._periodic_tasks.items():
+                task_id = scheduler_id.removeprefix("periodic_")
+                task = task_queue.get_task(task_id)
+                result.append({
+                    "task_id": task_id,
+                    "task_name": task.name if task else task_id,
+                    "scheduled_time": None,
+                    "status": "running" if thread.is_alive() else "pending",
+                    "scheduler_id": scheduler_id,
+                    "schedule_type": "periodic",
+                })
             return result
             
     def get_stats(self) -> Dict[str, Any]:
@@ -269,6 +287,7 @@ class TaskScheduler:
             return {
                 "running": self._running,
                 "scheduled_count": len(self._scheduled_tasks),
+                "periodic_count": len(self._periodic_tasks),
                 "check_interval": self.check_interval
             }
 

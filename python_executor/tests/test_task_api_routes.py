@@ -207,3 +207,57 @@ def test_get_task_reports_tool_type_from_execution_metadata(task_api_client, mon
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["data"]["category"] == "tsmaster"
+
+
+def test_get_scheduled_tasks_includes_periodic_registrations(task_api_client, monkeypatch):
+    monkeypatch.setattr(
+        task_api,
+        "task_scheduler",
+        type(
+            "_FakeScheduler",
+            (),
+            {
+                "get_scheduled_tasks": staticmethod(
+                    lambda: [
+                        {
+                            "task_id": "scheduled-1",
+                            "task_name": "Scheduled 1",
+                            "scheduled_time": "2026-04-02T10:00:00",
+                            "status": "pending",
+                        },
+                        {
+                            "task_id": "periodic-1",
+                            "task_name": "Periodic 1",
+                            "scheduled_time": None,
+                            "status": "running",
+                            "scheduler_id": "periodic_periodic-1",
+                            "schedule_type": "periodic",
+                        },
+                    ]
+                )
+            },
+        )(),
+    )
+
+    response = task_api_client.get("/api/tasks/scheduled")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["data"]) == 2
+    assert payload["data"][1]["schedule_type"] == "periodic"
+
+
+def test_task_stats_exposes_periodic_scheduler_count(task_api_client, monkeypatch):
+    monkeypatch.setattr(task_api.task_queue, "get_stats", lambda: {"total": 1, "pending": 1})
+    monkeypatch.setattr(task_api, "task_executor", type("_FakeExecutor", (), {"get_stats": staticmethod(lambda: {"queue_size": 0})})())
+    monkeypatch.setattr(
+        task_api,
+        "task_scheduler",
+        type("_FakeScheduler", (), {"get_stats": staticmethod(lambda: {"running": True, "scheduled_count": 3, "periodic_count": 2})})(),
+    )
+
+    response = task_api_client.get("/api/tasks/stats")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"]["scheduler"]["periodic_count"] == 2
