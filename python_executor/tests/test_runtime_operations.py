@@ -340,6 +340,51 @@ def test_runtime_housekeeping_service_cleans_failed_reports(tmp_path: Path):
     assert data_dir.exists()
 
 
+def test_service_api_includes_runtime_operation_summary():
+    import api.service_api as service_api
+
+    app = Flask(__name__)
+    app.register_blueprint(service_api.service_bp)
+
+    service_api.task_executor = _FakeTaskExecutor()
+    service_api.task_scheduler = _FakeScheduler()
+    service_api.task_queue = _FakeTaskQueue()
+    service_api.task_log_manager = type(
+        "_FakeTaskLogManager",
+        (),
+        {"get_log_stats": staticmethod(lambda: {"total_logs": 3})},
+    )()
+    service_api.get_preflight_checker = lambda: type(
+        "_Preflight",
+        (),
+        {"run": staticmethod(lambda: type("_Report", (), {"status": "warning", "summary": {"warning": 1}})())},
+    )()
+    service_api.get_runtime_diagnose_service = lambda: type(
+        "_Diagnose",
+        (),
+        {
+            "build_snapshot": staticmethod(
+                lambda: {"status": "blocked", "services": {"scheduler": {"running": False}}}
+            )
+        },
+    )()
+
+    client = app.test_client()
+
+    services_response = client.get("/api/services/status")
+    stats_response = client.get("/api/system/stats")
+
+    assert services_response.status_code == 200
+    services_payload = services_response.get_json()["data"]
+    assert services_payload["runtime_operations"]["preflight"]["status"] == "warning"
+    assert services_payload["runtime_operations"]["diagnose"]["status"] == "blocked"
+
+    assert stats_response.status_code == 200
+    stats_payload = stats_response.get_json()["data"]
+    assert stats_payload["runtime_operations"]["preflight"]["status"] == "warning"
+    assert stats_payload["runtime_operations"]["diagnose"]["status"] == "blocked"
+
+
 def test_readme_mentions_runtime_operations_endpoints():
     readme = Path("README.md").read_text(encoding="utf-8")
 
