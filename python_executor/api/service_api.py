@@ -11,6 +11,7 @@ task_executor = get_task_executor()
 from core.task_scheduler import task_scheduler
 from models.executor_task import task_queue
 from models.task_log import task_log_manager
+from core.runtime_operations import get_preflight_checker, get_runtime_diagnose_service
 
 
 # 创建蓝图
@@ -34,6 +35,22 @@ _service_status = {
 
 # 接口调用统计
 _endpoint_stats = {}
+
+
+def _build_runtime_operations_summary() -> Dict[str, Any]:
+    """构建运行时运维摘要。"""
+    preflight_report = get_preflight_checker().run()
+    diagnose_snapshot = get_runtime_diagnose_service().build_snapshot()
+    return {
+        "preflight": {
+            "status": preflight_report.status,
+            "summary": preflight_report.summary,
+        },
+        "diagnose": {
+            "status": diagnose_snapshot.get("status", "unknown"),
+            "services": diagnose_snapshot.get("services", {}),
+        },
+    }
 
 
 def record_endpoint_call(endpoint: str, response_time: float, success: bool = True):
@@ -75,10 +92,15 @@ def get_all_services_status():
         scheduler_stats = task_scheduler.get_stats()
         _service_status["scheduler"]["stats"] = scheduler_stats
         _service_status["scheduler"]["last_heartbeat"] = datetime.now().isoformat()
+
+        runtime_operations = _build_runtime_operations_summary()
         
         return jsonify({
             "success": True,
-            "data": _service_status
+            "data": {
+                **_service_status,
+                "runtime_operations": runtime_operations,
+            }
         })
         
     except Exception as e:
@@ -185,6 +207,7 @@ def get_system_stats():
                 "executor": executor_stats,
                 "scheduler": scheduler_stats,
                 "logs": log_stats,
+                "runtime_operations": _build_runtime_operations_summary(),
                 "services": {
                     name: {
                         "status": info["status"],
