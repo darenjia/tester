@@ -30,6 +30,7 @@ from core.execution_observability import (
     get_execution_observability_manager,
 )
 from core.status_monitor import get_status_monitor
+from core.task_compiler import TaskCompiler, TaskCompileError
 
 logger = get_logger("task_executor_production")
 
@@ -119,6 +120,23 @@ class TaskQueue:
         """获取处理中任务数"""
         with self._lock:
             return len(self.processing)
+
+    def remove(self, task_id: str) -> bool:
+        """从内部执行队列移除尚未开始的任务。"""
+        with self._lock:
+            retained: queue.Queue[ExecutionPlan] = queue.Queue(maxsize=self.queue.maxsize)
+            removed = False
+
+            while not self.queue.empty():
+                task = self.queue.get_nowait()
+                current_task_id = getattr(task, "task_id", None) or getattr(task, "task_no", None)
+                if not removed and current_task_id == task_id:
+                    removed = True
+                    continue
+                retained.put_nowait(task)
+
+            self.queue = retained
+            return removed
 
 class TaskExecutorProduction:
     """任务执行器 - 生产环境版本"""
@@ -356,6 +374,48 @@ class TaskExecutorProduction:
 
     def execute_plan(self, plan: ExecutionPlan) -> bool:
         return self.execute_task(plan)
+
+    def _build_execution_plan_from_queue_task(self, task) -> ExecutionPlan:
+        params = getattr(task, 'params', {}) if hasattr(task, 'params') else {}
+        metadata = getattr(task, 'metadata', {}) if hasattr(task, 'metadata') else {}
+        compiler = TaskCompiler(get_case_mapping_manager())
+
+        test_items = params.get('testItems')
+        if not test_items:
+            case_list = params.get('caseList') or metadata.get('caseList') or []
+            test_items = []
+            for case in case_list:
+                if not isinstance(case, dict):
+                    continue
+                test_items.append(
+                    {
+                        'caseNo': case.get('caseNo') or case.get('case_no') or "",
+                        'name': case.get('caseName') or case.get('name') or "",
+                        'type': case.get('caseType') or case.get('type') or 'test_module',
+                        'dtcInfo': case.get('dtcInfo') or case.get('dtc_info'),
+                        'params': case.get('params') or {},
+                        'repeat': case.get('repeat', 1),
+                    }
+                )
+
+        if not test_items:
+            raise TaskCompileError("submit_task 缺少 testItems/caseList，无法生成执行计划")
+
+        payload = {
+            'taskNo': getattr(task, 'id', None) or getattr(task, 'task_id', None) or "",
+            'projectNo': metadata.get('projectNo', ''),
+            'taskName': getattr(task, 'name', '') or getattr(task, 'taskName', ''),
+            'deviceId': metadata.get('deviceId', ''),
+            'toolType': params.get('tool_type') or getattr(task, 'task_type', None),
+            'configPath': params.get('config_path'),
+            'configName': params.get('config_name'),
+            'baseConfigDir': params.get('base_config_dir'),
+            'variables': params.get('variables', {}),
+            'canoeNamespace': params.get('canoe_namespace'),
+            'timeout': getattr(task, 'timeout', 3600),
+            'testItems': test_items,
+        }
+        return compiler.compile_payload(payload)
     
     @TASK_CIRCUIT_BREAKER
     def _execute_task_production(self, task: ExecutionPlan):
@@ -1279,6 +1339,11 @@ class TaskExecutorProduction:
     
     def cancel_task(self, task_id: str = None) -> bool:
         """取消指定任务"""
+        if task_id and self._task_queue.remove(task_id):
+            logger.info(f"已取消排队中的任务: {task_id}")
+            self._update_task_status(task_id, TaskStatus.CANCELLED, "任务被用户取消")
+            return True
+
         if self.current_task is None:
             logger.warning("没有正在执行的任务")
             return False
@@ -1286,6 +1351,10 @@ class TaskExecutorProduction:
         # 如果指定了task_id，检查是否匹配
         current_task_id = self._task_id(self.current_task)
         if task_id and current_task_id != task_id:
+            if self._task_queue.remove(task_id):
+                logger.info(f"已取消排队中的任务: {task_id}")
+                self._update_task_status(task_id, TaskStatus.CANCELLED, "任务被用户取消")
+                return True
             logger.warning(f"任务ID不匹配: 当前执行的是 {current_task_id}，要取消的是 {task_id}")
             return False
 
@@ -1314,22 +1383,12 @@ class TaskExecutorProduction:
                 logger.error("任务缺少ID属性，无法提交")
                 return False
 
+            execution_plan = self._build_execution_plan_from_queue_task(task)
+
             # 添加到全局任务队列
             if not global_task_queue.add(task):
                 logger.warning(f"任务 {task_id} 已存在于队列中")
                 return False
-
-            execution_plan = ExecutionPlan(
-                task_no=task_id,
-                project_no=getattr(task, 'metadata', {}).get('projectNo', '') if hasattr(task, 'metadata') else '',
-                task_name=getattr(task, 'name', '') or getattr(task, 'taskName', ''),
-                device_id=getattr(task, 'metadata', {}).get('deviceId', '') if hasattr(task, 'metadata') else '',
-                tool_type=getattr(task, 'params', {}).get('tool_type', 'canoe') if hasattr(task, 'params') else 'canoe',
-                config_path=getattr(task, 'params', {}).get('config_path') if hasattr(task, 'params') else None,
-                variables=getattr(task, 'params', {}).get('variables', {}) if hasattr(task, 'params') else {},
-                timeout_seconds=getattr(task, 'timeout', 3600),
-                raw_refs={'source': type(task).__name__},
-            )
 
             # 添加到内部执行队列
             self._task_queue.put(execution_plan)

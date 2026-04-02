@@ -74,18 +74,23 @@ class TaskScheduler:
                 
     def _process_queue(self):
         """处理任务队列"""
-        # 获取待处理任务
-        pending_count = len(task_queue.get_pending_tasks())
+        pending_tasks = task_queue.get_pending_tasks()
         running_count = task_executor.get_running_count()
 
-        # 如果有待处理任务且有空闲工作线程
-        if pending_count > 0 and running_count < task_executor.max_workers:
-            # 获取下一个任务
-            task = task_queue.get()
-            if task:
-                # 提交任务到执行队列 (使用 submit_task 处理内部格式)
-                task_executor.submit_task(task)
-                
+        if not pending_tasks or running_count >= task_executor.max_workers:
+            return
+
+        ready_task = None
+        for task in pending_tasks:
+            task_id = getattr(task, "id", None) or getattr(task, "task_id", None)
+            if task_id in self._scheduled_tasks:
+                continue
+            ready_task = task
+            break
+
+        if ready_task:
+            task_executor.submit_task(ready_task)
+                 
     def _process_scheduled_tasks(self):
         """处理定时任务"""
         current_time = datetime.now()
@@ -106,6 +111,7 @@ class TaskScheduler:
             task = task_queue.get_task(task_id)
             if task and task.status == TaskStatus.PENDING.value:
                 task_log_manager.info(task_id, "定时任务已到期，开始执行")
+                task_executor.submit_task(task)
                 
     def schedule_task(self, task: Task, delay: float = 0) -> bool:
         """
