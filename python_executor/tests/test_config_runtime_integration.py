@@ -354,6 +354,7 @@ def test_health_endpoint_reports_business_health(runtime_modules, monkeypatch):
 
 
 def test_report_exception_still_finishes_observability_context(runtime_modules, monkeypatch):
+    """Test that when report_result throws an exception, observability context is still finished"""
     task_executor_module = runtime_modules["task_executor_module"]
     observability_manager = get_execution_observability_manager()
     observability_manager.create_context(
@@ -372,11 +373,14 @@ def test_report_exception_still_finishes_observability_context(runtime_modules, 
             {"caseList": [], "to_tdm2_format": lambda self: {"taskNo": "TASK-R", "caseList": []}},
         )(),
     )
-    monkeypatch.setattr(
-        task_executor_module.TaskExecutorProduction,
-        "_do_report_direct",
-        lambda self, report_data: (_ for _ in ()).throw(RuntimeError("boom")),
-    )
+    # Monkeypatch report_client.report_result to simulate exception
+    class FakeReportClient:
+        def report_result(self, report_data, task_info=None, report_file_path=None):
+            raise RuntimeError("boom")
+
+        def reload_config(self):
+            pass
+
     persisted_reports = []
     monkeypatch.setattr(
         task_executor_module.TaskExecutorProduction,
@@ -385,6 +389,8 @@ def test_report_exception_still_finishes_observability_context(runtime_modules, 
     )
 
     executor = task_executor_module.TaskExecutorProduction(message_sender=lambda _: None)
+    executor.report_client = FakeReportClient()
+
     task = type(
         "_Task",
         (),

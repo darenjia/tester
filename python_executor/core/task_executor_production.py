@@ -1086,6 +1086,8 @@ class TaskExecutorProduction:
         """
         上报任务结果到远端服务器
 
+        通过 ReportClient.report_result() 统一处理文件上传、结果提交、失败持久化。
+
         Args:
             task: 任务对象
             task_result: 任务结果对象
@@ -1141,24 +1143,38 @@ class TaskExecutorProduction:
             if outcome.endTime:
                 report_data["endTime"] = outcome.endTime.isoformat()
 
-            # 如果有报告文件，先上传文件获取URL
-            report_url = None
-            if report_file_path:
-                report_url = self._upload_report_file(report_file_path)
-                if report_url:
-                    logger.info(f"[_report_to_remote] 报告文件上传成功: {report_file_path} -> {report_url}")
-                    # 将报告URL填充到caseList的reAddress字段
-                    if "caseList" in report_data and report_data["caseList"]:
-                        for case in report_data["caseList"]:
-                            if not case.get("reAddress"):
-                                case["reAddress"] = report_url
-                else:
-                    logger.warning(f"[_report_to_remote] 报告文件上传失败: {report_file_path}")
-
             logger.info(f"[_report_to_remote] 上报数据: taskNo={report_data.get('taskNo')}, caseList={len(report_data.get('caseList', []))}")
 
-            # 直接执行上报
-            success = self._do_report_direct(report_data)
+            # 构建任务上下文信息（用于失败持久化时的元数据）
+            task_info = {
+                'taskNo': task_id,
+                'projectNo': self._task_project_no(task),
+                'deviceId': self._task_device_id(task),
+                'toolType': self._task_tool_type(task),
+                'taskName': self._task_name(task),
+                'trace_id': observability_context["trace_id"],
+                'traceId': observability_context["trace_id"],
+                'attempt_id': observability_context["attempt_id"],
+                'attemptId': observability_context["attempt_id"],
+                'error_category': observability_context.get("error_category"),
+                'errorCategory': observability_context.get("error_category"),
+                'execution_error_category': observability_context.get("execution_error_category"),
+                'executionErrorCategory': observability_context.get("execution_error_category"),
+            }
+
+            # 统一通过 ReportClient.report_result() 处理上传-提交-失败持久化
+            report_client = getattr(self, 'report_client', None)
+            if report_client is None:
+                logger.error("[_report_to_remote] ReportClient 未初始化")
+                record_metric('task.report.failure', 1, {'task_no': task_id})
+                _ensure_observability_context(task).finish(task_id, report_status='failed')
+                record_metric('task.finished', 1, {'task_no': task_id, 'status': 'failed'})
+                return
+
+            if hasattr(report_client, 'reload_config'):
+                report_client.reload_config()
+
+            success = report_client.report_result(report_data, task_info, report_file_path)
 
             if success:
                 logger.info(f"[_report_to_remote] 任务结果上报成功: {task_id}")
@@ -1166,11 +1182,7 @@ class TaskExecutorProduction:
             else:
                 logger.warning(f"[_report_to_remote] 任务结果上报失败: {task_id}")
                 record_metric('task.report.failure', 1, {'task_no': task_id})
-                # 上报失败时持久化以便后续重试
                 self._current_error_category = "report_failure"
-                report_data["report_error_category"] = "report_failure"
-                report_data["reportErrorCategory"] = "report_failure"
-                self._persist_failed_report(report_data, task)
 
             _ensure_observability_context(task).finish(
                 task_id,
@@ -1186,9 +1198,6 @@ class TaskExecutorProduction:
             logger.error(f"[_report_to_remote] 远端上报任务结果时出错: {e}", exc_info=True)
             record_metric('task.report.failure', 1, {'task_no': task_id})
             self._current_error_category = "report_failure"
-            if 'report_data' in locals():
-                report_data["report_error_category"] = "report_failure"
-                report_data["reportErrorCategory"] = "report_failure"
             _ensure_observability_context(task).finish(
                 task_id,
                 report_status='failed',
@@ -1198,7 +1207,7 @@ class TaskExecutorProduction:
                 1,
                 {'task_no': task_id, 'status': 'failed'},
             )
-            # 异常时也持久化
+            # 异常时也持久化（如果report_data已构建）
             if 'report_data' in locals():
                 self._persist_failed_report(report_data, task)
 

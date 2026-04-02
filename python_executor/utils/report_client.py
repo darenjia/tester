@@ -65,9 +65,6 @@ class ReportClient:
         else:
             self._api_url = self.config_manager.get('report.api_url', '')
 
-        if not self._api_url:
-            self._api_url = self.config_manager.get('report.api_url', '')
-
         self._result_api_url = self.config_manager.get('report.result_api_url', 'http://10.124.11.142:8315/api/python/report')
         self._file_upload_url = self.config_manager.get('report_server.upload_url', 'http://10.124.11.142:8204/upload')
         if not self._file_upload_url:
@@ -91,7 +88,7 @@ class ReportClient:
         self._load_config()
 
     def report_task_result(self, task_result: TaskResult | ExecutionOutcome, task_info: Dict[str, Any] = None,
-                          report_file_path: str = None) -> bool:
+                          report_file_path: str = None, trace_context: Dict[str, Any] = None) -> bool:
         """
         上报任务执行结果
 
@@ -99,6 +96,7 @@ class ReportClient:
             task_result: 任务结果对象
             task_info: 额外的任务信息（如projectNo, deviceId等）
             report_file_path: 报告文件路径（可选）
+            trace_context: 可观测性上下文（trace_id, attempt_id, error_category等）
 
         Returns:
             是否上报成功
@@ -116,16 +114,19 @@ class ReportClient:
                 else:
                     logger.warning(f"报告文件上传失败: {report_file_path}")
 
-            normalized_result = self._normalize_task_result(task_result)
+            # Build task_info with trace context if provided (snake_case for internal use)
+            effective_task_info = dict(task_info) if task_info else {}
+            if trace_context:
+                effective_task_info.update({
+                    "trace_id": trace_context.get("trace_id"),
+                    "attempt_id": trace_context.get("attempt_id"),
+                    "error_category": trace_context.get("error_category"),
+                    "execution_error_category": trace_context.get("execution_error_category"),
+                })
 
-            if report_url and normalized_result.results:
-                for result in normalized_result.results:
-                    if hasattr(result, 'reAddress') and not result.reAddress:
-                        result.reAddress = report_url
+            report_data = self._build_report_data(task_result, effective_task_info, report_url)
 
-            report_data = self._build_report_data(task_result, task_info)
-
-            self._executor.submit(self._do_report, report_data, task_info)
+            self._executor.submit(self._do_report, report_data, effective_task_info)
 
             return True
         except Exception as e:
@@ -137,10 +138,11 @@ class ReportClient:
             return task_result.to_task_result()
         return task_result
 
-    def _build_report_data(self, task_result: TaskResult | ExecutionOutcome, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _build_report_data(self, task_result: TaskResult | ExecutionOutcome, task_info: Dict[str, Any] = None,
+                          report_url: str = None) -> Dict[str, Any]:
         """构建上报数据 - TDM2.0格式"""
         if isinstance(task_result, ExecutionOutcome):
-            return task_result.to_report_payload(task_info)
+            return task_result.to_report_payload(task_info, report_url)
 
         task_result = self._normalize_task_result(task_result)
         data = {
@@ -159,6 +161,12 @@ class ReportClient:
         # 计算执行时长
         if task_result.startTime and task_result.endTime:
             data["duration"] = (task_result.endTime - task_result.startTime).total_seconds()
+
+        # Propagate uploaded report URL to each result that lacks one
+        if report_url:
+            for result in data.get("results", []):
+                if not result.get("reAddress"):
+                    result["reAddress"] = report_url
 
         # 合并额外信息
         if task_info:
@@ -208,6 +216,58 @@ class ReportClient:
         logger.info(f"任务结果上报成功: taskNo={task_no}")
         self._reset_failure_counter()
         return True
+
+    def report_result(self, report_data: Dict[str, Any], task_info: Dict[str, Any] = None,
+                      report_file_path: str = None) -> bool:
+        """
+        上报预构建的结果数据（统一上报入口）
+
+        统一处理文件上传、结果提交、失败持久化。
+        确保所有上报路径共享相同的行为。
+
+        Args:
+            report_data: 预构建的上报数据字典
+            task_info: 任务上下文信息（用于失败持久化）
+            report_file_path: 报告文件路径（可选，如果提供将上传文件并将URL填充到caseList）
+
+        Returns:
+            上报成功返回 True，否则返回 False
+        """
+        if not self.enabled:
+            logger.debug("上报功能未启用，跳过结果上报")
+            return False
+
+        try:
+            effective_report_data = dict(report_data)
+            task_info = task_info or {}
+
+            # 如果提供了报告文件，先上传并获取URL
+            report_url = None
+            if report_file_path:
+                report_url = self.upload_report_file(report_file_path)
+                if report_url:
+                    logger.info(f"报告文件上传成功: {report_file_path} -> {report_url}")
+                    # 将URL填充到caseList中缺少reAddress的条目
+                    case_list = effective_report_data.get("caseList", [])
+                    for case in case_list:
+                        if not case.get("reAddress"):
+                            case["reAddress"] = report_url
+                else:
+                    logger.warning(f"报告文件上传失败: {report_file_path}")
+
+            # 执行实际上报
+            if self.report_payload(effective_report_data):
+                return True
+            else:
+                # 上报失败，持久化以便重试
+                error_msg = "服务器无响应"
+                self._handle_report_failure(effective_report_data, task_info, error_msg)
+                return False
+
+        except Exception as e:
+            logger.error(f"上报结果时出错: {e}")
+            self._handle_report_failure(report_data, task_info, str(e))
+            return False
 
     def _handle_report_failure(self, report_data: Dict[str, Any],
                                 task_info: Dict[str, Any] = None,
@@ -269,30 +329,22 @@ class ReportClient:
         task_info: Dict[str, Any] = None,
         error: str = "未知错误",
     ) -> Dict[str, Any]:
-        """构造失败上报的结构化元数据。"""
+        """构造失败上报的结构化元数据（使用snake_case作为内部规范）。"""
         task_info = task_info or {}
         return {
             "report_source": "report_client",
             "endpoint": self._result_api_url,
             "failure_reason": error,
-            "taskNo": report_data.get("taskNo"),
             "task_no": report_data.get("taskNo"),
-            "taskName": task_info.get("taskName") or report_data.get("taskName"),
             "task_name": task_info.get("taskName") or report_data.get("taskName"),
-            "projectNo": task_info.get("projectNo") or report_data.get("projectNo"),
             "project_no": task_info.get("projectNo") or report_data.get("projectNo"),
-            "deviceId": task_info.get("deviceId") or report_data.get("deviceId"),
             "device_id": task_info.get("deviceId") or report_data.get("deviceId"),
-            "toolType": task_info.get("toolType") or report_data.get("toolType"),
             "tool_type": task_info.get("toolType") or report_data.get("toolType"),
-            "trace_id": task_info.get("trace_id") or task_info.get("traceId") or report_data.get("trace_id") or report_data.get("traceId"),
-            "traceId": task_info.get("trace_id") or task_info.get("traceId") or report_data.get("trace_id") or report_data.get("traceId"),
-            "attempt_id": task_info.get("attempt_id") or task_info.get("attemptId") or report_data.get("attempt_id") or report_data.get("attemptId"),
-            "attemptId": task_info.get("attempt_id") or task_info.get("attemptId") or report_data.get("attempt_id") or report_data.get("attemptId"),
-            "error_category": task_info.get("error_category") or task_info.get("errorCategory") or report_data.get("error_category") or report_data.get("errorCategory") or "report_failure",
-            "errorCategory": task_info.get("error_category") or task_info.get("errorCategory") or report_data.get("error_category") or report_data.get("errorCategory") or "report_failure",
+            "trace_id": task_info.get("trace_id") or report_data.get("trace_id"),
+            "attempt_id": task_info.get("attempt_id") or report_data.get("attempt_id"),
+            "error_category": task_info.get("error_category") or report_data.get("error_category") or "report_failure",
+            "execution_error_category": task_info.get("execution_error_category") or report_data.get("execution_error_category"),
             "report_error_category": "report_failure",
-            "reportErrorCategory": "report_failure",
         }
 
     def _calculate_priority(self, report_data: Dict[str, Any]) -> int:

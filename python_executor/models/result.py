@@ -301,7 +301,7 @@ class ExecutionOutcome:
             errorMessage=self.error_summary,
         )
 
-    def to_report_payload(self, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
+    def to_report_payload(self, task_info: Dict[str, Any] = None, report_url: str = None) -> Dict[str, Any]:
         payload = {
             "taskNo": self.task_no,
             "status": self.status,
@@ -314,6 +314,11 @@ class ExecutionOutcome:
             "timestamp": int(datetime.now().timestamp() * 1000),
             "platform": "NETWORK",
         }
+        # Propagate uploaded report URL to each case result that lacks one
+        if report_url:
+            for result in payload.get("results", []):
+                if not result.get("reAddress"):
+                    result["reAddress"] = report_url
         if task_info:
             payload.update(task_info)
         return payload
