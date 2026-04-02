@@ -17,8 +17,9 @@ from .capabilities import (
     ConfigurationCapability,
     MeasurementCapability,
     ProjectControlCapability,
-    RPCExecutionCapability,
+    TSMasterExecutionCapability,
 )
+from core.case_mapping_manager import get_case_mapping_manager
 
 # 尝试导入TSMaster RPC API
 try:
@@ -106,20 +107,25 @@ class TSMasterAdapter(BaseTestAdapter):
 
     def _register_capabilities(self) -> None:
         self.register_capability(
+            "tsmaster_execution",
+            TSMasterExecutionCapability(
+                build_case_selection=self.build_case_selection,
+                start_execution=lambda selected_cases: self.start_test_execution(
+                    test_cases=selected_cases,
+                    wait_for_complete=False,
+                    timeout=self.operation_timeout,
+                ),
+                wait_for_completion=self.wait_for_test_complete,
+                get_report_info=self.get_test_report_info,
+            ),
+        )
+        self.register_capability(
             "configuration",
             ConfigurationCapability(load=self.load_configuration),
         )
         self.register_capability(
             "measurement",
             MeasurementCapability(start=self.start_test, stop=self.stop_test),
-        )
-        self.register_capability(
-            "rpc_execution",
-            RPCExecutionCapability(
-                start_execution=self.start_test_execution,
-                wait_for_complete=self.wait_for_test_complete,
-                get_report_info=self.get_test_report_info,
-            ),
         )
         self.register_capability(
             "project_control",
@@ -132,7 +138,7 @@ class TSMasterAdapter(BaseTestAdapter):
             "artifact",
             ArtifactCapability(collect=self.get_test_report_info),
         )
-    
+
     def connect(self) -> bool:
         """
         连接TSMaster应用
@@ -542,7 +548,7 @@ class TSMasterAdapter(BaseTestAdapter):
 
             if wait_for_complete:
                 self.logger.info(f"等待测试完成（超时: {timeout}秒）...")
-                if not self._wait_for_test_complete(timeout):
+                if not self.wait_for_test_complete(timeout):
                     self.logger.warning("等待测试完成超时")
 
             return True
@@ -551,168 +557,9 @@ class TSMasterAdapter(BaseTestAdapter):
             self._set_error(f"测试执行启动失败: {str(e)}")
             return False
 
-    def run_test_with_master_form(self, test_cases: Optional[str] = None,
-                                  wait_for_complete: bool = True,
-                                  timeout: Optional[int] = None) -> bool:
-        """
-        使用Master小程序执行完整测试流程
-
-        这是TSMaster推荐的标准测试执行流程，与tsmaster_example.py中的流程一致：
-
-        1. 启动Master小程序
-        2. 等待Master稳定
-        3. 初始化设备 (Master.Init)
-        4. 开启自动报告 (Master.AutoReport)
-        5. 强制编译测试用例 (TestSystem.GenCode)
-        6. 选择测试用例 (TestSystem.SelectCases)
-        7. 开始测试 (TestSystem.Controller)
-        8. 等待测试完成
-        9. 生成报告 (Master.GenReport)
-
-        Args:
-            test_cases: 测试用例选择字符串，格式如 "TG1_TC1=1,TG1_TC2=1"
-            wait_for_complete: 是否等待测试完成
-            timeout: 执行超时时间（秒）
-
-        Returns:
-            执行成功返回True，否则返回False
-        """
-        if not self.is_connected:
-            self._set_error("TSMaster未连接，无法执行测试")
-            return False
-
-        if not self._using_rpc or not self._rpc_client:
-            self._set_error("Master小程序模式仅支持RPC模式")
-            return False
-
-        timeout = timeout or self.operation_timeout
-
-        try:
-            self.logger.info("=== 开始Master小程序测试流程 ===")
-
-            # Step 1: 启动Master小程序（如果未启动）
-            if not self._master_form_started:
-                self.logger.info(f"启动Master小程序: {self.master_form_name}")
-                if not self.start_master_form(self.master_form_name):
-                    self._set_error("Master小程序启动失败")
-                    return False
-                # 等待Master稳定
-                time.sleep(2)
-
-            # Step 2: 初始化Master设备
-            self.logger.info("初始化Master设备...")
-            if not self._rpc_client.initialize_master(timeout=5):
-                self._set_error("Master设备初始化失败")
-                return False
-
-            # Step 3: 开启自动报告
-            self.logger.info("开启自动报告...")
-            self._rpc_client.enable_auto_report(True)
-
-            # Step 4: 强制编译测试用例（防呆关键步骤！）
-            self.logger.info("编译测试用例...")
-            if not self._rpc_client.compile_test_cases(timeout=10):
-                self._set_error("测试用例编译失败")
-                return False
-
-            # Step 5: 选择测试用例
-            if test_cases:
-                self.logger.info(f"选择测试用例: {test_cases}")
-                self._rpc_client.select_test_cases(test_cases)
-            else:
-                self.logger.info("未指定测试用例，将执行所有选中的用例")
-
-            # Step 6: 开始测试
-            self.logger.info("开始测试...")
-            if not self._rpc_client.start_test():
-                self._set_error("启动测试失败")
-                return False
-
-            # Step 7: 等待测试完成
-            if wait_for_complete:
-                self.logger.info(f"等待测试完成（超时: {timeout}秒）...")
-                if not self._wait_for_test_complete_by_status(timeout):
-                    self.logger.warning("等待测试完成超时")
-
-            self.logger.info("=== Master小程序测试流程完成 ===")
-            return True
-
-        except Exception as e:
-            self._set_error(f"Master小程序测试流程异常: {str(e)}")
-            return False
-
-    def _wait_for_test_complete_by_status(self, timeout: int) -> bool:
-        """
-        通过TestSystem.RunningStatus等待测试完成
-
-        Args:
-            timeout: 超时时间（秒）
-
-        Returns:
-            测试完成返回True，超时返回False
-        """
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            try:
-                if self._using_rpc and self._rpc_client:
-                    # 优先使用 RunningStatus 判断
-                    running_status = self._rpc_client.read_system_var("TestSystem.RunningStatus")
-                    if running_status == "0":
-                        self.logger.info("测试执行完成 (RunningStatus=0)")
-                        return True
-                    # 同时检查 Controller 作为备选
-                    controller = self._rpc_client.read_system_var("TestSystem.Controller")
-                    if controller == "0":
-                        self.logger.info("测试执行完成 (Controller=0)")
-                        return True
-            except Exception as e:
-                self.logger.debug(f"检查测试状态异常: {str(e)}")
-
-            time.sleep(0.5)
-
-        return False
-
-    def _wait_for_test_complete(self, timeout: int) -> bool:
-        """
-        等待测试完成
-
-        Args:
-            timeout: 超时时间（秒）
-
-        Returns:
-            测试完成返回True，超时返回False
-        """
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            try:
-                if self._using_rpc and self._rpc_client:
-                    # 优先使用 RunningStatus 判断
-                    running_status = self._rpc_client.read_system_var("TestSystem.RunningStatus")
-                    if running_status == "0":
-                        self.logger.info("测试执行完成")
-                        return True
-                    # 同时检查 Controller 作为备选
-                    controller = self._rpc_client.read_system_var("TestSystem.Controller")
-                    if controller == "0":
-                        self.logger.info("测试执行完成")
-                        return True
-                else:
-                    controller = self._read_system_var("TestSystem.Controller")
-                    if controller == "0":
-                        self.logger.info("测试执行完成")
-                        return True
-            except Exception as e:
-                self.logger.debug(f"检查测试状态异常: {str(e)}")
-
-            time.sleep(0.5)
-
-        return False
-
     def wait_for_test_complete(self, timeout: Optional[int] = None) -> bool:
         """
-        Wait for test to complete by polling is_test_finished()
+        Wait for test completion by polling the TSMaster controller state.
 
         Args:
             timeout: Timeout in seconds. Defaults to operation_timeout.
@@ -770,41 +617,6 @@ class TSMasterAdapter(BaseTestAdapter):
 
         except Exception as e:
             self._set_error(f"停止测试执行失败: {str(e)}")
-            return False
-
-    def generate_test_report(self, timeout: int = 10) -> bool:
-        """
-        生成测试报告
-
-        Args:
-            timeout: 超时时间（秒）
-
-        Returns:
-            生成成功返回True，否则返回False
-        """
-        if not self.is_connected:
-            self._set_error("TSMaster未连接，无法生成报告")
-            return False
-
-        try:
-            self.logger.info("正在生成测试报告...")
-
-            if self._using_rpc and self._rpc_client:
-                success = self._rpc_client.generate_report(timeout)
-            else:
-                success = self._write_system_var("Master.GenReport", "1")
-                if success:
-                    time.sleep(1)
-
-            if success:
-                self.logger.info("测试报告生成完成")
-            else:
-                self._set_error("测试报告生成失败")
-
-            return success
-
-        except Exception as e:
-            self._set_error(f"生成测试报告失败: {str(e)}")
             return False
 
     def get_test_results(self, result_type: str = "xml") -> Optional[Dict[str, Any]]:
@@ -895,6 +707,29 @@ class TSMasterAdapter(BaseTestAdapter):
         except Exception as e:
             self._set_error(f"获取测试报告信息失败: {str(e)}")
             return None
+
+    def build_case_selection(self, plan) -> str:
+        """
+        Build a TSMaster test case selection string from plan cases.
+
+        The returned string follows the conventional "CASE_A=1,CASE_B=1" form.
+        """
+        mapping_manager = get_case_mapping_manager()
+        selection_parts: List[str] = []
+
+        plan_cases = getattr(plan, "cases", None) or getattr(plan, "test_items", None) or []
+        for case in plan_cases:
+            case_no = getattr(case, "case_no", None) or getattr(case, "caseNo", None)
+            if not case_no:
+                continue
+
+            mapping = mapping_manager.get_mapping(case_no)
+            if mapping and getattr(mapping, "ini_config", None):
+                selection_parts.append(mapping.ini_config)
+            else:
+                selection_parts.append(f"{case_no}=1")
+
+        return ",".join(selection_parts)
 
     def get_test_statistics(self) -> Dict[str, int]:
         """

@@ -130,7 +130,7 @@ python app.py
 - `core.adapters` 包级导出只保留 raw adapter 入口
 - `TaskExecutorProduction` 通过 `ExecutionStrategySelector` 选择工具策略
 - CANoe 当前只保留 `test_module` 执行路径
-- TSMaster 通过 `rpc_execution` / `project_control` capability 执行
+- TSMaster 通过 `tsmaster_execution` / `project_control` capability 执行
 - TTworkbench 通过 `ttworkbench_execution` capability 执行 clf / batch 任务
 - `AdapterWrapper` 已删除，主路径只保留 `raw adapter + strategy + capability`
 

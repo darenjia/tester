@@ -1,168 +1,151 @@
+from types import SimpleNamespace
+
 from core.execution_strategies.tsmaster_strategy import TSMasterExecutionStrategy
-from core.adapters.tsmaster_adapter import TSMasterAdapter
+from core.result_collector import ResultCollector
 
 
-class _DummyAdapter:
-    def __init__(self, capabilities):
-        self._capabilities = capabilities
+class _ExecutionCapability:
+    def __init__(self, report_info):
+        self.report_info = report_info
+        self.build_case_selection_calls = 0
+        self.start_execution_calls = []
+        self.wait_for_completion_calls = []
+        self.wait_for_complete_calls = []
+        self.report_info_calls = 0
+
+    def build_case_selection(self, plan):
+        self.build_case_selection_calls += 1
+        return ",".join(f"{case.case_no}=1" for case in getattr(plan, "cases", []) or [])
+
+    def start_execution(self, *args, **kwargs):
+        self.start_execution_calls.append((args, kwargs))
+        return True
+
+    def wait_for_completion(self, timeout):
+        self.wait_for_completion_calls.append(timeout)
+        return True
+
+    def wait_for_complete(self, timeout=None):
+        self.wait_for_complete_calls.append(timeout)
+        return True
+
+    def get_report_info(self):
+        self.report_info_calls += 1
+        return self.report_info
+
+
+class _Adapter:
+    def __init__(self, capability):
+        self._capability = capability
 
     def get_capability(self, name, default=None):
-        return self._capabilities.get(name, default)
+        if name == "tsmaster_execution":
+            return self._capability
+        return default
 
 
-def test_tsmaster_strategy_requires_rpc_capability():
-    strategy = TSMasterExecutionStrategy()
-    adapter = _DummyAdapter(
-        {
-            "configuration": object(),
-            "measurement": object(),
-        }
+def _make_plan(timeout_seconds=30, case_nos=None):
+    case_nos = case_nos or ["CASE-001"]
+    return SimpleNamespace(
+        tool_type="tsmaster",
+        task_no="TASK-001",
+        timeout_seconds=timeout_seconds,
+        timeout=timeout_seconds,
+        cases=[
+            SimpleNamespace(case_no=case_no, case_name=f"Case {index + 1}", case_type="test_module")
+            for index, case_no in enumerate(case_nos)
+        ],
     )
 
-    ok, error = strategy.prepare(plan=None, adapter=adapter)
 
-    assert ok is False
-    assert "rpc" in error.lower()
-
-
-def test_tsmaster_strategy_prepare_accepts_registered_capabilities():
-    strategy = TSMasterExecutionStrategy()
-    adapter = _DummyAdapter(
-        {
-            "configuration": object(),
-            "measurement": object(),
-            "rpc_execution": object(),
-        }
-    )
-
-    ok, error = strategy.prepare(plan=None, adapter=adapter)
-
-    assert ok is True
-    assert error is None
-
-
-def test_tsmaster_strategy_runs_via_capabilities_without_executor_helpers(monkeypatch):
-    strategy = TSMasterExecutionStrategy()
-    observed = {"start": [], "wait": [], "load": [], "stop": 0}
-
+def _patch_mapping_manager(monkeypatch):
     monkeypatch.setattr(
         "core.execution_strategies.tsmaster_strategy.get_case_mapping_manager",
         lambda: type(
             "_MappingManager",
             (),
-            {"get_mapping": staticmethod(lambda case_no: type("_Mapping", (), {"ini_config": f"{case_no}=1"})())},
+            {
+                "get_mapping": staticmethod(
+                    lambda case_no: SimpleNamespace(ini_config=f"{case_no}=1")
+                )
+            },
         )(),
     )
 
-    class _RPC:
-        def start_execution(self, test_cases=None, wait_for_complete=True, timeout=None):
-            observed["start"].append((test_cases, wait_for_complete, timeout))
-            return True
 
-        def wait_for_complete(self, timeout=None):
-            observed["wait"].append(timeout)
-            return True
-
-        def get_report_info(self):
-            return {
-                "passed": 1,
-                "failed": 0,
-                "details": [{"name": "Case 1", "case_no": "CASE-1", "verdict": "PASS"}],
-            }
-
-    class _Artifact:
-        def collect(self):
-            return {
-                "passed": 1,
-                "failed": 0,
-                "details": [{"name": "Case 1", "case_no": "CASE-1", "verdict": "PASS"}],
-            }
-
-    class _Measurement:
-        def start(self):
-            observed["measurement_started"] = True
-            return True
-
-        def stop(self):
-            observed["stop"] += 1
-            return True
-
-    class _Configuration:
-        def load(self, config_path):
-            observed["load"].append(config_path)
-            return True
-
-    class _Adapter:
-        def get_capability(self, name, default=None):
-            mapping = {
-                "configuration": _Configuration(),
-                "measurement": _Measurement(),
-                "rpc_execution": _RPC(),
-                "artifact": _Artifact(),
-            }
-            return mapping.get(name, default)
-
-    class _Collector:
-        def __init__(self):
-            self.results = []
-
-        def add_test_result(self, result):
-            self.results.append(result)
-
-    class _Executor:
-        def __init__(self):
-            self.current_collector = _Collector()
-
-        def _load_configuration_by_path(self, config_path):
-            raise AssertionError("strategy should load configuration via capability")
-
-        def _start_test_execution(self, plan):
-            raise AssertionError("strategy should start execution via rpc capability")
-
-        def _collect_tsmaster_results(self, plan):
-            raise AssertionError("strategy should collect results via capability")
-
-        def _stop_measurement(self, plan):
-            raise AssertionError("strategy should stop measurement via capability")
-
-    plan = type(
-        "_Plan",
-        (),
+def test_tsmaster_strategy_uses_dedicated_execution_capability_and_collects_outcome(monkeypatch):
+    _patch_mapping_manager(monkeypatch)
+    capability = _ExecutionCapability(
         {
-            "timeout_seconds": 30,
-            "cases": [type("_Case", (), {"case_no": "CASE-1", "case_name": "Case 1", "case_type": "test_module"})()],
-        },
-    )()
+            "report_path": "C:/reports/out.html",
+            "testdata_path": "C:/reports/data",
+            "results": [{"case_no": "CASE-001", "passed": True, "verdict": "PASS"}],
+        }
+    )
+    adapter = _Adapter(capability)
+    collector = ResultCollector("TASK-001")
 
-    executor = _Executor()
-    results = strategy.run(plan, adapter=_Adapter(), executor=executor, config_path="D:/cfgs/tsmaster.tsp")
+    outcome = TSMasterExecutionStrategy().run(_make_plan(), adapter, collector)
 
-    assert observed["load"] == ["D:/cfgs/tsmaster.tsp"]
-    assert observed["start"] == [("CASE-1=1", False, 30)]
-    assert observed["wait"] == [30]
-    assert observed["stop"] == 1
-    assert len(results) == 1
-    assert results[0].verdict == "PASS"
-    assert len(executor.current_collector.results) == 1
-
-
-def test_tsmaster_adapter_falls_back_to_traditional_connect(monkeypatch):
-    adapter = TSMasterAdapter({"use_rpc": True, "fallback_to_traditional": True})
-    calls = []
-
-    monkeypatch.setattr(adapter, "_connect_via_rpc", lambda: calls.append("rpc") or False)
-    monkeypatch.setattr(adapter, "_connect_via_traditional", lambda: calls.append("traditional") or True)
-
-    assert adapter.connect() is True
-    assert calls == ["rpc", "traditional"]
+    assert capability.build_case_selection_calls == 1
+    assert getattr(outcome, "taskNo", None) == "TASK-001"
+    assert getattr(outcome, "status", None) == "completed"
+    assert outcome.summary["passed"] == 1
+    assert outcome.summary["failed"] == 0
+    assert outcome.results[0].name == "CASE-001"
 
 
-def test_tsmaster_adapter_skips_traditional_fallback_when_disabled(monkeypatch):
-    adapter = TSMasterAdapter({"use_rpc": True, "fallback_to_traditional": False})
-    calls = []
+def test_tsmaster_strategy_marks_timeout_as_failed_outcome(monkeypatch):
+    _patch_mapping_manager(monkeypatch)
 
-    monkeypatch.setattr(adapter, "_connect_via_rpc", lambda: calls.append("rpc") or False)
-    monkeypatch.setattr(adapter, "_connect_via_traditional", lambda: calls.append("traditional") or True)
+    capability = _ExecutionCapability(
+        {
+            "report_path": "C:/reports/out.html",
+            "testdata_path": "C:/reports/data",
+            "results": [],
+        }
+    )
+    capability.wait_for_completion = lambda timeout: capability.wait_for_completion_calls.append(timeout) or False
+    adapter = _Adapter(capability)
+    collector = ResultCollector("TASK-001")
 
-    assert adapter.connect() is False
-    assert calls == ["rpc"]
+    outcome = TSMasterExecutionStrategy().run(_make_plan(timeout_seconds=5), adapter, collector)
+
+    assert capability.build_case_selection_calls == 1
+    assert getattr(outcome, "status", None) == "timeout"
+    assert getattr(outcome, "errorMessage", None) == "TSMaster execution timed out"
+    assert outcome.summary["failed"] == 1
+
+
+def test_tsmaster_strategy_marks_missing_report_as_failed_outcome(monkeypatch):
+    _patch_mapping_manager(monkeypatch)
+
+    capability = _ExecutionCapability(None)
+    capability.get_report_info = lambda: None
+    adapter = _Adapter(capability)
+    collector = ResultCollector("TASK-001")
+
+    outcome = TSMasterExecutionStrategy().run(_make_plan(), adapter, collector)
+
+    assert capability.build_case_selection_calls == 1
+    assert getattr(outcome, "status", None) == "failed"
+    assert "report" in getattr(outcome, "errorMessage", "").lower()
+
+
+def test_tsmaster_strategy_returns_execution_outcome_for_executor_runtime_collector(monkeypatch):
+    _patch_mapping_manager(monkeypatch)
+    capability = _ExecutionCapability(
+        {
+            "report_path": "C:/reports/out.html",
+            "testdata_path": "C:/reports/data",
+            "results": [{"case_no": "CASE-001", "passed": True, "verdict": "PASS"}],
+        }
+    )
+    adapter = _Adapter(capability)
+    executor = SimpleNamespace(current_collector=ResultCollector("TASK-001"))
+
+    outcome = TSMasterExecutionStrategy().run(_make_plan(), adapter, executor=executor)
+
+    assert getattr(outcome, "taskNo", None) == "TASK-001"
+    assert getattr(outcome, "status", None) == "completed"
+    assert outcome.summary["passed"] == 1
