@@ -351,3 +351,91 @@ def test_schedule_periodic_task_validates_task_before_starting_thread(monkeypatc
     assert scheduler.schedule_periodic_task(task, interval=1.0, max_iterations=1) is None
     assert started == []
     assert scheduler._periodic_tasks == {}
+
+
+def test_cancel_scheduled_task_can_cancel_periodic_registration(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler._periodic_tasks["periodic-job-1"] = {
+        "scheduler_id": "periodic-job-1",
+        "task_id": "job-1",
+        "task_name": "Periodic Job 1",
+        "interval": 5.0,
+        "max_iterations": None,
+        "iteration": 0,
+        "thread": type("_FakeThread", (), {"is_alive": staticmethod(lambda: True), "join": staticmethod(lambda timeout=None: None)})(),
+        "cancel_event": type("_FakeEvent", (), {"set": staticmethod(lambda: None), "is_set": staticmethod(lambda: False)})(),
+    }
+
+    monkeypatch.setattr("core.task_scheduler.task_executor.cancel_task", lambda task_id: False)
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+
+    assert scheduler.cancel_scheduled_task("periodic-job-1") is True
+    assert scheduler._periodic_tasks == {}
+
+
+def test_stop_joins_periodic_threads_and_clears_registry(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler._running = True
+    joined = []
+
+    class _FakeThread:
+        def join(self, timeout=None):
+            joined.append(timeout)
+
+        def is_alive(self):
+            return False
+
+    scheduler._scheduler_thread = _FakeThread()
+    scheduler._periodic_tasks["periodic-job-2"] = {
+        "scheduler_id": "periodic-job-2",
+        "task_id": "job-2",
+        "task_name": "Periodic Job 2",
+        "interval": 5.0,
+        "max_iterations": None,
+        "iteration": 1,
+        "thread": _FakeThread(),
+        "cancel_event": type("_FakeEvent", (), {"set": staticmethod(lambda: None), "is_set": staticmethod(lambda: False)})(),
+    }
+
+    monkeypatch.setattr("core.task_scheduler.task_log_manager.info", lambda *args, **kwargs: None)
+
+    scheduler.stop()
+
+    assert joined == [5, 5]
+    assert scheduler._periodic_tasks == {}
+
+
+def test_get_scheduled_tasks_uses_periodic_registry_metadata(monkeypatch):
+    from core.task_scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler._periodic_tasks["periodic-job-3"] = {
+        "scheduler_id": "periodic-job-3",
+        "task_id": "job-3",
+        "task_name": "Periodic Job 3",
+        "interval": 15.0,
+        "max_iterations": 4,
+        "iteration": 2,
+        "thread": type("_FakeThread", (), {"is_alive": staticmethod(lambda: True)})(),
+        "cancel_event": type("_FakeEvent", (), {"set": staticmethod(lambda: None), "is_set": staticmethod(lambda: False)})(),
+    }
+
+    monkeypatch.setattr("core.task_scheduler.task_queue.get_task", lambda task_id: None)
+
+    scheduled = scheduler.get_scheduled_tasks()
+
+    assert scheduled == [{
+        "task_id": "job-3",
+        "task_name": "Periodic Job 3",
+        "scheduled_time": None,
+        "status": "running",
+        "scheduler_id": "periodic-job-3",
+        "schedule_type": "periodic",
+        "interval": 15.0,
+        "max_iterations": 4,
+        "iteration": 2,
+    }]

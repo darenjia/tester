@@ -142,6 +142,27 @@ def test_cancel_task_route_uses_scheduler_to_cancel_delayed_tasks(task_api_clien
     assert cancelled == ["task-delay"]
 
 
+def test_cancel_task_route_accepts_periodic_scheduler_id(task_api_client, monkeypatch):
+    cancelled = []
+
+    class _FakeScheduler:
+        def cancel_scheduled_task(self, task_id):
+            cancelled.append(task_id)
+            return task_id == "periodic_task-1"
+
+    class _FakeExecutor:
+        def cancel_task(self, task_id):
+            raise AssertionError("periodic cancel should be handled by scheduler registry")
+
+    monkeypatch.setattr(task_api, "task_scheduler", _FakeScheduler())
+    monkeypatch.setattr(task_api, "task_executor", _FakeExecutor())
+
+    response = task_api_client.post("/api/tasks/periodic_task-1/cancel")
+
+    assert response.status_code == 200
+    assert cancelled == ["periodic_task-1"]
+
+
 def test_delete_task_removes_queued_executor_task_before_deleting_record(task_api_client, monkeypatch):
     removed = []
     cancelled = []

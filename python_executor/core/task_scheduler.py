@@ -37,7 +37,7 @@ class TaskScheduler:
         self._scheduler_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._scheduled_tasks: Dict[str, datetime] = {}  # task_id -> scheduled_time
-        self._periodic_tasks: Dict[str, threading.Thread] = {}
+        self._periodic_tasks: Dict[str, Dict[str, Any]] = {}
         
     def start(self):
         """启动调度器"""
@@ -56,9 +56,19 @@ class TaskScheduler:
         """停止调度器"""
         with self._lock:
             self._running = False
+            periodic_entries = list(self._periodic_tasks.values())
             
         if self._scheduler_thread:
             self._scheduler_thread.join(timeout=5)
+        for entry in periodic_entries:
+            cancel_event = entry.get("cancel_event")
+            thread = entry.get("thread")
+            if cancel_event:
+                cancel_event.set()
+            if thread:
+                thread.join(timeout=5)
+        with self._lock:
+            self._periodic_tasks.clear()
             
         logger.info("任务调度器已停止")
         task_log_manager.info("system", "任务调度器已停止")
@@ -151,8 +161,8 @@ class TaskScheduler:
             
         return False
         
-    def schedule_periodic_task(self, task: Task, interval: float, 
-                               max_iterations: Optional[int] = None) -> str:
+    def schedule_periodic_task(self, task: Task, interval: float,
+                               max_iterations: Optional[int] = None) -> Optional[str]:
         """
         调度周期性任务
         
@@ -177,11 +187,29 @@ class TaskScheduler:
             return None
 
         scheduler_id = f"periodic_{task.id}"
+        cancel_event = threading.Event()
+        registry_entry: Dict[str, Any] = {
+            "scheduler_id": scheduler_id,
+            "task_id": task.id,
+            "task_name": task.name,
+            "interval": interval,
+            "max_iterations": max_iterations,
+            "iteration": 0,
+            "thread": None,
+            "cancel_event": cancel_event,
+        }
         
         def periodic_runner():
             iteration = 0
             try:
-                while self._running and (max_iterations is None or iteration < max_iterations):
+                while (
+                    self._running
+                    and not cancel_event.is_set()
+                    and (max_iterations is None or iteration < max_iterations)
+                ):
+                    with self._lock:
+                        if scheduler_id in self._periodic_tasks:
+                            self._periodic_tasks[scheduler_id]["iteration"] = iteration
                     # 创建新任务实例
                     new_task = Task(
                         name=f"{task.name} #{iteration + 1}",
@@ -203,7 +231,8 @@ class TaskScheduler:
                         )
                     
                     iteration += 1
-                    time.sleep(interval)
+                    if cancel_event.wait(interval):
+                        break
             finally:
                 with self._lock:
                     self._periodic_tasks.pop(scheduler_id, None)
@@ -211,7 +240,8 @@ class TaskScheduler:
         # 启动周期性任务线程
         thread = threading.Thread(target=periodic_runner, daemon=True)
         with self._lock:
-            self._periodic_tasks[scheduler_id] = thread
+            registry_entry["thread"] = thread
+            self._periodic_tasks[scheduler_id] = registry_entry
         thread.start()
         
         task_log_manager.info(
@@ -233,10 +263,18 @@ class TaskScheduler:
             是否取消成功
         """
         was_scheduled = False
+        periodic_entry: Optional[Dict[str, Any]] = None
         with self._lock:
             if task_id in self._scheduled_tasks:
                 del self._scheduled_tasks[task_id]
                 was_scheduled = True
+            elif task_id in self._periodic_tasks:
+                periodic_entry = self._periodic_tasks.pop(task_id)
+            else:
+                for scheduler_id, entry in list(self._periodic_tasks.items()):
+                    if entry.get("task_id") == task_id:
+                        periodic_entry = self._periodic_tasks.pop(scheduler_id)
+                        break
                  
         # 未到期的定时任务仍在全局队列里，直接标记为取消并保留审计记录
         if was_scheduled and task_queue.update_task_status(
@@ -245,6 +283,17 @@ class TaskScheduler:
             error_message="定时任务已取消",
         ):
             task_log_manager.info(task_id, "定时任务已取消")
+            return True
+
+        if periodic_entry:
+            cancel_event = periodic_entry.get("cancel_event")
+            if cancel_event:
+                cancel_event.set()
+            task_log_manager.info(
+                periodic_entry.get("task_id", task_id),
+                "周期性任务已取消",
+                details={"scheduler_id": periodic_entry.get("scheduler_id", task_id)},
+            )
             return True
 
         # 否则尝试取消已进入执行器的任务
@@ -268,16 +317,20 @@ class TaskScheduler:
                         "scheduled_time": scheduled_time.isoformat(),
                         "status": task.status
                     })
-            for scheduler_id, thread in self._periodic_tasks.items():
-                task_id = scheduler_id.removeprefix("periodic_")
+            for scheduler_id, entry in self._periodic_tasks.items():
+                task_id = entry.get("task_id", scheduler_id)
                 task = task_queue.get_task(task_id)
+                thread = entry.get("thread")
                 result.append({
                     "task_id": task_id,
-                    "task_name": task.name if task else task_id,
+                    "task_name": entry.get("task_name") or (task.name if task else task_id),
                     "scheduled_time": None,
-                    "status": "running" if thread.is_alive() else "pending",
+                    "status": "running" if thread and thread.is_alive() else "pending",
                     "scheduler_id": scheduler_id,
                     "schedule_type": "periodic",
+                    "interval": entry.get("interval"),
+                    "max_iterations": entry.get("max_iterations"),
+                    "iteration": entry.get("iteration", 0),
                 })
             return result
             
