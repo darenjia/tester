@@ -5,11 +5,11 @@
 """
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Callable, List
 from concurrent.futures import ThreadPoolExecutor
 
 from utils.logger import get_logger
-from utils.exceptions import TaskException, ToolException
 from utils.validators import InputValidator, ValidationError
 from utils.metrics import TaskMetrics, record_metric
 from models.task import Task, TaskStatus
@@ -19,9 +19,23 @@ from core.test_state_handlers import (
     RunningHandler, ResultCollectHandler, CleanupHandler, PausedHandler
 )
 from core.result_collector import ResultCollector
-from core.adapters import create_adapter_with_wrapper, TestToolType
+from core.adapters import TestToolType
+from core.execution_plan import ExecutionPlan
 
 logger = get_logger("state_machine_executor")
+
+
+@dataclass(slots=True)
+class _StateMachineTaskView:
+    task_id: str
+    timeout: int
+    tool_type: str
+    config_path: str | None = None
+    config_name: str | None = None
+    base_config_dir: str | None = None
+    config_params: Dict[str, Any] = field(default_factory=dict)
+    report_server: Any = None
+    test_items: List[Any] = field(default_factory=list)
 
 
 class StateMachineTaskExecutor:
@@ -36,10 +50,10 @@ class StateMachineTaskExecutor:
         """
         self.message_sender = message_sender
         self._running = False
-        self._task_queue = []
+        self._task_queue: List[ExecutionPlan] = []
         self._queue_lock = threading.Lock()
         self._worker_pool = ThreadPoolExecutor(max_workers=1)
-        self._current_task: Optional[Task] = None
+        self._current_task: Optional[ExecutionPlan] = None
         self._current_state_machine: Optional[TestStateMachine] = None
         self._stop_event = threading.Event()
         
@@ -95,7 +109,25 @@ class StateMachineTaskExecutor:
                 if self._running:
                     logger.error(f"工作循环异常: {e}")
     
-    def _get_next_task(self) -> Optional[Task]:
+    def _ensure_execution_plan(self, task: Task | ExecutionPlan) -> ExecutionPlan:
+        if isinstance(task, ExecutionPlan):
+            return task
+        return ExecutionPlan.from_legacy_task(task)
+
+    def _build_task_view(self, plan: ExecutionPlan) -> _StateMachineTaskView:
+        return _StateMachineTaskView(
+            task_id=plan.task_no,
+            timeout=plan.timeout_seconds,
+            tool_type=plan.tool_type,
+            config_path=plan.config_path,
+            config_name=plan.config_name,
+            base_config_dir=plan.base_config_dir,
+            config_params=dict(plan.variables or {}),
+            report_server=None,
+            test_items=list(plan.cases),
+        )
+
+    def _get_next_task(self) -> Optional[ExecutionPlan]:
         """获取下一个任务"""
         with self._queue_lock:
             if self._task_queue:
@@ -112,10 +144,12 @@ class StateMachineTaskExecutor:
         Returns:
             bool: 提交成功返回True
         """
+        plan = self._ensure_execution_plan(task)
+
         # 验证任务数据
         try:
             test_items = []
-            for item in task.test_items:
+            for item in plan.test_items:
                 item_dict = {
                     'name': item.name,
                     'type': item.type,
@@ -124,12 +158,12 @@ class StateMachineTaskExecutor:
                 test_items.append(item_dict)
 
             task_data = {
-                'taskNo': task.task_id,
-                'deviceId': task.device_id,
-                'toolType': task.tool_type,
-                'configPath': task.config_path,
+                'taskNo': plan.task_id,
+                'deviceId': plan.device_id,
+                'toolType': plan.tool_type,
+                'configPath': plan.config_path,
                 'testItems': test_items,
-                'timeout': task.timeout
+                'timeout': plan.timeout_seconds
             }
             InputValidator.validate_task_data(task_data)
         except ValidationError as e:
@@ -138,14 +172,18 @@ class StateMachineTaskExecutor:
         
         # 添加到队列
         with self._queue_lock:
-            self._task_queue.append(task)
-            logger.info(f"任务已加入队列: {task.task_id}")
+            self._task_queue.append(plan)
+            logger.info(f"任务已加入队列: {plan.task_id}")
             return True
+
+    def execute_plan(self, plan: ExecutionPlan) -> bool:
+        return self.execute_task(plan)
     
-    def _execute_with_state_machine(self, task: Task):
+    def _execute_with_state_machine(self, task: ExecutionPlan):
         """使用状态机执行任务"""
         self._current_task = task
         self._stop_event.clear()
+        task_view = self._build_task_view(task)
         
         # 创建结果收集器
         collector = ResultCollector(task.task_id)
@@ -169,7 +207,7 @@ class StateMachineTaskExecutor:
                 state_machine.register_transition(transition)
             
             # 注册状态处理器
-            self._register_state_handlers(state_machine, task, collector, metrics)
+            self._register_state_handlers(state_machine, task_view, collector, metrics)
             
             # 添加状态变化回调
             state_machine.add_state_change_callback(
@@ -229,7 +267,7 @@ class StateMachineTaskExecutor:
             })
     
     def _register_state_handlers(self, state_machine: TestStateMachine, 
-                                 task: Task, collector: ResultCollector,
+                                 task: _StateMachineTaskView, collector: ResultCollector,
                                  metrics: TaskMetrics):
         """注册状态处理器"""
         # 获取测试项列表

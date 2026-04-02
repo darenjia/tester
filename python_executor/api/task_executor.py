@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from models.executor_task import Task, TaskStatus, task_queue
-from models.task import Task as ExecTask, Case
 from core.case_mapping_manager import get_case_mapping_manager
+from core.task_compiler import TaskCompiler
 from utils.logger import get_logger
 
 logger = get_logger("http_task_executor")
@@ -227,6 +227,43 @@ def enrich_task_data_from_mappings(task_data: Dict[str, Any]) -> Dict[str, Any]:
     return task_data
 
 
+def _build_compile_payload(task_no: str, task_data: Dict[str, Any]) -> Dict[str, Any]:
+    compile_payload = {
+        "taskNo": task_data.get("taskNo", task_no),
+        "projectNo": task_data.get("projectNo", ""),
+        "taskName": task_data.get("taskName", ""),
+        "deviceId": task_data.get("deviceId"),
+        "toolType": task_data.get("toolType"),
+        "configPath": task_data.get("configPath"),
+        "configName": task_data.get("configName"),
+        "baseConfigDir": task_data.get("baseConfigDir"),
+        "variables": task_data.get("variables", {}),
+        "canoeNamespace": task_data.get("canoeNamespace"),
+        "timeout": task_data.get("timeout", 3600),
+        "testItems": [],
+    }
+
+    for case_data in task_data.get("caseList", []):
+        compile_payload["testItems"].append(
+            {
+                "caseNo": case_data.get("caseNo") or case_data.get("case_no", ""),
+                "name": case_data.get("caseName") or case_data.get("name", ""),
+                "type": case_data.get("caseType", "test_module"),
+                "dtcInfo": case_data.get("dtcInfo") or case_data.get("dtc_info"),
+                "params": case_data.get("params", {}),
+                "repeat": case_data.get("repeat", 1),
+            }
+        )
+
+    return compile_payload
+
+
+def _compile_execution_plan(task_no: str, task_data: Dict[str, Any]):
+    compiler = TaskCompiler(get_case_mapping_manager())
+    compile_payload = _build_compile_payload(task_no, task_data)
+    return compiler.compile_payload(compile_payload)
+
+
 def execute_task_async(task_no: str, task_data: Dict[str, Any]):
     """
     异步执行任务
@@ -244,47 +281,24 @@ def execute_task_async(task_no: str, task_data: Dict[str, Any]):
             _update_task_in_queue(task_no, status=TaskStatus.RUNNING.value,
                                   message="任务开始执行", progress=0)
 
-            # 从映射库丰富任务数据
-            enriched_task_data = enrich_task_data_from_mappings(task_data.copy())
-
             executor = _get_executor()
             logger.info(f"[run_task] 获取到执行器: {executor}")
-
-            # 构建任务对象
-            case_list = []
-            for case_data in enriched_task_data.get('caseList', []):
-                case = Case(
-                    caseName=case_data.get('caseName', ''),
-                    caseType=case_data.get('caseType', 'test_module'),
-                    caseNo=case_data.get('caseNo') or case_data.get('case_no', ''),
-                    dtcInfo=case_data.get('dtcInfo') or case_data.get('dtc_info'),
-                    params=case_data.get('params', {}),
-                    repeat=case_data.get('repeat', 1)
-                )
-                case_list.append(case)
-
-            task = ExecTask(
-                projectNo=enriched_task_data.get('projectNo', ''),
-                taskNo=enriched_task_data.get('taskNo', task_no),
-                taskName=enriched_task_data.get('taskName', ''),
-                caseList=case_list,
-                deviceId=enriched_task_data.get('deviceId'),
-                toolType=enriched_task_data.get('toolType'),
-                configPath=enriched_task_data.get('configPath'),
-                timeout=enriched_task_data.get('timeout', 3600)
+            execution_plan = _compile_execution_plan(task_no, task_data.copy())
+            logger.info(
+                f"[run_task] 编译执行计划完成: task_no={execution_plan.task_no}, "
+                f"tool_type={execution_plan.tool_type}, configPath={execution_plan.config_path}, "
+                f"cases={len(execution_plan.cases)}"
             )
 
-            logger.info(f"[run_task] 构建任务对象: task.task_id={task.task_id}, tool_type={task.tool_type}, configPath={task.config_path}, cases={len(case_list)}")
-
-            result = executor.execute_task(task)
-            logger.info(f"[run_task] execute_task 返回: {result}, task_id={task.task_id}")
+            result = executor.execute_plan(execution_plan)
+            logger.info(f"[run_task] execute_plan 返回: {result}, task_id={execution_plan.task_no}")
 
             wait_count = 0
             while True:
                 status = executor.get_current_status()
                 current_status = status.get("status")
 
-                if current_status != "idle" and status.get("task_id") == task.task_id:
+                if current_status != "idle" and status.get("task_id") == execution_plan.task_no:
                     logger.info(f"[run_task] 任务正在执行: task_no={task_no}, status={current_status}")
                     while True:
                         status = executor.get_current_status()

@@ -418,8 +418,20 @@ def test_readme_mentions_only_config_json():
     assert "collecting" in readme
     assert "TaskCompiler" in readme
     assert "ExecutionPlan" in readme
+    assert "StateMachineTaskExecutor" in readme
+    assert "adapter_factory" in readme
     assert "/health" in readme
     assert "/metrics" in readme
+
+
+def test_architecture_doc_mentions_unified_execution_boundaries():
+    architecture_doc = Path("架构文档.md").read_text(encoding="utf-8")
+
+    assert "TaskCompiler" in architecture_doc
+    assert "ExecutionPlan" in architecture_doc
+    assert "adapter_factory.py" in architecture_doc
+    assert "config.json" in architecture_doc
+    assert "统一配置真源" in architecture_doc or "统一配置" in architecture_doc
 
 
 def test_config_cache_manager_tracks_active_unified_config_instance(tmp_path: Path):

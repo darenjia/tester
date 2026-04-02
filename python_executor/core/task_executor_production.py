@@ -39,7 +39,7 @@ def _get_runtime_config_manager():
     return get_runtime_config()
 
 
-def _ensure_observability_context(task: Task):
+def _ensure_observability_context(task: ExecutionPlan):
     """Ensure direct executor/reporting calls still have an observability context."""
     observability_manager = get_execution_observability_manager()
     try:
@@ -76,7 +76,7 @@ class TaskQueue:
         self.completed = {}
         self._lock = threading.Lock()
     
-    def put(self, task: Task) -> bool:
+    def put(self, task: ExecutionPlan) -> bool:
         """添加任务到队列"""
         try:
             self.queue.put(task, block=False)
@@ -85,14 +85,14 @@ class TaskQueue:
             logger.warning("任务队列已满")
             return False
     
-    def get(self, timeout: float = 1.0) -> Optional[Task]:
+    def get(self, timeout: float = 1.0) -> Optional[ExecutionPlan]:
         """从队列获取任务"""
         try:
             return self.queue.get(timeout=timeout)
         except queue.Empty:
             return None
     
-    def mark_processing(self, task_id: str, task: Task):
+    def mark_processing(self, task_id: str, task: ExecutionPlan):
         """标记任务为处理中"""
         with self._lock:
             self.processing[task_id] = {
@@ -132,7 +132,7 @@ class TaskExecutorProduction:
         """
         self.logger = logger  # 实例logger，用于实例方法
         self.message_sender = message_sender
-        self.current_task: Optional[Task] = None
+        self.current_task: Optional[ExecutionPlan] = None
         self.current_collector: Optional[ResultCollector] = None
         self.controller = None
         self._stop_event = threading.Event()
@@ -157,10 +157,10 @@ class TaskExecutorProduction:
 
         self.logger.info("任务执行器（生产环境版）初始化完成")
 
-    def _task_id(self, task: Task | ExecutionPlan) -> str:
+    def _task_id(self, task: ExecutionPlan) -> str:
         return getattr(task, "task_id", None) or getattr(task, "task_no")
 
-    def _task_name(self, task: Task | ExecutionPlan) -> str:
+    def _task_name(self, task: ExecutionPlan) -> str:
         return (
             getattr(task, "taskName", None)
             or getattr(task, "task_name", None)
@@ -168,35 +168,40 @@ class TaskExecutorProduction:
             or ""
         )
 
-    def _task_project_no(self, task: Task | ExecutionPlan) -> str:
+    def _task_project_no(self, task: ExecutionPlan) -> str:
         return getattr(task, "projectNo", None) or getattr(task, "project_no", "") or ""
 
-    def _task_device_id(self, task: Task | ExecutionPlan) -> str:
+    def _task_device_id(self, task: ExecutionPlan) -> str:
         return getattr(task, "deviceId", None) or getattr(task, "device_id", "") or ""
 
-    def _task_tool_type(self, task: Task | ExecutionPlan) -> str:
+    def _task_tool_type(self, task: ExecutionPlan) -> str:
         return getattr(task, "toolType", None) or getattr(task, "tool_type", "") or ""
 
-    def _task_config_path(self, task: Task | ExecutionPlan) -> str | None:
+    def _task_config_path(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "configPath", None) or getattr(task, "config_path", None)
 
-    def _task_config_name(self, task: Task | ExecutionPlan) -> str | None:
+    def _task_config_name(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "configName", None) or getattr(task, "config_name", None)
 
-    def _task_base_config_dir(self, task: Task | ExecutionPlan) -> str | None:
+    def _task_base_config_dir(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "baseConfigDir", None) or getattr(task, "base_config_dir", None)
 
-    def _task_variables(self, task: Task | ExecutionPlan) -> Dict[str, Any]:
+    def _task_variables(self, task: ExecutionPlan) -> Dict[str, Any]:
         return getattr(task, "variables", {}) or {}
 
-    def _task_canoe_namespace(self, task: Task | ExecutionPlan) -> str | None:
+    def _task_canoe_namespace(self, task: ExecutionPlan) -> str | None:
         return getattr(task, "canoeNamespace", None) or getattr(task, "canoe_namespace", None)
 
-    def _task_timeout(self, task: Task | ExecutionPlan) -> int:
+    def _task_timeout(self, task: ExecutionPlan) -> int:
         return getattr(task, "timeout", None) or getattr(task, "timeout_seconds", 3600)
 
-    def _task_cases(self, task: Task | ExecutionPlan) -> list:
+    def _task_cases(self, task: ExecutionPlan) -> list:
         return getattr(task, "test_items", None) or getattr(task, "cases", [])
+
+    def _ensure_execution_plan(self, task: Task | ExecutionPlan) -> ExecutionPlan:
+        if isinstance(task, ExecutionPlan):
+            return task
+        return ExecutionPlan.from_legacy_task(task)
 
     def _case_name(self, case: Any) -> str:
         return getattr(case, "name", None) or getattr(case, "caseName", None) or getattr(case, "case_name", "") or ""
@@ -288,15 +293,15 @@ class TaskExecutorProduction:
         Returns:
             bool: 提交成功返回True
         """
-        # 获取任务ID
-        task_id = self._task_id(task)
+        plan = self._ensure_execution_plan(task)
+        task_id = self._task_id(plan)
         if task_id is None:
             logger.error("execute_task 失败: 任务缺少 task_id 属性")
             return False
 
         # 验证任务数据
         try:
-            test_items = [self._legacy_test_item_dict(item) for item in self._task_cases(task)]
+            test_items = [self._legacy_test_item_dict(item) for item in self._task_cases(plan)]
 
             # 显式检查 test_items 是否为空
             if not test_items:
@@ -305,11 +310,11 @@ class TaskExecutorProduction:
 
             task_data = {
                 'taskNo': task_id,
-                'deviceId': self._task_device_id(task),
-                'toolType': self._task_tool_type(task),
-                'configPath': self._task_config_path(task),
+                'deviceId': self._task_device_id(plan),
+                'toolType': self._task_tool_type(plan),
+                'configPath': self._task_config_path(plan),
                 'testItems': test_items,
-                'timeout': self._task_timeout(task)
+                'timeout': self._task_timeout(plan)
             }
             InputValidator.validate_task_data(task_data)
         except ValidationError as e:
@@ -320,26 +325,26 @@ class TaskExecutorProduction:
             return False
 
         # 添加到内部执行队列
-        if self._task_queue.put(task):
+        if self._task_queue.put(plan):
             # 同时添加到全局队列供API查询（将TDMTask转换为内部Task格式）
             from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus
             exec_task = ExecutorTask(
                 id=task_id,
-                name=self._task_name(task),
-                task_type=getattr(task, 'task_type', 'test_module'),
+                name=self._task_name(plan),
+                task_type='test_module',
                 priority=1,
                 status=ExecutorTaskStatus.PENDING.value,
                 params={
-                    'tool_type': self._task_tool_type(task),
-                    'config_path': self._task_config_path(task),
-                    'variables': self._task_variables(task)
+                    'tool_type': self._task_tool_type(plan),
+                    'config_path': self._task_config_path(plan),
+                    'variables': self._task_variables(plan)
                 },
-                timeout=self._task_timeout(task),
+                timeout=self._task_timeout(plan),
                 metadata={
                     'taskNo': task_id,
-                    'projectNo': self._task_project_no(task),
-                    'deviceId': self._task_device_id(task),
-                    'caseCount': len(self._task_cases(task) or [])
+                    'projectNo': self._task_project_no(plan),
+                    'deviceId': self._task_device_id(plan),
+                    'caseCount': len(self._task_cases(plan) or [])
                 }
             )
             global_task_queue.add(exec_task)
@@ -353,12 +358,12 @@ class TaskExecutorProduction:
         return self.execute_task(plan)
     
     @TASK_CIRCUIT_BREAKER
-    def _execute_task_production(self, task: Task | ExecutionPlan):
+    def _execute_task_production(self, task: ExecutionPlan):
         """生产环境任务执行"""
         task_id = self._task_id(task)
         tool_type = self._task_tool_type(task)
         logger.info(
-            f"[_execute_task_production] 开始执行任务: task_id={task_id}, task_type={getattr(task, 'task_type', 'N/A')}, tool_type={tool_type}"
+            f"[_execute_task_production] 开始执行任务: task_id={task_id}, task_type=test_module, tool_type={tool_type}"
         )
 
         with self._lock:
@@ -1314,20 +1319,20 @@ class TaskExecutorProduction:
                 logger.warning(f"任务 {task_id} 已存在于队列中")
                 return False
 
-            # 转换为执行任务的 Task 模型 (TDM2.0格式)
-            from models.task import Task as ExecTask
-
-            exec_task = ExecTask(
-                taskNo=task_id,
-                taskName=getattr(task, 'name', '') or getattr(task, 'taskName', ''),
-                timeout=getattr(task, 'timeout', 3600),
-                toolType=getattr(task, 'params', {}).get('tool_type', 'canoe') if hasattr(task, 'params') else 'canoe',
-                configPath=getattr(task, 'params', {}).get('config_path') if hasattr(task, 'params') else None,
-                variables=getattr(task, 'params', {}).get('variables', {}) if hasattr(task, 'params') else {}
+            execution_plan = ExecutionPlan(
+                task_no=task_id,
+                project_no=getattr(task, 'metadata', {}).get('projectNo', '') if hasattr(task, 'metadata') else '',
+                task_name=getattr(task, 'name', '') or getattr(task, 'taskName', ''),
+                device_id=getattr(task, 'metadata', {}).get('deviceId', '') if hasattr(task, 'metadata') else '',
+                tool_type=getattr(task, 'params', {}).get('tool_type', 'canoe') if hasattr(task, 'params') else 'canoe',
+                config_path=getattr(task, 'params', {}).get('config_path') if hasattr(task, 'params') else None,
+                variables=getattr(task, 'params', {}).get('variables', {}) if hasattr(task, 'params') else {},
+                timeout_seconds=getattr(task, 'timeout', 3600),
+                raw_refs={'source': type(task).__name__},
             )
 
             # 添加到内部执行队列
-            self._task_queue.put(exec_task)
+            self._task_queue.put(execution_plan)
 
             logger.info(f"任务 {task_id} 已提交到执行队列")
             return True

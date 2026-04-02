@@ -5,6 +5,7 @@ import pytest
 from core.execution_plan import ConfigSource, ExecutionPlan, PlannedCase
 from core.task_compiler import TaskCompileError, TaskCompiler
 from models.result import Message
+from models.task import Case, Task
 
 
 class _FakeMapping:
@@ -127,3 +128,25 @@ def test_execute_plan_queues_internal_execution_plan(monkeypatch):
 
     assert executor.execute_plan(plan) is True
     assert queued_items[0] is plan
+
+
+def test_execute_task_converts_legacy_task_to_execution_plan(monkeypatch):
+    from core.task_executor_production import TaskExecutorProduction
+
+    executor = TaskExecutorProduction(message_sender=lambda _: None)
+    queued_items = []
+    monkeypatch.setattr(executor._task_queue, "put", lambda plan: queued_items.append(plan) or True)
+
+    task = Task(
+        taskNo="TASK-LEGACY",
+        taskName="Legacy Task",
+        deviceId="DEVICE-LEGACY",
+        toolType="canoe",
+        timeout=45,
+        caseList=[Case(caseNo="CASE-LEGACY", caseName="Case Legacy", caseType="test_module")],
+    )
+
+    assert executor.execute_task(task) is True
+    assert isinstance(queued_items[0], ExecutionPlan)
+    assert queued_items[0].task_no == "TASK-LEGACY"
+    assert queued_items[0].cases[0].case_no == "CASE-LEGACY"
