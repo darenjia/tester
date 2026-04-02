@@ -2,8 +2,11 @@
 结果模型定义 - TDM2.0字段标准
 """
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from models.task import TaskResult, TestResult
 
 
 @dataclass
@@ -238,6 +241,97 @@ class ExecutionResult:
             "taskNo": self.taskNo,
             "platform": self.platform,
             "caseList": [case.to_dict() for case in self.caseList]
+        }
+
+
+@dataclass
+class ExecutionOutcome:
+    """
+    任务级执行结果真源。
+    """
+
+    task_no: str
+    status: str
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    verdict: Optional[str] = None
+    case_results: List["TestResult"] = field(default_factory=list)
+    summary: Dict[str, Any] = field(default_factory=dict)
+    artifacts: Dict[str, Any] = field(default_factory=dict)
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    error_summary: Optional[str] = None
+    report_metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def duration(self) -> Optional[float]:
+        if self.finished_at and self.started_at:
+            return (self.finished_at - self.started_at).total_seconds()
+        return None
+
+    @property
+    def taskNo(self) -> str:
+        return self.task_no
+
+    @property
+    def results(self) -> List["TestResult"]:
+        return self.case_results
+
+    @property
+    def startTime(self) -> Optional[datetime]:
+        return self.started_at
+
+    @property
+    def endTime(self) -> Optional[datetime]:
+        return self.finished_at
+
+    @property
+    def errorMessage(self) -> Optional[str]:
+        return self.error_summary
+
+    def to_task_result(self) -> "TaskResult":
+        from models.task import TaskResult
+
+        return TaskResult(
+            taskNo=self.task_no,
+            status=self.status,
+            startTime=self.started_at,
+            endTime=self.finished_at,
+            results=list(self.case_results),
+            summary=dict(self.summary or {}),
+            errorMessage=self.error_summary,
+        )
+
+    def to_report_payload(self, task_info: Dict[str, Any] = None) -> Dict[str, Any]:
+        payload = {
+            "taskNo": self.task_no,
+            "status": self.status,
+            "startTime": self.started_at.isoformat() if self.started_at else None,
+            "endTime": self.finished_at.isoformat() if self.finished_at else None,
+            "duration": self.duration or 0,
+            "summary": dict(self.summary or {}),
+            "results": [result.to_dict() for result in self.case_results],
+            "errorMessage": self.error_summary,
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "platform": "NETWORK",
+        }
+        if task_info:
+            payload.update(task_info)
+        return payload
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "taskNo": self.task_no,
+            "status": self.status,
+            "verdict": self.verdict,
+            "startTime": self.started_at.isoformat() if self.started_at else None,
+            "endTime": self.finished_at.isoformat() if self.finished_at else None,
+            "duration": self.duration,
+            "summary": dict(self.summary or {}),
+            "results": [result.to_dict() for result in self.case_results],
+            "artifacts": dict(self.artifacts or {}),
+            "metrics": dict(self.metrics or {}),
+            "errorMessage": self.error_summary,
+            "reportMetadata": dict(self.report_metadata or {}),
         }
 
 

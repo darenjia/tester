@@ -18,7 +18,7 @@ from utils.metrics import TaskMetrics, performance_monitor, record_metric
 from utils.report_client import ReportClient
 from config.settings import get_config as get_runtime_config
 from models.task import Task, TaskStatus, TestToolType, TestResult, TaskResult
-from models.result import CaseResult, ExecutionResult
+from models.result import CaseResult, ExecutionResult, ExecutionOutcome
 from models.executor_task import task_queue as global_task_queue, TaskStatus as ExecutorTaskStatus
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
@@ -284,6 +284,19 @@ class TaskExecutorProduction:
         if hasattr(self.controller, "run_test_module"):
             return self.controller.run_test_module(module_name)
         raise ToolException("当前适配器不支持TestModule执行")
+
+    def _normalize_execution_outcome(self, task_result: TaskResult | ExecutionOutcome) -> ExecutionOutcome:
+        if isinstance(task_result, ExecutionOutcome):
+            return task_result
+        return ExecutionOutcome(
+            task_no=task_result.taskNo,
+            status=task_result.status,
+            started_at=task_result.startTime,
+            finished_at=task_result.endTime,
+            case_results=list(task_result.results or []),
+            summary=dict(task_result.summary or {}),
+            error_summary=task_result.errorMessage,
+        )
     
     def start(self):
         """启动执行器"""
@@ -987,17 +1000,18 @@ class TaskExecutorProduction:
     
     def _report_final_result(self, task_no: str, task_result):
         """上报最终结果"""
+        outcome = self._normalize_execution_outcome(task_result)
         if self.message_sender:
             self.message_sender({
                 "type": "RESULT_REPORT",
                 "taskNo": task_no,
-                "status": task_result.status,
-                "results": [r.to_dict() for r in task_result.results],
-                "summary": task_result.summary,
+                "status": outcome.status,
+                "results": [r.to_dict() for r in outcome.results],
+                "summary": outcome.summary,
                 "timestamp": int(time.time() * 1000)
             })
 
-    def _report_to_remote(self, task: Task, task_result: TaskResult, report_file_path: str = None):
+    def _report_to_remote(self, task: Task, task_result: TaskResult | ExecutionOutcome, report_file_path: str = None):
         """
         上报任务结果到远端服务器
 
@@ -1010,8 +1024,9 @@ class TaskExecutorProduction:
         logger.info(f"[_report_to_remote] 开始上报任务结果: taskNo={task_id}, report_file_path={report_file_path}")
 
         try:
+            outcome = self._normalize_execution_outcome(task_result)
             # 构建 TDM2.0 格式的上报数据
-            execution_result = self._build_execution_result(task, task_result)
+            execution_result = self._build_execution_result(task, outcome)
             logger.info(f"[_report_to_remote] 构建执行结果完成: caseList数量={len(execution_result.caseList)}")
 
             # 构建上报数据
@@ -1022,15 +1037,15 @@ class TaskExecutorProduction:
             report_data["deviceId"] = self._task_device_id(task)
             report_data["taskName"] = self._task_name(task) or task_id
             report_data["toolType"] = self._task_tool_type(task)
-            report_data["status"] = task_result.status
-            report_data["summary"] = task_result.summary
-            report_data["errorMessage"] = task_result.errorMessage
+            report_data["status"] = outcome.status
+            report_data["summary"] = outcome.summary
+            report_data["errorMessage"] = outcome.errorMessage
             report_data["timestamp"] = int(time.time() * 1000)
 
-            if task_result.startTime:
-                report_data["startTime"] = task_result.startTime.isoformat()
-            if task_result.endTime:
-                report_data["endTime"] = task_result.endTime.isoformat()
+            if outcome.startTime:
+                report_data["startTime"] = outcome.startTime.isoformat()
+            if outcome.endTime:
+                report_data["endTime"] = outcome.endTime.isoformat()
 
             # 如果有报告文件，先上传文件获取URL
             report_url = None
@@ -1177,7 +1192,7 @@ class TaskExecutorProduction:
             logger.error(f"[_do_report_direct] 上报异常: {e}")
             return False
 
-    def _build_execution_result(self, task: Task, task_result: TaskResult) -> ExecutionResult:
+    def _build_execution_result(self, task: Task, task_result: TaskResult | ExecutionOutcome) -> ExecutionResult:
         """
         构建 TDM2.0 格式的执行结果
 
@@ -1188,11 +1203,12 @@ class TaskExecutorProduction:
         Returns:
             ExecutionResult 实例
         """
+        execution_outcome = self._normalize_execution_outcome(task_result)
         execution_result = ExecutionResult(taskNo=self._task_id(task))
 
         # 如果有测试结果，转换为 CaseResult
-        if task_result.results:
-            for test_result in task_result.results:
+        if execution_outcome.results:
+            for test_result in execution_outcome.results:
                 case_no = self._get_case_no_from_result(test_result, task)
 
                 # 根据结果状态确定 result 字段
@@ -1223,7 +1239,7 @@ class TaskExecutorProduction:
                 case_result = CaseResult(
                     caseNo=case_no,
                     result="BLOCK",
-                    remark=task_result.errorMessage or "任务执行失败，用例未能执行",
+                    remark=execution_outcome.errorMessage or "任务执行失败，用例未能执行",
                     created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 )
                 execution_result.add_case_result(case_result)

@@ -168,9 +168,15 @@ class ReportRetryScheduler:
             (success: bool, error_message: str or None)
         """
         try:
+            endpoint = None
+            if getattr(report, "metadata", None):
+                endpoint = report.metadata.get("endpoint") or report.metadata.get("report_endpoint")
+            if not endpoint:
+                endpoint = getattr(self.report_client, "_result_api_url", None)
+
             response = self.report_client._make_request(
                 method="POST",
-                url=self.report_client._result_api_url,
+                url=endpoint,
                 json=report.report_data,
                 timeout=timeout
             )
@@ -253,7 +259,7 @@ class ReportRetryScheduler:
         # 在后台线程执行批量重试
         thread = threading.Thread(
             target=self._retry_all_pending_async,
-            args=(total,),
+            args=(total, False),
             daemon=True,
             name="RetryAllPending"
         )
@@ -267,7 +273,7 @@ class ReportRetryScheduler:
             "message": f"已启动后台重试任务，共 {total} 个报告"
         }
 
-    def _retry_all_pending_async(self, total: int):
+    def _retry_all_pending_async(self, total: int, respect_running_state: bool = False):
         """异步执行批量重试（在后台线程中运行）"""
         stats = {"success": 0, "failed": 0, "total": total}
 
@@ -275,7 +281,7 @@ class ReportRetryScheduler:
             pending = self.report_manager.get_pending_reports(limit=1000)
 
             for report in pending:
-                if not self._running:
+                if respect_running_state and not self._running:
                     logger.info("批量重试被中断")
                     break
 
