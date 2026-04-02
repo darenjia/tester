@@ -314,6 +314,7 @@
         const execution = task.execution || {};
         const attempts = task.metadata?.report_attempts || task.metadata?.attempts || [];
         const recentLogs = task.recent_logs || [];
+        const observability = extractTaskObservability(task, attempts);
 
         root.innerHTML = `
             <div class="detail-hero">
@@ -420,6 +421,10 @@
                         <div class="info-grid">
                             ${infoCard('日志总数', task.log_stats?.total || 0)}
                             ${infoCard('INFO / ERROR', `${task.log_stats?.INFO || 0} / ${task.log_stats?.ERROR || 0}`)}
+                            ${infoCard('trace_id', observability.traceId)}
+                            ${infoCard('attempt_id', observability.attemptId)}
+                            ${infoCard('error_category', observability.errorCategory)}
+                            ${infoCard('execution_error_category', observability.executionErrorCategory)}
                         </div>
                         <h4 style="margin:16px 0 10px">任务参数</h4>
                         <pre class="code-block">${escapeHtml(JSON.stringify(task.params || {}, null, 2))}</pre>
@@ -512,6 +517,17 @@
                 </tbody>
             </table>
         `;
+    }
+
+    function extractTaskObservability(task, attempts) {
+        const metadata = task.metadata || {};
+        const latestAttempt = attempts.length ? attempts[attempts.length - 1] : {};
+        return {
+            traceId: metadata.trace_id || metadata.traceId || latestAttempt.trace_id || latestAttempt.traceId || '--',
+            attemptId: metadata.attempt_id || metadata.attemptId || latestAttempt.attempt_id || latestAttempt.attemptId || '--',
+            errorCategory: metadata.error_category || metadata.errorCategory || task.error_category || '--',
+            executionErrorCategory: metadata.execution_error_category || metadata.executionErrorCategory || task.execution_error_category || '--'
+        };
     }
 
     function timelineItem(time, title, desc, state) {
