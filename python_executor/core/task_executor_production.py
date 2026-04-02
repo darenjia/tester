@@ -24,6 +24,7 @@ from models.executor_task import task_queue as global_task_queue, TaskStatus as 
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
 from core.adapters import create_adapter, TestToolType
+from core.adapters.runtime_config_helper import build_adapter_config
 from core.case_mapping_manager import get_case_mapping_manager
 from core.execution_plan import ExecutionPlan, PlannedCase
 from core.execution_strategies.selector import ExecutionStrategySelector
@@ -648,9 +649,12 @@ class TaskExecutorProduction:
                     raise TaskException(f"不支持的测试工具类型: {tool_type}")
                 
                 # 使用适配器工厂创建原生适配器，由 strategy/capability 驱动主路径
-                raw_adapter = create_adapter(adapter_type, singleton=False)
+                # 通过 build_adapter_config 注入运行时配置（路径、超时、RPC 模式等）
+                runtime_cfg = _get_runtime_config_manager()
+                adapter_cfg = build_adapter_config(adapter_type, runtime_cfg)
+                raw_adapter = create_adapter(adapter_type, config=adapter_cfg, singleton=False)
                 self.controller = raw_adapter
-                logger.info(f"已创建适配器: {adapter_type.value}")
+                logger.info(f"已创建适配器: {adapter_type.value}, config keys={list(adapter_cfg.keys())}")
             except Exception as e:
                 raise TaskException(f"创建适配器失败: {e}")
 
