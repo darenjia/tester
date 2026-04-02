@@ -152,15 +152,31 @@ class TTworkbenchExecutionStrategy(ExecutionStrategy):
         try:
             results: list[TestResult] = []
             task_id = getattr(plan, "task_no", "")
+            artifacts: dict[str, Any] = {}
 
             for case in getattr(plan, "cases", []) or []:
                 test_result = self._execute_case(case, execution_capability, task_id)
                 results.append(test_result)
                 self._collect_results(runtime_collector, [test_result])
 
+                # Collect artifact paths from test result details
+                # NOTE: For single-report-per-execution mode, only the last case's
+                # artifact paths are preserved. This is intentional - when running
+                # batch execution, the final report overwrites previous ones, so
+                # only the last case's paths are meaningful for upload.
+                if test_result.details:
+                    if test_result.details.get("report_path"):
+                        artifacts["report_path"] = test_result.details["report_path"]
+                    if test_result.details.get("log_path"):
+                        artifacts["log_path"] = test_result.details["log_path"]
+
             # Return ExecutionOutcome if collector available, else list[TestResult]
             if runtime_collector is not None:
-                return runtime_collector.finalize(status="completed")
+                return runtime_collector.finalize(
+                    status="completed",
+                    artifacts=artifacts if artifacts else None,
+                    report_metadata={"source": "ttworkbench_execution"},
+                )
             return results
 
         finally:

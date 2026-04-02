@@ -779,8 +779,11 @@ class TaskExecutorProduction:
         # 上报最终结果到WebSocket客户端
         self._report_final_result(task_id, task_result)
 
-        # 上报到远端服务器（包含报告文件上传）- 异步执行避免阻塞
-        report_file_path = getattr(self, '_current_report_info', None).get('report_path') if hasattr(self, '_current_report_info') and self._current_report_info else None
+        # Get report_file_path from ExecutionOutcome.artifacts (authoritative artifact source)
+        # This replaces the deprecated _current_report_info ad hoc state
+        report_file_path = None
+        if isinstance(task_result, ExecutionOutcome) and task_result.artifacts:
+            report_file_path = task_result.artifacts.get('report_path')
         self._executor.submit(self._report_to_remote, task, task_result, report_file_path)
 
         final_status = getattr(task_result, "status", TaskStatus.COMPLETED.value)

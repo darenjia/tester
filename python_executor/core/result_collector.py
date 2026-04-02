@@ -61,8 +61,19 @@ class ResultCollector:
         self.status_updates.append(status_update)
         logger.info(f"任务状态更新: {status} - {message if message else ''}")
 
-    def finalize(self, status: str = "completed", error_message: str = None) -> ExecutionOutcome:
-        """完成结果收集"""
+    def finalize(self, status: str = "completed", error_message: str = None,
+                artifacts: Dict[str, Any] = None, report_metadata: Dict[str, Any] = None) -> ExecutionOutcome:
+        """完成结果收集
+
+        Args:
+            status: 任务状态
+            error_message: 错误信息
+            artifacts: 报告产物路径字典，如 {"report_path": "...", "log_path": "..."}
+            report_metadata: 报告相关元数据
+
+        Returns:
+            ExecutionOutcome包含完整的执行结果和产物信息
+        """
         self.end_time = datetime.now()
 
         # 生成结果摘要
@@ -94,6 +105,8 @@ class ResultCollector:
             summary=summary,
             metrics={"duration": duration},
             error_summary=error_message,
+            artifacts=artifacts or {},
+            report_metadata=report_metadata or {},
         )
 
         logger.info(f"结果收集完成 - 总计: {total}, 通过: {passed}, 失败: {failed}, 耗时: {duration:.1f}秒")

@@ -137,6 +137,8 @@ class CANoeExecutionStrategy(ExecutionStrategy):
 
         try:
             results: list[TestResult] = []
+            artifacts: dict[str, Any] = {}
+
             for case in plan_cases:
                 raw_result = test_module_capability.execute_module(
                     getattr(case, "case_name", ""),
@@ -146,9 +148,22 @@ class CANoeExecutionStrategy(ExecutionStrategy):
                 results.append(test_result)
                 self._collect_results(runtime_collector, [test_result])
 
+                # Collect artifact paths from raw_result if available
+                if raw_result:
+                    if raw_result.get("report_path"):
+                        artifacts["report_path"] = raw_result["report_path"]
+                    if raw_result.get("log_path"):
+                        artifacts["log_path"] = raw_result["log_path"]
+                    if raw_result.get("testdata_path"):
+                        artifacts["testdata_path"] = raw_result["testdata_path"]
+
             # Return ExecutionOutcome if collector available, else list[TestResult]
             if runtime_collector is not None:
-                return runtime_collector.finalize(status="completed")
+                return runtime_collector.finalize(
+                    status="completed",
+                    artifacts=artifacts if artifacts else None,
+                    report_metadata={"source": "canoe_test_module"},
+                )
             return results
 
         finally:

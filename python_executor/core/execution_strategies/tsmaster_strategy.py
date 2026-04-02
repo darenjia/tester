@@ -429,8 +429,28 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             results = self._report_items(report_info, plan_cases, aggregate_only=not has_per_case_details)
             self._append_results(runtime_collector, results)
 
+            # Build artifacts from report_info for authoritative artifact handoff
+            artifacts = {}
+            if report_info.get("report_path"):
+                artifacts["report_path"] = report_info["report_path"]
+            if report_info.get("testdata_path"):
+                artifacts["testdata_path"] = report_info["testdata_path"]
+            if report_info.get("log_path"):
+                artifacts["log_path"] = report_info["log_path"]
+
+            report_metadata = {
+                "source": "tsmaster_execution",
+                "has_per_case_details": has_per_case_details,
+                "passed": report_info.get("passed", 0),
+                "failed": report_info.get("failed", 0),
+            }
+
             if runtime_collector is not None:
-                return runtime_collector.finalize(status="completed")
+                return runtime_collector.finalize(
+                    status="completed",
+                    artifacts=artifacts if artifacts else None,
+                    report_metadata=report_metadata if report_metadata else None,
+                )
             return results
 
         finally:
