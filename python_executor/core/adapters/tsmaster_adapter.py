@@ -779,6 +779,16 @@ class TSMasterAdapter(BaseTestAdapter):
                     archive_base = os.path.join(temp_dir, archive_name)
                     shutil.make_archive(archive_base, 'zip', temp_extract_dir)
                     archive_path = archive_base + ".zip"
+
+                    # Move archive to system temp directory (outside temp_dir) before cleanup
+                    if archive_path and os.path.exists(archive_path):
+                        final_dir = tempfile.gettempdir()
+                        final_archive_name = os.path.basename(archive_path)
+                        final_path = os.path.join(final_dir, final_archive_name)
+                        shutil.move(archive_path, final_path)
+                        archive_path = final_path
+                        self.logger.info(f"压缩包已移动到: {archive_path}")
+
                     result["archive_path"] = archive_path
                     self.logger.info(f"压缩包已创建: {archive_path}")
                 else:
