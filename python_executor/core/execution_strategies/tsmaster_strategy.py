@@ -134,14 +134,19 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             return capability.build_case_selection(plan)
         return self._case_selection_string(plan)
 
-    def _start_execution(self, capability: Any, selected_cases: str) -> bool:
+    def _start_execution(self, capability: Any, selected_cases: str, task_no: str = None) -> bool:
         """Start TSMaster execution.
 
         Note: The timeout parameter is NOT passed to start_execution because
         TSMaster enforces timeout via wait_for_completion(), not here.
         This is documented in the Runtime Adapter Contract.
+
+        Args:
+            capability: The tsmaster_execution capability
+            selected_cases: Case selection string
+            task_no: Optional task number for archive tracking
         """
-        return bool(capability.start_execution(selected_cases))
+        return bool(capability.start_execution(selected_cases, task_no=task_no))
 
     def _wait_for_completion(self, capability: Any, timeout: int) -> bool:
         """Wait for TSMaster execution to complete.
@@ -369,17 +374,35 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
         # Track whether we started the measurement (for ownership tracking)
         measurement_started_by_strategy = False
 
+        measurement_capability = adapter.get_capability("measurement")
+        measurement_started_by_strategy = False
+
+        # Step 2: Start measurement before execution if capability exists
+        # If capability exists but fails to start, fail fast - do not continue execution
+        if measurement_capability is not None:
+            measurement_started_by_strategy = self._start_measurement(adapter)
+            if not measurement_started_by_strategy:
+                results = self._failure_results(
+                    plan,
+                    verdict="RUNTIME",
+                    message="TSMaster measurement failed to start",
+                )
+                self._append_results(runtime_collector, results)
+                return self._finalize_with_status(
+                    runtime_collector,
+                    status="failed",
+                    error_message="TSMaster measurement failed to start",
+                    results=results,
+                )
+
         try:
             capability = self._execution_capability(adapter)
             plan_cases = self._plan_cases(plan)
             selected_cases = self._build_case_selection(plan, capability)
             timeout = self._timeout_for(plan)
 
-            # Step 2: Start measurement before execution if not already running
-            # This ensures simulation/measurement is active during test execution
-            measurement_started_by_strategy = self._start_measurement(adapter)
-
-            if not self._start_execution(capability, selected_cases):
+            task_no = getattr(plan, "task_no", None) or getattr(plan, "taskNo", None)
+            if not self._start_execution(capability, selected_cases, task_no=task_no):
                 results = self._failure_results(
                     plan,
                     verdict="ERROR",
