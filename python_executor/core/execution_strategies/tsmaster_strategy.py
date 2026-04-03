@@ -134,7 +134,7 @@ class TSMasterExecutionStrategy(ExecutionStrategy):
             return capability.build_case_selection(plan)
         return self._case_selection_string(plan)
 
-    def _start_execution(self, capability: Any, selected_cases: str, task_no: str = None) -> bool:
+    def _start_execution(self, capability: Any, selected_cases: str, task_no: Optional[str] = None) -> bool:
         """Start TSMaster execution.
 
         Note: The timeout parameter is NOT passed to start_execution because
