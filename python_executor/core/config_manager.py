@@ -209,6 +209,21 @@ class TestConfigManager:
 
         logger.debug(f"生成SelectInfo.ini: {file_path}")
 
+    def generate_select_info_ini(self, case_nos: List[str], output_dir: str) -> str:
+        """
+        生成 SelectInfo.ini 文件（公开接口）
+
+        Args:
+            case_nos: 用例编号列表，如 ["CANOE-001", "CANOE-002"]
+            output_dir: 输出目录（cfg 文件所在目录）
+
+        Returns:
+            SelectInfo.ini 文件路径
+        """
+        select_info_path = os.path.join(output_dir, "SelectInfo.ini")
+        self._generate_select_info_ini(select_info_path, [{"caseNo": c} for c in case_nos])
+        return select_info_path
+
     def _generate_para_info_ini(self, file_path: str, variables: Dict[str, Any] = None,
                                 default_config: str = ""):
         """
