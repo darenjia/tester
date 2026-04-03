@@ -43,6 +43,12 @@
     background: var(--danger-color);
 }
 
+.status-strip .health-pill .label {
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+}
+
 .status-strip .running-task {
     flex: 1;
     display: flex;
@@ -866,6 +872,256 @@
 .panel-log-list .log-message {
     color: #e2e8f0;
     word-break: break-word;
+}
+
+/* ==========================================================================
+   Additional Panel Styles
+   ========================================================================== */
+
+/* Panel hero inner elements */
+.panel-hero .hero-name {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.panel-hero .hero-meta {
+    font-size: 13px;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.panel-hero .hero-task-id {
+    font-size: 12px;
+    opacity: 0.7;
+    font-family: 'Consolas', monospace;
+}
+
+/* Panel info grid - direct class access (in addition to nested) */
+.panel-info-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.panel-info-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Error section */
+.error-section {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 16px;
+}
+
+.error-section .error-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--danger-color);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.error-section .error-message {
+    font-size: 13px;
+    color: #991b1b;
+    line-height: 1.5;
+    font-family: 'Consolas', monospace;
+}
+
+/* Test results table */
+.test-results-table {
+    margin-top: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.test-results-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.test-results-table th {
+    background: var(--bg-color);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.test-results-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.test-results-table tr:last-child td {
+    border-bottom: none;
+}
+
+.test-results-table tr:hover td {
+    background: var(--bg-color);
+}
+
+/* Log stats bar */
+.log-stats-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.log-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.log-stat-label {
+    color: var(--text-secondary);
+}
+
+.log-stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.log-stat.info .log-stat-value { color: var(--info-color); }
+.log-stat.warning .log-stat-value { color: var(--warning-color); }
+.log-stat.error .log-stat-value { color: var(--danger-color); }
+
+/* Diagnosis grid */
+.diagnosis-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.diagnosis-item {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.diagnosis-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.diagnosis-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.diagnosis-section {
+    margin-top: 16px;
+}
+
+.diagnosis-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.badge-secondary {
+    background: var(--bg-color);
+    color: var(--text-secondary);
+}
+
+/* Empty states */
+.no-results,
+.no-logs {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* Pass rate badge in summary */
+.panel-summary-card.pass-rate .summary-value {
+    color: var(--primary-color);
+}
+
+/* Task elapsed time in status strip */
+.task-elapsed {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+}
+
+/* WS status text */
+.ws-status-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Strip counters container */
+.strip-counters {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Result badge */
+.result-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.result-badge.passed,
+.result-badge.completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.result-badge.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.result-badge.pending,
+.result-badge.running {
+    background: #dbeafe;
+    color: #1e40af;
 }
 
 /* ==========================================================================
