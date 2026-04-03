@@ -73,8 +73,46 @@
         }
     </style>
     {% block extra_css %}{% endblock %}
+<style>
+/* Sidebar rail mode — applied when active_page == 'dashboard' */
+body.mission-control .sidebar {
+    width: var(--sidebar-collapsed-width, 60px);
+    overflow: hidden;
+    transition: width 0.25s ease;
+}
+body.mission-control .sidebar:hover {
+    width: var(--sidebar-width, 220px);
+}
+body.mission-control .sidebar h1 span,
+body.mission-control .nav-item span,
+body.mission-control .sidebar-footer {
+    display: none;
+}
+body.mission-control .sidebar:hover h1 span,
+body.mission-control .sidebar:hover .nav-item span,
+body.mission-control .sidebar:hover .sidebar-footer {
+    display: block;
+}
+body.mission-control .nav-item {
+    justify-content: center;
+    padding: 14px;
+}
+body.mission-control .nav-item i {
+    margin-right: 0;
+}
+body.mission-control .sidebar:hover .nav-item {
+    justify-content: flex-start;
+    padding: 12px 20px;
+}
+body.mission-control .sidebar:hover .nav-item i {
+    margin-right: 12px;
+}
+body.mission-control .sidebar-header {
+    padding: 16px 12px;
+}
+</style>
 </head>
-<body>
+<body class="{% if active_page == 'dashboard' %}mission-control{% endif %}">
     <div class="app-container">
         <!-- 侧边栏 -->
         <aside class="sidebar">
@@ -310,5 +348,11 @@
     </script>
     
     {% block extra_js %}{% endblock %}
+
+    <!-- SocketIO client for real-time updates -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        window.socketio = io();
+    </script>
 </body>
 </html>
