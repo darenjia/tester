@@ -17,6 +17,7 @@ Execution Flow:
 6. Return ExecutionOutcome or list[TestResult]
 """
 
+import os
 from typing import Any, Optional
 
 from models.result import ExecutionOutcome
@@ -97,6 +98,56 @@ class CANoeExecutionStrategy(ExecutionStrategy):
             for result in results:
                 collector.add_test_result(result)
 
+    def _group_cases_by_config_path(
+        self, cases: list, config_path: str | None
+    ) -> dict[str, list]:
+        """
+        将用例按 config_path 分组。
+
+        由于 CANoe 中 config_path 相同的用例在同一配置下执行，
+        按 config_path 分组可以实现批量执行。
+
+        Returns:
+            dict[str, list] — {config_path: [cases]}
+        """
+        groups: dict[str, list] = {}
+        for case in cases:
+            path = config_path or ""
+            if path not in groups:
+                groups[path] = []
+            groups[path].append(case)
+        return groups
+
+    def _generate_select_info_ini_for_group(
+        self, cases: list, config_path: str
+    ) -> None:
+        """
+        为一组用例生成 SelectInfo.ini，写入 cfg 所在目录。
+
+        Args:
+            cases: 同组用例列表
+            config_path: .cfg 文件路径
+
+        Raises:
+            RuntimeError: SelectInfo.ini 生成失败
+        """
+        if not config_path:
+            return
+
+        cfg_dir = os.path.dirname(config_path)
+        case_nos = [getattr(case, "case_no", "") or getattr(case, "caseName", "") or "" for case in cases]
+        case_nos = [c for c in case_nos if c]
+
+        if not case_nos:
+            return
+
+        try:
+            from core.config_manager import TestConfigManager
+            config_manager = TestConfigManager()
+            config_manager.generate_select_info_ini(case_nos, cfg_dir)
+        except Exception as e:
+            raise RuntimeError(f"Failed to generate SelectInfo.ini: {e}")
+
     def run(
         self,
         plan: Any,
@@ -132,39 +183,47 @@ class CANoeExecutionStrategy(ExecutionStrategy):
         # Use collector from executor if not provided directly
         runtime_collector = collector or getattr(executor, "current_collector", None)
 
-        self._load_configuration(adapter, config_path)
-        self._start_measurement(adapter)
+        # 按 config_path 分组
+        groups = self._group_cases_by_config_path(plan_cases, config_path)
 
-        try:
-            results: list[TestResult] = []
-            artifacts: dict[str, Any] = {}
+        results: list[TestResult] = []
+        artifacts: dict[str, Any] = {}
 
-            for case in plan_cases:
-                raw_result = test_module_capability.execute_module(
-                    getattr(case, "case_name", ""),
-                    timeout=self._timeout_for(plan),
-                )
-                test_result = self._build_test_result(case, raw_result)
-                results.append(test_result)
-                self._collect_results(runtime_collector, [test_result])
+        for group_path, group_cases in groups.items():
+            # 生成 SelectInfo.ini
+            self._generate_select_info_ini_for_group(group_cases, group_path)
 
-                # Collect artifact paths from raw_result if available
-                if raw_result:
-                    if raw_result.get("report_path"):
-                        artifacts["report_path"] = raw_result["report_path"]
-                    if raw_result.get("log_path"):
-                        artifacts["log_path"] = raw_result["log_path"]
-                    if raw_result.get("testdata_path"):
-                        artifacts["testdata_path"] = raw_result["testdata_path"]
+            # 加载配置
+            self._load_configuration(adapter, group_path)
 
-            # Return ExecutionOutcome if collector available, else list[TestResult]
-            if runtime_collector is not None:
-                return runtime_collector.finalize(
-                    status="completed",
-                    artifacts=artifacts if artifacts else None,
-                    report_metadata={"source": "canoe_test_module"},
-                )
-            return results
+            # 启动测量
+            self._start_measurement(adapter)
 
-        finally:
-            self._stop_measurement(adapter)
+            try:
+                for case in group_cases:
+                    raw_result = test_module_capability.execute_module(
+                        getattr(case, "case_name", ""),
+                        timeout=self._timeout_for(plan),
+                    )
+                    test_result = self._build_test_result(case, raw_result)
+                    results.append(test_result)
+                    self._collect_results(runtime_collector, [test_result])
+
+                    if raw_result:
+                        if raw_result.get("report_path"):
+                            artifacts["report_path"] = raw_result["report_path"]
+                        if raw_result.get("log_path"):
+                            artifacts["log_path"] = raw_result["log_path"]
+                        if raw_result.get("testdata_path"):
+                            artifacts["testdata_path"] = raw_result["testdata_path"]
+            finally:
+                self._stop_measurement(adapter)
+
+        # Return ExecutionOutcome if collector available, else list[TestResult]
+        if runtime_collector is not None:
+            return runtime_collector.finalize(
+                status="completed",
+                artifacts=artifacts if artifacts else None,
+                report_metadata={"source": "canoe_test_module"},
+            )
+        return results
