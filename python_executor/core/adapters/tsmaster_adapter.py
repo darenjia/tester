@@ -8,7 +8,11 @@ TSMaster测试工具适配器
 """
 
 import time
+import os
+import shutil
+import tempfile
 import logging
+from datetime import datetime
 from typing import Optional, Dict, Any, Callable, List
 
 from .base_adapter import BaseTestAdapter, TestToolType, AdapterStatus
@@ -731,11 +735,61 @@ class TSMasterAdapter(BaseTestAdapter):
             result = {
                 "report_path": report_path,
                 "testdata_path": testdata_path,
+                "archive_path": None,  # will be set below if archiving succeeds
                 "passed": passed,
                 "failed": failed,
                 "total": passed + failed,
                 "success_rate": (passed / (passed + failed) * 100) if (passed + failed) > 0 else 0
             }
+
+            # 压缩报告和测试数据
+            archive_path = None
+            try:
+                # 获取 taskNo
+                task_no = self._current_task_no or "UNKNOWN"
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                archive_name = f"TSMaster_Report_{task_no}_{timestamp}"
+
+                # 创建临时目录用于存放压缩源文件
+                temp_dir = tempfile.mkdtemp(prefix="tsmaster_archive_")
+                temp_extract_dir = os.path.join(temp_dir, "archive_content")
+                os.makedirs(temp_extract_dir)
+
+                # 查找最新子文件夹并复制内容
+                report_latest = self._find_latest_subfolder(report_path) if report_path else None
+                testdata_latest = self._find_latest_subfolder(testdata_path) if testdata_path else None
+
+                if report_latest:
+                    dest_report = os.path.join(temp_extract_dir, "report")
+                    shutil.copytree(report_latest, dest_report)
+                    self.logger.info(f"已复制报告文件: {report_latest} -> {dest_report}")
+
+                if testdata_latest:
+                    dest_testdata = os.path.join(temp_extract_dir, "testdata")
+                    shutil.copytree(testdata_latest, dest_testdata)
+                    self.logger.info(f"已复制测试数据: {testdata_latest} -> {dest_testdata}")
+
+                # 检查是否有文件需要压缩
+                if os.path.exists(temp_extract_dir) and os.listdir(temp_extract_dir):
+                    archive_base = os.path.join(temp_dir, archive_name)
+                    shutil.make_archive(archive_base, 'zip', temp_extract_dir)
+                    archive_path = archive_base + ".zip"
+                    result["archive_path"] = archive_path
+                    self.logger.info(f"压缩包已创建: {archive_path}")
+                else:
+                    self.logger.warning("没有找到可压缩的报告文件")
+
+            except Exception as e:
+                self.logger.error(f"创建报告压缩包失败: {e}")
+                archive_path = None
+            finally:
+                # 清理临时目录
+                if 'temp_dir' in dir() and os.path.exists(temp_dir):
+                    try:
+                        shutil.rmtree(temp_dir)
+                        self.logger.info("临时目录已清理")
+                    except Exception:
+                        pass
 
             self.logger.info(f"测试报告信息: passed={passed}, failed={failed}, total={passed+failed}")
             return result
