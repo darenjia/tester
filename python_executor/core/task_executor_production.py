@@ -497,7 +497,38 @@ class TaskExecutorProduction:
             'testItems': test_items,
         }
         return compiler.compile_payload(payload)
-    
+
+    def _resolve_task_config(self, task: ExecutionPlan) -> ExecutionPlan:
+        """
+        配置解析代理方法
+
+        将配置准备逻辑从 _execute_task_production 中提取出来，单独管理。
+        内部委托给 ConfigPreparationPhase 处理。
+
+        Args:
+            task: 原始执行计划
+
+        Returns:
+            配置解析后的执行计划
+
+        Raises:
+            TaskException: 配置冲突、缺失或准备失败时
+        """
+        try:
+            prep_phase = ConfigPreparationPhase()
+            task = prep_phase.prepare(task)
+            self.logger.info(
+                f"[_resolve_task_config] 配置准备完成: "
+                f"config_source={task.config_source}, config_path={task.config_path}"
+            )
+            return task
+        except ConfigConflictError as e:
+            raise TaskException(f"配置冲突: {e}")
+        except MissingConfigError as e:
+            raise TaskException(f"缺少配置: {e}")
+        except ConfigPreparationError as e:
+            raise TaskException(f"配置准备失败: {e}")
+
     @TASK_CIRCUIT_BREAKER
     def _execute_task_production(self, task: ExecutionPlan):
         """生产环境任务执行"""
@@ -543,24 +574,14 @@ class TaskExecutorProduction:
 
             logger.info(f"[_execute_task_production] 任务初始化完成，开始配置准备阶段")
 
-            # ========== 配置准备（使用 ConfigPreparationPhase） ==========
+            # ========== 配置准备（使用 TaskConfigResolver） ==========
             try:
-                prep_phase = ConfigPreparationPhase()
-                task = prep_phase.prepare(task)
-                logger.info(
-                    f"[_execute_task_production] 配置准备完成: "
-                    f"config_source={task.config_source}, config_path={task.config_path}"
-                )
+                task = self._resolve_task_config(task)
                 self.current_collector.add_log("INFO", f"配置来源: {task.config_source.value}")
                 if task.config_path:
                     self.current_collector.add_log("INFO", f"cfg文件: {task.config_path}")
-
-            except ConfigConflictError as e:
-                raise TaskException(f"配置冲突: {e}")
-            except MissingConfigError as e:
-                raise TaskException(f"缺少配置: {e}")
-            except ConfigPreparationError as e:
-                raise TaskException(f"配置准备失败: {e}")
+            except TaskException:
+                raise  # _resolve_task_config 已将内部异常转换为 TaskException，直接抛出
 
             # ========== CANoe: 生成 SelectInfo.ini（在连接之前） ==========
             if tool_type and tool_type.lower() == TestToolType.CANOE.value:
