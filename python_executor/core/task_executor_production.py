@@ -79,11 +79,11 @@ def _ensure_observability_context(task: ExecutionPlan):
         )
     return observability_manager
 
-# 任务执行熔断器
+# 任务执行熔断器 - 只对工具级异常熔断，普通用例失败不触发熔断
 TASK_CIRCUIT_BREAKER = CircuitBreaker(
     failure_threshold=10,
     recovery_timeout=300.0,
-    expected_exception=Exception
+    expected_exception=(ToolException, ConnectionError, TimeoutError, OSError)
 )
 
 class TaskQueue:
@@ -698,8 +698,9 @@ class TaskExecutorProduction:
         except TaskException as e:
             logger.error(f"任务执行失败: {e}")
             self._current_metrics.record_error()
-            TASK_CIRCUIT_BREAKER.record_failure()
+            # 注意：这里没有 TASK_CIRCUIT_BREAKER.record_failure()
             self._fail_task(task, str(e))
+            return  # 确保不继续执行到后面
             
         except ToolException as e:
             logger.error(f"工具操作失败: {e}")
