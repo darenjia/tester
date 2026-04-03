@@ -86,76 +86,6 @@ TASK_CIRCUIT_BREAKER = CircuitBreaker(
     expected_exception=(ToolException, ConnectionError, TimeoutError, OSError)
 )
 
-class TaskQueue:
-    """任务队列管理器"""
-    
-    def __init__(self, max_size: int = 100):
-        self.queue = queue.Queue(maxsize=max_size)
-        self.processing = {}
-        self.completed = {}
-        self._lock = threading.Lock()
-    
-    def put(self, task: ExecutionPlan) -> bool:
-        """添加任务到队列"""
-        try:
-            self.queue.put(task, block=False)
-            return True
-        except queue.Full:
-            logger.warning("任务队列已满")
-            return False
-    
-    def get(self, timeout: float = 1.0) -> Optional[ExecutionPlan]:
-        """从队列获取任务"""
-        try:
-            return self.queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
-    
-    def mark_processing(self, task_id: str, task: ExecutionPlan):
-        """标记任务为处理中"""
-        with self._lock:
-            self.processing[task_id] = {
-                'task': task,
-                'start_time': time.time()
-            }
-    
-    def mark_completed(self, task_id: str, result: Dict[str, Any]):
-        """标记任务为已完成"""
-        with self._lock:
-            if task_id in self.processing:
-                del self.processing[task_id]
-            
-            self.completed[task_id] = {
-                'result': result,
-                'completion_time': time.time()
-            }
-    
-    def get_queue_size(self) -> int:
-        """获取队列大小"""
-        return self.queue.qsize()
-    
-    def get_processing_count(self) -> int:
-        """获取处理中任务数"""
-        with self._lock:
-            return len(self.processing)
-
-    def remove(self, task_id: str) -> bool:
-        """从内部执行队列移除尚未开始的任务。"""
-        with self._lock:
-            retained: queue.Queue[ExecutionPlan] = queue.Queue(maxsize=self.queue.maxsize)
-            removed = False
-
-            while not self.queue.empty():
-                task = self.queue.get_nowait()
-                current_task_id = getattr(task, "task_id", None) or getattr(task, "task_no", None)
-                if not removed and current_task_id == task_id:
-                    removed = True
-                    continue
-                retained.put_nowait(task)
-
-            self.queue = retained
-            return removed
-
 class TaskExecutorProduction:
     """任务执行器 - 生产环境版本"""
 
@@ -175,7 +105,6 @@ class TaskExecutorProduction:
         self._task_thread = None
         self._start_time = None
         self._lock = threading.RLock()
-        self._task_queue = TaskQueue()
         self._worker_pool = ThreadPoolExecutor(max_workers=1)  # 串行执行
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="report_")  # 异步上报
         self._running = False
@@ -409,7 +338,7 @@ class TaskExecutorProduction:
         while self._running:
             try:
                 # 从队列获取任务
-                task = self._task_queue.get(timeout=1.0)
+                task = global_task_queue.get()
                 
                 if task:
                     # 提交到线程池执行
@@ -477,40 +406,38 @@ class TaskExecutorProduction:
             logger.error(f"策略选择/预检查失败: {e}")
             return False
 
-        # 添加到内部执行队列
-        if self._task_queue.put(plan):
-            # 同时添加到全局队列供API查询（将TDMTask转换为内部Task格式）
-            from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus
-            exec_task = ExecutorTask(
-                id=task_id,
-                name=self._task_name(plan),
-                task_type='test_module',
-                priority=1,
-                status=ExecutorTaskStatus.PENDING.value,
-                params={
-                    'tool_type': self._task_tool_type(plan),
-                    'config_path': self._task_config_path(plan),
-                    'config_name': self._task_config_name(plan),
-                    'base_config_dir': self._task_base_config_dir(plan),
-                    'variables': self._task_variables(plan),
-                    'canoe_namespace': self._task_canoe_namespace(plan),
-                    'testItems': test_items,
-                },
-                timeout=self._task_timeout(plan),
-                metadata={
-                    'taskNo': task_id,
-                    'projectNo': self._task_project_no(plan),
-                    'deviceId': self._task_device_id(plan),
-                    'caseCount': len(self._task_cases(plan) or []),
-                    'caseList': [self._legacy_config_case_dict(item) for item in self._task_cases(plan)],
-                }
-            )
-            global_task_queue.add(exec_task)
-            logger.info(f"任务已加入队列: {task_id}")
-            return True
-        else:
+        # 添加到全局执行队列
+        from models.executor_task import Task as ExecutorTask, TaskStatus as ExecutorTaskStatus
+        exec_task = ExecutorTask(
+            id=task_id,
+            name=self._task_name(plan),
+            task_type='test_module',
+            priority=1,
+            status=ExecutorTaskStatus.PENDING.value,
+            params={
+                'tool_type': self._task_tool_type(plan),
+                'config_path': self._task_config_path(plan),
+                'config_name': self._task_config_name(plan),
+                'base_config_dir': self._task_base_config_dir(plan),
+                'variables': self._task_variables(plan),
+                'canoe_namespace': self._task_canoe_namespace(plan),
+                'testItems': test_items,
+            },
+            timeout=self._task_timeout(plan),
+            metadata={
+                'taskNo': task_id,
+                'projectNo': self._task_project_no(plan),
+                'deviceId': self._task_device_id(plan),
+                'caseCount': len(self._task_cases(plan) or []),
+                'caseList': [self._legacy_config_case_dict(item) for item in self._task_cases(plan)],
+            }
+        )
+        if not global_task_queue.add(exec_task):
             logger.error(f"任务加入队列失败: {task_id}")
             return False
+
+        logger.info(f"任务已加入队列: {task_id}")
+        return True
 
     def execute_plan(self, plan: ExecutionPlan) -> bool:
         return self.execute_task(plan)
@@ -595,7 +522,6 @@ class TaskExecutorProduction:
 
         # 初始化性能指标
         self._current_metrics = TaskMetrics(task_id)
-        self._task_queue.mark_processing(task_id, task)
         self._ensure_task_observability_context(task)
         observability_manager = _ensure_observability_context(task)
 
@@ -733,12 +659,6 @@ class TaskExecutorProduction:
             
             record_metric('task.error_count', metrics_summary['error_count'], {
                 'task_id': task_id
-            })
-            
-            # 标记任务完成
-            self._task_queue.mark_completed(task_id, {
-                'status': 'completed' if metrics_summary['error_count'] == 0 else 'failed',
-                'metrics': metrics_summary
             })
             
             with self._lock:
@@ -986,7 +906,7 @@ class TaskExecutorProduction:
     
     def cancel_task(self, task_id: str = None) -> bool:
         """取消指定任务"""
-        if task_id and self._task_queue.remove(task_id):
+        if task_id and global_task_queue.remove(task_id):
             logger.info(f"已取消排队中的任务: {task_id}")
             self._update_task_status(task_id, TaskStatus.CANCELLED, "任务被用户取消")
             return True
@@ -998,7 +918,7 @@ class TaskExecutorProduction:
         # 如果指定了task_id，检查是否匹配
         current_task_id = self._task_id(self.current_task)
         if task_id and current_task_id != task_id:
-            if self._task_queue.remove(task_id):
+            if global_task_queue.remove(task_id):
                 logger.info(f"已取消排队中的任务: {task_id}")
                 self._update_task_status(task_id, TaskStatus.CANCELLED, "任务被用户取消")
                 return True
@@ -1035,15 +955,6 @@ class TaskExecutorProduction:
             # 添加到全局任务队列
             if not global_task_queue.add(task):
                 logger.warning(f"任务 {task_id} 已存在于队列中")
-                return False
-
-            # 添加到内部执行队列
-            if not self._task_queue.put(execution_plan):
-                logger.error(f"任务 {task_id} 加入内部执行队列失败")
-                try:
-                    global_task_queue.remove(task_id)
-                except Exception as rollback_error:
-                    logger.warning(f"回滚全局任务队列失败: {rollback_error}")
                 return False
 
             logger.info(f"任务 {task_id} 已提交到执行队列")
@@ -1506,8 +1417,8 @@ class TaskExecutorProduction:
         if not self.current_task:
             return {
                 "status": "idle",
-                "queue_size": self._task_queue.get_queue_size(),
-                "processing_count": self._task_queue.get_processing_count()
+                "queue_size": global_task_queue.size(),
+                "processing_count": global_task_queue.total_count()
             }
 
         return {
@@ -1516,8 +1427,8 @@ class TaskExecutorProduction:
             "tool_type": self._task_tool_type(self.current_task),
             "start_time": datetime.fromtimestamp(self._start_time).isoformat() if self._start_time else None,
             "duration": time.time() - self._start_time if self._start_time else 0,
-            "queue_size": self._task_queue.get_queue_size(),
-            "processing_count": self._task_queue.get_processing_count(),
+            "queue_size": global_task_queue.size(),
+            "processing_count": global_task_queue.total_count(),
             "metrics": self._current_metrics.get_summary() if self._current_metrics else None
         }
 
@@ -1531,7 +1442,7 @@ class TaskExecutorProduction:
         with self._lock:
             if self.current_task and self._running:
                 return 1
-            return 1 if self._task_queue.get_processing_count() > 0 else 0
+            return global_task_queue.get_running_count() if hasattr(global_task_queue, 'get_running_count') else (1 if global_task_queue.get_running_tasks() else 0)
 
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -1542,7 +1453,7 @@ class TaskExecutorProduction:
         """
         return {
             "running": self.get_running_count(),
-            "queue_size": self._task_queue.get_queue_size(),
+            "queue_size": global_task_queue.size(),
             "max_workers": self.max_workers,
             "is_running": self._running
         }
