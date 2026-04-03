@@ -153,6 +153,11 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
+.status-strip .focus-toggle:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 .status-strip .focus-toggle i {
     font-size: 14px;
 }
@@ -627,6 +632,11 @@
     color: var(--text-primary);
 }
 
+.panel-header .panel-close:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 /* Panel Tabs */
 .panel-tabs {
     display: flex;
@@ -804,7 +814,7 @@
     line-height: 1.6;
 }
 
-.panel-log-list .log-entry {
+.panel-log-list .panel-log-entry {
     padding: 6px 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: #e2e8f0;
@@ -812,7 +822,7 @@
     gap: 10px;
 }
 
-.panel-log-list .log-entry:last-child {
+.panel-log-list .panel-log-entry:last-child {
     border-bottom: none;
 }
 
@@ -881,20 +891,6 @@
     }
 }
 
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
-}
 
 /* ==========================================================================
    Responsive Adjustments
