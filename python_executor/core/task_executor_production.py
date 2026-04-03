@@ -877,6 +877,13 @@ class TaskExecutorProduction:
         """任务失败"""
         task_id = self._task_id(task)
         logger.error(f"任务失败: {task_id}, 错误: {error_message}")
+
+        # 防御性初始化：如果 current_collector 未初始化（配置阶段崩溃场景），创建兜底的
+        if not self.current_collector:
+            self.current_collector = ResultCollector(task_id)
+            self.current_collector.add_log("WARNING", f"current_collector 未初始化，使用兜底收集器，上报错误: {error_message}")
+            logger.warning(f"[_fail_task] current_collector 为 None，已创建兜底收集器")
+
         observability_manager = get_execution_observability_manager()
         execution_error_category = "execution_failure"
         self._current_execution_error_category = execution_error_category
