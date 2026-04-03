@@ -12,12 +12,12 @@
 <div class="status-strip" id="status-strip">
     <div class="health-pill" id="health-pill"></div>
 
-    <div class="running-task-container" id="running-task">
-        <span class="running-task-name" id="strip-task-name">—</span>
-        <div class="running-task-progress">
-            <div class="progress-fill" id="strip-progress-fill"></div>
+    <div class="running-task" id="running-task">
+        <span class="task-name" id="strip-task-name">—</span>
+        <div class="strip-progress">
+            <div class="strip-progress-fill" id="strip-progress-fill"></div>
         </div>
-        <span class="running-task-elapsed" id="strip-elapsed">—</span>
+        <span class="task-elapsed" id="strip-elapsed">—</span>
     </div>
 
     <div class="strip-counters" id="strip-counters">
@@ -44,7 +44,7 @@
         <span class="ws-status-text" id="ws-status-text">连接中</span>
     </div>
 
-    <button class="focus-toggle-btn" id="focus-toggle-btn" onclick="toggleFocusMode()">
+    <button class="focus-toggle" id="focus-toggle-btn" onclick="toggleFocusMode()">
         <i class="fas fa-expand"></i>
         <span>专注模式</span>
     </button>
@@ -114,7 +114,7 @@
 <div class="detail-slide-panel" id="detail-panel">
     <div class="panel-header">
         <h3>Task Detail</h3>
-        <button class="panel-close-btn" id="panel-close-btn">
+        <button class="panel-close" id="panel-close-btn">
             <i class="fas fa-times"></i>
         </button>
     </div>
@@ -226,33 +226,33 @@ window.renderPanelBasic = function(task) {
                 <span class="hero-task-id">ID: ${escapeHtml(task.id || '—')}</span>
             </div>
         </div>
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Status</span>
-                <span class="info-value">${statusText}</span>
+        <div class="panel-info-grid">
+            <div class="panel-info-item">
+                <span class="panel-info-label">Status</span>
+                <span class="panel-info-value">${statusText}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Tool</span>
-                <span class="info-value">${escapeHtml(task.task_type || task.category || '—').toUpperCase()}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Tool</span>
+                <span class="panel-info-value">${escapeHtml(task.task_type || task.category || '—').toUpperCase()}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Created</span>
-                <span class="info-value">${formatTime(task.created_at)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Created</span>
+                <span class="panel-info-value">${formatTime(task.created_at)}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Priority</span>
-                <span class="info-value">${getPriorityLabel(task.priority)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Priority</span>
+                <span class="panel-info-value">${getPriorityLabel(task.priority)}</span>
             </div>
             ${task.created_by ? `
-            <div class="info-item">
-                <span class="info-label">Creator</span>
-                <span class="info-value">${escapeHtml(task.created_by)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Creator</span>
+                <span class="panel-info-value">${escapeHtml(task.created_by)}</span>
             </div>
             ` : ''}
             ${task.category ? `
-            <div class="info-item">
-                <span class="info-label">Category</span>
-                <span class="info-value">${escapeHtml(task.category)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Category</span>
+                <span class="panel-info-value">${escapeHtml(task.category)}</span>
             </div>
             ` : ''}
         </div>
@@ -265,22 +265,22 @@ window.renderPanelExecution = function(task) {
 
     const exec = task.execution || {};
     container.innerHTML = `
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Started</span>
-                <span class="info-value">${formatTime(exec.started_at)}</span>
+        <div class="panel-info-grid">
+            <div class="panel-info-item">
+                <span class="panel-info-label">Started</span>
+                <span class="panel-info-value">${formatTime(exec.started_at)}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Completed</span>
-                <span class="info-value">${formatTime(exec.completed_at)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Completed</span>
+                <span class="panel-info-value">${formatTime(exec.completed_at)}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Duration</span>
-                <span class="info-value">${formatDuration(exec.duration)}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Duration</span>
+                <span class="panel-info-value">${formatDuration(exec.duration)}</span>
             </div>
-            <div class="info-item">
-                <span class="info-label">Retry Count</span>
-                <span class="info-value">${exec.retry_count ?? 0} / ${exec.max_retries ?? '—'}</span>
+            <div class="panel-info-item">
+                <span class="panel-info-label">Retry Count</span>
+                <span class="panel-info-value">${exec.retry_count ?? 0} / ${exec.max_retries ?? '—'}</span>
             </div>
         </div>
         ${task.error_message ? `
@@ -302,24 +302,24 @@ window.renderPanelResults = function(task) {
         : '—');
 
     container.innerHTML = `
-        <div class="result-summary-grid">
-            <div class="summary-item">
+        <div class="panel-summary-grid">
+            <div class="panel-summary-card">
                 <span class="summary-value">${summary.total ?? 0}</span>
                 <span class="summary-label">Total</span>
             </div>
-            <div class="summary-item passed">
+            <div class="panel-summary-card passed">
                 <span class="summary-value">${summary.passed ?? 0}</span>
                 <span class="summary-label">Passed</span>
             </div>
-            <div class="summary-item failed">
+            <div class="panel-summary-card failed">
                 <span class="summary-value">${summary.failed ?? 0}</span>
                 <span class="summary-label">Failed</span>
             </div>
-            <div class="summary-item blocked">
+            <div class="panel-summary-card blocked">
                 <span class="summary-value">${summary.blocked ?? 0}</span>
                 <span class="summary-label">Blocked</span>
             </div>
-            <div class="summary-item pass-rate">
+            <div class="panel-summary-card pass-rate">
                 <span class="summary-value">${passRate}</span>
                 <span class="summary-label">Pass Rate</span>
             </div>
@@ -378,7 +378,7 @@ window.renderPanelLogs = function(task) {
         ${logs.length > 0 ? `
         <div class="panel-log-list">
             ${logs.map(log => `
-            <div class="log-entry log-${(log.level || 'INFO').toLowerCase()}">
+            <div class="panel-log-entry log-${(log.level || 'INFO').toLowerCase()}">
                 <span class="log-time">${formatLogTime(log.timestamp)}</span>
                 <span class="log-level">${escapeHtml(log.level || 'INFO')}</span>
                 <span class="log-message">${escapeHtml(log.message || '')}</span>
