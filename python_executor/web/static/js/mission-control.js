@@ -128,6 +128,10 @@
         ])
         .then(function(responses) {
             return Promise.all(responses.map(function(res) {
+                if (!res.ok) {
+                    console.warn('API request failed: HTTP ' + res.status);
+                    return { success: false, data: null };
+                }
                 return res.json();
             }));
         })
