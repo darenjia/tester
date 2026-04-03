@@ -665,6 +665,36 @@ class TSMasterAdapter(BaseTestAdapter):
             self._set_error(f"获取测试结果失败: {str(e)}")
             return None
 
+    def _find_latest_subfolder(self, parent_path: str) -> Optional[str]:
+        """
+        查找目录下按修改时间最新的子文件夹
+
+        Args:
+            parent_path: 父目录路径
+
+        Returns:
+            最新子文件夹的完整路径，如果不存在则返回 None
+        """
+        if not os.path.exists(parent_path):
+            self.logger.warning(f"目录不存在: {parent_path}")
+            return None
+
+        try:
+            subfolders = [d for d in os.listdir(parent_path)
+                          if os.path.isdir(os.path.join(parent_path, d))]
+            if not subfolders:
+                self.logger.warning(f"目录下没有子文件夹: {parent_path}")
+                return None
+
+            latest = max(subfolders,
+                          key=lambda d: os.path.getmtime(os.path.join(parent_path, d)))
+            latest_path = os.path.join(parent_path, latest)
+            self.logger.info(f"找到最新子文件夹: {latest_path}")
+            return latest_path
+        except Exception as e:
+            self.logger.error(f"查找最新子文件夹失败: {e}")
+            return None
+
     def get_test_report_info(self) -> Optional[Dict[str, Any]]:
         """
         Get test report paths and statistics after execution
