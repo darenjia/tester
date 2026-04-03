@@ -1,0 +1,929 @@
+/* ==========================================================================
+   Mission Control - Kanban Board Styles
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Status Strip
+   -------------------------------------------------------------------------- */
+.status-strip {
+    height: var(--status-strip-height);
+    background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-strip .health-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    font-size: 13px;
+    color: white;
+    font-weight: 500;
+}
+
+.status-strip .health-pill .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success-color);
+}
+
+.status-strip .health-pill .dot.warning {
+    background: var(--warning-color);
+}
+
+.status-strip .health-pill .dot.error {
+    background: var(--danger-color);
+}
+
+.status-strip .running-task-strip {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.status-strip .running-task-strip .task-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+}
+
+.status-strip .running-task-strip .task-name {
+    font-size: 13px;
+    color: var(--info-color);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-strip .running-task-strip .task-progress {
+    width: 100px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.status-strip .running-task-strip .task-progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.status-strip .counters {
+    display: flex;
+    gap: 16px;
+}
+
+.status-strip .counter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.status-strip .counter .count {
+    font-weight: 600;
+}
+
+.status-strip .counter.pending .count {
+    color: var(--text-secondary);
+}
+
+.status-strip .counter.running .count {
+    color: var(--info-color);
+}
+
+.status-strip .counter.completed .count {
+    color: var(--success-color);
+}
+
+.status-strip .counter.failed .count {
+    color: var(--danger-color);
+}
+
+.status-strip .ws-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.status-strip .ws-indicator .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success-color);
+    animation: pulse 2s infinite;
+}
+
+.status-strip .ws-indicator .dot.disconnected {
+    background: var(--danger-color);
+    animation: none;
+}
+
+.status-strip .focus-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.status-strip .focus-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.status-strip .focus-toggle i {
+    font-size: 14px;
+}
+
+/* --------------------------------------------------------------------------
+   Kanban Board
+   -------------------------------------------------------------------------- */
+.kanban-board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 20px;
+    height: calc(100vh - var(--status-strip-height) - var(--header-height));
+    overflow-x: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Kanban Column
+   -------------------------------------------------------------------------- */
+.kanban-column {
+    background: var(--bg-color);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    min-width: 280px;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+.kanban-column-header {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--card-bg);
+    flex-shrink: 0;
+}
+
+.kanban-column-header .column-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kanban-column-header .column-title .icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.kanban-column-header .column-title .icon.pending {
+    background: var(--bg-color);
+    color: var(--text-secondary);
+}
+
+.kanban-column-header .column-title .icon.running {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary-color);
+}
+
+.kanban-column-header .column-title .icon.completed {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.kanban-column-header .column-title .icon.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+.kanban-column-header .column-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-color);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.kanban-column-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Kanban Column Empty State
+   -------------------------------------------------------------------------- */
+.kanban-column-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.kanban-column-empty .empty-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.kanban-column-empty .empty-text {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.kanban-column-empty .empty-text strong {
+    display: block;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Kanban Card
+   -------------------------------------------------------------------------- */
+.kanban-card {
+    background: var(--card-bg);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    animation: cardSlideIn 0.3s ease;
+}
+
+.kanban-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.kanban-card.running {
+    border-color: var(--primary-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--primary-color);
+}
+
+.kanban-card.completed {
+    border-color: var(--success-color);
+    background: linear-gradient(135deg, var(--card-bg) 0%, rgba(16, 185, 129, 0.03) 100%);
+}
+
+.kanban-card.failed {
+    border-color: var(--danger-color);
+    background: linear-gradient(135deg, var(--card-bg) 0%, rgba(239, 68, 68, 0.03) 100%);
+    animation: cardSlideIn 0.3s ease, failedPulse 2s ease-in-out infinite;
+}
+
+.kanban-card.pending {
+    border-color: var(--border-color);
+}
+
+/* Card Header */
+.card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.card-title-row {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Card Status Badge */
+.card-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+
+.card-status-badge.running {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary-color);
+}
+
+.card-status-badge.completed {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.card-status-badge.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+.card-status-badge.pending {
+    background: var(--bg-color);
+    color: var(--text-secondary);
+}
+
+.card-status-badge .spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Card Meta */
+.card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.card-meta .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.card-meta .meta-item i {
+    font-size: 12px;
+}
+
+.card-meta .tool-badge {
+    padding: 2px 6px;
+    background: var(--bg-color);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+/* Card Progress */
+.card-progress {
+    margin-bottom: 10px;
+}
+
+.card-progress .progress-bar {
+    height: 6px;
+    background: var(--bg-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.card-progress .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--info-color));
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.card-progress .progress-fill.completed {
+    background: var(--success-color);
+}
+
+.card-progress .progress-fill.failed {
+    background: var(--danger-color);
+}
+
+.card-progress .progress-text {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Card Tally */
+.card-tally {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.card-tally .tally-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.card-tally .tally-item i {
+    font-size: 12px;
+}
+
+.card-tally .tally-item.passed i {
+    color: var(--success-color);
+}
+
+.card-tally .tally-item.failed i {
+    color: var(--danger-color);
+}
+
+.card-tally .tally-item.skipped i {
+    color: var(--text-secondary);
+}
+
+/* Card Error Preview */
+.card-error-preview {
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+}
+
+.card-error-preview .error-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--danger-color);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.card-error-preview .error-title i {
+    font-size: 10px;
+}
+
+.card-error-preview .error-message {
+    font-size: 12px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Card Quick Analysis */
+.card-quick-analysis {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.card-quick-analysis .tag {
+    padding: 3px 8px;
+    background: var(--bg-color);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.card-quick-analysis .tag.warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-color);
+}
+
+.card-quick-analysis .tag.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+/* --------------------------------------------------------------------------
+   Detail Panel Overlay
+   -------------------------------------------------------------------------- */
+.detail-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    z-index: 100;
+}
+
+.detail-panel-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Detail Slide Panel
+   -------------------------------------------------------------------------- */
+.detail-slide-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 520px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--card-bg);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.detail-slide-panel.active {
+    transform: translateX(0);
+}
+
+/* Panel Header */
+.panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    background: var(--bg-color);
+}
+
+.panel-header .panel-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.panel-header .panel-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+}
+
+.panel-header .panel-close:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Panel Tabs */
+.panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--card-bg);
+    flex-shrink: 0;
+}
+
+.panel-tab {
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.panel-tab:hover {
+    color: var(--text-primary);
+}
+
+.panel-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* Panel Body */
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.panel-content {
+    display: none;
+}
+
+.panel-content.active {
+    display: block;
+}
+
+/* Panel Hero */
+.panel-hero {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    border-radius: 12px;
+    padding: 24px;
+    color: white;
+    margin-bottom: 24px;
+}
+
+.panel-hero .hero-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.panel-hero .hero-status .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: white;
+}
+
+.panel-hero .hero-status .status-dot.running {
+    animation: pulse 2s infinite;
+}
+
+.panel-hero .hero-status .status-text {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.panel-hero .hero-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.panel-hero .hero-subtitle {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* Panel Info Grid */
+.panel-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.panel-info-item {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.panel-info-item .info-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.panel-info-item .info-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.panel-info-item .info-value.small {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+}
+
+/* Panel Summary Grid */
+.panel-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.panel-summary-card {
+    background: var(--bg-color);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+}
+
+.panel-summary-card .summary-value {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.panel-summary-card .summary-value.passed {
+    color: var(--success-color);
+}
+
+.panel-summary-card .summary-value.failed {
+    color: var(--danger-color);
+}
+
+.panel-summary-card .summary-value.skipped {
+    color: var(--text-secondary);
+}
+
+.panel-summary-card .summary-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Panel Log List */
+.panel-log-list {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.panel-log-list .log-entry {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: #e2e8f0;
+    display: flex;
+    gap: 10px;
+}
+
+.panel-log-list .log-entry:last-child {
+    border-bottom: none;
+}
+
+.panel-log-list .log-time {
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.panel-log-list .log-level {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 50px;
+    text-align: center;
+}
+
+.panel-log-list .log-level.DEBUG {
+    background: #475569;
+    color: #cbd5e1;
+}
+
+.panel-log-list .log-level.INFO {
+    background: #0369a1;
+    color: #e0f2fe;
+}
+
+.panel-log-list .log-level.WARNING {
+    background: #a16207;
+    color: #fef08a;
+}
+
+.panel-log-list .log-level.ERROR {
+    background: #991b1b;
+    color: #fecaca;
+}
+
+.panel-log-list .log-message {
+    color: #e2e8f0;
+    word-break: break-word;
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+@keyframes cardSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes failedPulse {
+    0%, 100% {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    50% {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
+@media (max-width: 1200px) {
+    .kanban-board {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .kanban-board {
+        grid-template-columns: 1fr;
+    }
+
+    .kanban-column {
+        min-width: 100%;
+    }
+
+    .detail-slide-panel {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .panel-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .panel-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
