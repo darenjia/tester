@@ -635,6 +635,25 @@ class TaskExecutorProduction:
             except ConfigPreparationError as e:
                 raise TaskException(f"配置准备失败: {e}")
 
+            # ========== CANoe: 生成 SelectInfo.ini（在连接之前） ==========
+            if tool_type and tool_type.lower() == TestToolType.CANOE.value:
+                if task.config_path and task.cases:
+                    try:
+                        cfg_dir = os.path.dirname(task.config_path)
+                        case_nos = []
+                        for case in task.cases:
+                            case_no = getattr(case, "case_no", "") or getattr(case, "caseName", "") or ""
+                            if case_no:
+                                case_nos.append(case_no)
+                        if case_nos:
+                            from core.config_manager import TestConfigManager
+                            config_manager = TestConfigManager()
+                            ini_path = config_manager.generate_select_info_ini(case_nos, cfg_dir)
+                            logger.info(f"[CANoe] SelectInfo.ini 已生成: {ini_path}")
+                            self.current_collector.add_log("INFO", f"SelectInfo.ini: {ini_path}")
+                    except Exception as e:
+                        logger.warning(f"[CANoe] SelectInfo.ini 生成失败: {e}")
+
             # 根据工具类型选择控制器（使用适配器工厂）
             step_start = time.time()
             try:
@@ -776,6 +795,34 @@ class TaskExecutorProduction:
         else:
             task_result = self.current_collector.finalize(TaskStatus.COMPLETED.value)
 
+        # 将执行结果保存到 task.result（供 API 详情页使用）
+        # 构建 API 期望的格式：{ "results": [...], "summary": {...} }
+        task_result_dict = None
+        if isinstance(task_result, ExecutionOutcome):
+            # 转换 case_results 为字典列表
+            results_list = []
+            for r in task_result.case_results:
+                if hasattr(r, 'to_dict'):
+                    results_list.append(r.to_dict())
+                else:
+                    results_list.append(r)
+
+            # 转换 summary，确保字段名兼容 API 期望的格式
+            summary = dict(task_result.summary) if task_result.summary else {}
+            # 将 passRate 转换为 pass_rate（如果存在）
+            if 'passRate' in summary:
+                summary['pass_rate'] = summary.pop('passRate')
+            # 添加 blocked 字段（API 期望有，但 ExecutionOutcome.summary 可能没有）
+            if 'blocked' not in summary:
+                total = summary.get('total', 0)
+                passed = summary.get('passed', 0)
+                summary['blocked'] = 0
+
+            task_result_dict = {
+                "results": results_list,
+                "summary": summary
+            }
+
         # 上报最终结果到WebSocket客户端
         self._report_final_result(task_id, task_result)
 
@@ -788,7 +835,7 @@ class TaskExecutorProduction:
 
         final_status = getattr(task_result, "status", TaskStatus.COMPLETED.value)
         if final_status == TaskStatus.COMPLETED.value:
-            self._update_task_status(task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒")
+            self._update_task_status(task_id, TaskStatus.COMPLETED, f"任务执行完成，耗时{duration:.1f}秒", result=task_result_dict)
             return
 
         error_message = getattr(task_result, "errorMessage", None) or "任务执行失败"
@@ -809,7 +856,7 @@ class TaskExecutorProduction:
             1,
             {'task_no': task_id, 'stage': observability_manager.get_snapshot(task_id).get('failed_stage') or ''},
         )
-        self._update_task_status(task_id, TaskStatus.FAILED, error_message)
+        self._update_task_status(task_id, TaskStatus.FAILED, error_message, result=task_result_dict)
     
     def _fail_task(self, task: Task, error_message: str):
         """任务失败"""
@@ -862,10 +909,30 @@ class TaskExecutorProduction:
                         logger.info(f"[_fail_task] 添加失败结果: {item_name}, case_no={case_no}")
 
         # 完成结果收集（失败状态）
+        task_result_dict = None
         if self.current_collector:
             task_result = self.current_collector.finalize(TaskStatus.FAILED.value, error_message)
             logger.info(f"[_fail_task] 结果收集完成: results={len(task_result.results)}")
             self._report_final_result(task_id, task_result)
+
+            # 构建 task_result_dict（供 API 详情页使用）
+            results_list = []
+            for r in task_result.case_results:
+                if hasattr(r, 'to_dict'):
+                    results_list.append(r.to_dict())
+                else:
+                    results_list.append(r)
+
+            summary = dict(task_result.summary) if task_result.summary else {}
+            if 'passRate' in summary:
+                summary['pass_rate'] = summary.pop('passRate')
+            if 'blocked' not in summary:
+                summary['blocked'] = 0
+
+            task_result_dict = {
+                "results": results_list,
+                "summary": summary
+            }
 
             # 上报到远端服务器
             logger.info(f"[_fail_task] 开始调用远端上报")
@@ -874,7 +941,7 @@ class TaskExecutorProduction:
             logger.warning(f"[_fail_task] current_collector 为 None，无法上报结果")
 
         # 更新状态
-        self._update_task_status(task_id, TaskStatus.FAILED, error_message)
+        self._update_task_status(task_id, TaskStatus.FAILED, error_message, result=task_result_dict)
     
     def _cleanup(self):
         """清理资源"""
@@ -1011,7 +1078,7 @@ class TaskExecutorProduction:
             logger.error(f"重试任务失败: {e}")
             return None
     
-    def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None):
+    def _update_task_status(self, task_no: str, status: TaskStatus, message: str = None, progress: int = None, result: Dict[str, Any] = None):
         """更新任务状态"""
         if self.current_collector:
             self.current_collector.add_status_update(status.value, message, progress)
@@ -1021,7 +1088,8 @@ class TaskExecutorProduction:
             global_task_queue.update_task_status(
                 task_no,
                 status.value,
-                error_message=message
+                error_message=message,
+                result=result
             )
         except Exception as e:
             logger.warning(f"更新全局任务队列状态失败: {e}")
