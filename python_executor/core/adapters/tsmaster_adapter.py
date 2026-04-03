@@ -542,9 +542,13 @@ class TSMasterAdapter(BaseTestAdapter):
             # 选择测试用例
             if test_cases:
                 if self._using_rpc and self._rpc_client:
-                    self._rpc_client.select_test_cases(test_cases)
+                    if not self._rpc_client.select_test_cases(test_cases):
+                        self._set_error("选择测试用例失败")
+                        return False
                 else:
-                    self._write_system_var("TestSystem.SelectCases", test_cases)
+                    if not self._write_system_var("TestSystem.SelectCases", test_cases):
+                        self._set_error("选择测试用例失败")
+                        return False
 
             # 启动测试
             if self._using_rpc and self._rpc_client:
@@ -744,6 +748,7 @@ class TSMasterAdapter(BaseTestAdapter):
 
             # 压缩报告和测试数据
             archive_path = None
+            temp_dir = None
             try:
                 # 获取 taskNo
                 task_no = self._current_task_no or "UNKNOWN"
@@ -781,15 +786,14 @@ class TSMasterAdapter(BaseTestAdapter):
 
             except Exception as e:
                 self.logger.error(f"创建报告压缩包失败: {e}")
-                archive_path = None
             finally:
                 # 清理临时目录
-                if 'temp_dir' in dir() and os.path.exists(temp_dir):
+                if temp_dir and os.path.exists(temp_dir):
                     try:
                         shutil.rmtree(temp_dir)
                         self.logger.info("临时目录已清理")
-                    except Exception:
-                        pass
+                    except Exception as cleanup_err:
+                        self.logger.warning(f"临时目录清理失败: {cleanup_err}")
 
             self.logger.info(f"测试报告信息: passed={passed}, failed={failed}, total={passed+failed}")
             return result
