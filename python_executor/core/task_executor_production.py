@@ -672,28 +672,26 @@ class TaskExecutorProduction:
                 # 通过 build_adapter_config 注入运行时配置（路径、超时、RPC 模式等）
                 runtime_cfg = _get_runtime_config_manager()
                 adapter_cfg = build_adapter_config(adapter_type, runtime_cfg)
-                raw_adapter = create_adapter(adapter_type, config=adapter_cfg, singleton=False)
-                self.controller = raw_adapter
-                logger.info(f"已创建适配器: {adapter_type.value}, config keys={list(adapter_cfg.keys())}")
+                with create_adapter(adapter_type, config=adapter_cfg, singleton=False) as adapter:
+                    self.controller = adapter
+                    logger.info(f"已创建适配器: {adapter_type.value}, config keys={list(adapter_cfg.keys())}")
+
+                    # ========== 连接测试软件（带重试） ==========
+                    step_start = time.time()
+                    self._connect_tool_with_retry(task)
+                    self._current_metrics.record_step('connect_tool', time.time() - step_start)
+
+                    step_start = time.time()
+                    results = self._run_strategy_execution(task, adapter=self.controller, config_path=task.config_path or "")
+                    self._current_metrics.record_step('strategy_execute', time.time() - step_start)
+
+                    # 完成任务
+                    self._complete_task(task, results)
+
+                    # 记录成功，重置熔断器
+                    TASK_CIRCUIT_BREAKER.record_success()
             except Exception as e:
                 raise TaskException(f"创建适配器失败: {e}")
-
-            self._current_metrics.record_step('controller_init', time.time() - step_start)
-
-            # 连接测试软件（带重试）
-            step_start = time.time()
-            self._connect_tool_with_retry(task)
-            self._current_metrics.record_step('connect_tool', time.time() - step_start)
-
-            step_start = time.time()
-            results = self._run_strategy_execution(task, adapter=self.controller, config_path=task.config_path or "")
-            self._current_metrics.record_step('strategy_execute', time.time() - step_start)
-            
-            # 完成任务
-            self._complete_task(task, results)
-            
-            # 记录成功，重置熔断器
-            TASK_CIRCUIT_BREAKER.record_success()
             
         except TaskException as e:
             logger.error(f"任务执行失败: {e}")

@@ -186,10 +186,10 @@ class BaseTestAdapter(CapabilityRegistryMixin, ABC):
     def validate_config(self, required_keys: List[str]) -> bool:
         """
         验证配置是否包含必需的键
-        
+
         Args:
             required_keys: 必需的配置键列表
-            
+
         Returns:
             验证通过返回True，否则返回False
         """
@@ -198,3 +198,16 @@ class BaseTestAdapter(CapabilityRegistryMixin, ABC):
             self._set_error(f"配置缺少必需的键: {missing_keys}")
             return False
         return True
+
+    def __enter__(self) -> 'BaseTestAdapter':
+        """上下文管理器入口"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口，确保断开连接"""
+        try:
+            if self.is_connected:
+                self.disconnect()
+        except Exception as e:
+            self.logger.warning(f"上下文管理器退出时断开连接失败: {e}")
+        return False  # 不吞没异常
