@@ -484,8 +484,10 @@
 
             quickAnalysis =
                 '<div class="card-quick-analysis">' +
-                    '<span class="tag error">Quick Analysis</span>' +
-                    '<span class="tag warning">Retry Available</span>' +
+                    '<button class="card-quick-analysis-btn" type="button">' +
+                        '<i class="fas fa-search-plus"></i> Quick Analysis' +
+                    '</button>' +
+                    '<div class="card-quick-analysis-content">' + escapeHtml(task.error_message || '') + '</div>' +
                 '</div>';
         }
 
@@ -581,6 +583,10 @@
 
         fetch('/api/tasks/' + taskId)
             .then(function(res) {
+                if (!res.ok) {
+                    console.error('Failed to load task detail: HTTP ' + res.status);
+                    return;
+                }
                 return res.json();
             })
             .then(function(result) {
