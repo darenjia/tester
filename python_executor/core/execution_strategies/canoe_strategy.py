@@ -142,6 +142,8 @@ class CANoeExecutionStrategy(ExecutionStrategy):
             return
 
         try:
+            # Ensure directory exists before generating SelectInfo.ini
+            os.makedirs(cfg_dir, exist_ok=True)
             from core.config_manager import TestConfigManager
             config_manager = TestConfigManager()
             config_manager.generate_select_info_ini(case_nos, cfg_dir)

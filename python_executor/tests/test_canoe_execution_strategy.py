@@ -234,3 +234,137 @@ def test_canoe_strategy_rejects_non_test_module_cases():
         assert "only supports test_module" in str(exc)
     else:
         raise AssertionError("non-test_module CANoe cases should be rejected")
+
+
+def test_canoe_strategy_groups_cases_by_config_path():
+    """Test that CANoe strategy groups cases by config_path and executes them in batch."""
+    strategy = CANoeExecutionStrategy()
+    executed_paths: list[tuple] = []
+
+    class _TestModuleCapability:
+        def execute_module(self, module_name, timeout=None):
+            executed_paths.append(("execute_module", module_name, timeout))
+            return {"verdict": "PASS", "details": {"module": module_name}}
+
+    class _ConfigurationCapability:
+        def load(self, config_path):
+            executed_paths.append(("load", config_path))
+            return True
+
+    class _MeasurementCapability:
+        def start(self):
+            executed_paths.append(("start_measurement", None))
+            return True
+
+        def stop(self):
+            executed_paths.append(("stop_measurement", None))
+
+    class _Adapter:
+        def get_capability(self, name, default=None):
+            mapping = {
+                "configuration": _ConfigurationCapability(),
+                "measurement": _MeasurementCapability(),
+                "test_module": _TestModuleCapability(),
+            }
+            return mapping.get(name, default)
+
+    class _Plan:
+        timeout_seconds = 30
+        cases = [
+            type("_Case", (), {
+                "case_name": "ModuleA",
+                "case_type": "test_module",
+                "case_no": "CANOE-001"
+            })(),
+            type("_Case", (), {
+                "case_name": "ModuleB",
+                "case_type": "test_module",
+                "case_no": "CANOE-002"
+            })(),
+        ]
+
+    collector = ResultCollector("CANOE-BATCH-001")
+
+    outcome = strategy.run(
+        _Plan(),
+        adapter=_Adapter(),
+        collector=collector,
+        config_path=r"D:\TAMS\DTTC_CONFIG\S59\BCANFD\Test.cfg"
+    )
+
+    # Verify grouping: same config_path means one load + one start_measurement
+    load_calls = [c for c in executed_paths if c[0] == "load"]
+    start_calls = [c for c in executed_paths if c[0] == "start_measurement"]
+    stop_calls = [c for c in executed_paths if c[0] == "stop_measurement"]
+
+    assert len(load_calls) == 1, f"Expected 1 load call, got {len(load_calls)}"
+    assert len(start_calls) == 1, f"Expected 1 start_measurement call, got {len(start_calls)}"
+    assert len(stop_calls) == 1, f"Expected 1 stop_measurement call, got {len(stop_calls)}"
+
+    # Verify all cases executed
+    execute_calls = [c for c in executed_paths if c[0] == "execute_module"]
+    assert len(execute_calls) == 2
+    assert outcome.status == "completed"
+    assert outcome.summary["total"] == 2
+
+
+def test_canoe_strategy_generates_select_info_ini(tmp_path):
+    """Test that CANoe strategy generates SelectInfo.ini before measurement."""
+    strategy = CANoeExecutionStrategy()
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir()
+    cfg_file = config_dir / "Test.cfg"
+    cfg_file.write_text("")
+    ini_file = config_dir / "SelectInfo.ini"
+
+    class _TestModuleCapability:
+        def execute_module(self, module_name, timeout=None):
+            return {"verdict": "PASS", "details": {"module": module_name}}
+
+    class _ConfigurationCapability:
+        def load(self, config_path):
+            return True
+
+    class _MeasurementCapability:
+        def start(self):
+            # Verify SelectInfo.ini exists before measurement starts
+            assert ini_file.exists(), "SelectInfo.ini should be generated before start_measurement"
+            content = ini_file.read_text()
+            assert "CANOE-001" in content, f"SelectInfo.ini should contain case_no, got: {content}"
+            return True
+
+        def stop(self):
+            pass
+
+    class _Adapter:
+        def get_capability(self, name, default=None):
+            mapping = {
+                "configuration": _ConfigurationCapability(),
+                "measurement": _MeasurementCapability(),
+                "test_module": _TestModuleCapability(),
+            }
+            return mapping.get(name, default)
+
+    class _Plan:
+        timeout_seconds = 30
+        cases = [
+            type("_Case", (), {
+                "case_name": "ModuleA",
+                "case_type": "test_module",
+                "case_no": "CANOE-001"
+            })(),
+        ]
+
+    collector = ResultCollector("CANOE-INI-001")
+
+    outcome = strategy.run(
+        _Plan(),
+        adapter=_Adapter(),
+        collector=collector,
+        config_path=str(cfg_file)
+    )
+
+    assert ini_file.exists()
+    content = ini_file.read_text()
+    assert "[CFG_PARA]" in content
+    assert "CANOE-001=1" in content
