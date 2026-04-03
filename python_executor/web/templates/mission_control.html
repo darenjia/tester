@@ -1,0 +1,447 @@
+{% extends "base.html" %}
+
+{% block title %}Mission Control - 测试执行器{% endblock %}
+{% block page_title %}Mission Control{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mission-control.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- Status Strip -->
+<div class="status-strip" id="status-strip">
+    <div class="health-pill" id="health-pill"></div>
+
+    <div class="running-task-container" id="running-task">
+        <span class="running-task-name" id="strip-task-name">—</span>
+        <div class="running-task-progress">
+            <div class="progress-fill" id="strip-progress-fill"></div>
+        </div>
+        <span class="running-task-elapsed" id="strip-elapsed">—</span>
+    </div>
+
+    <div class="strip-counters" id="strip-counters">
+        <span class="counter pending" data-status="pending">
+            <i class="fas fa-clock"></i>
+            <span class="counter-value" id="count-pending">0</span> 待执行
+        </span>
+        <span class="counter running" data-status="running">
+            <i class="fas fa-play"></i>
+            <span class="counter-value" id="count-running">0</span> 运行中
+        </span>
+        <span class="counter completed" data-status="completed">
+            <i class="fas fa-check-circle"></i>
+            <span class="counter-value" id="count-completed">0</span> 已完成
+        </span>
+        <span class="counter failed" data-status="failed">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span class="counter-value" id="count-failed">0</span> 失败
+        </span>
+    </div>
+
+    <div class="ws-indicator">
+        <span class="ws-dot" id="ws-dot"></span>
+        <span class="ws-status-text" id="ws-status-text">连接中</span>
+    </div>
+
+    <button class="focus-toggle-btn" id="focus-toggle-btn" onclick="toggleFocusMode()">
+        <i class="fas fa-expand"></i>
+        <span>专注模式</span>
+    </button>
+</div>
+
+<!-- Kanban Board -->
+<div class="kanban-board" id="kanban-board">
+    <!-- Column 1 - Pending -->
+    <div class="kanban-column" data-column="pending" data-status="pending">
+        <div class="kanban-column-header">
+            <span class="column-title"><i class="fas fa-clock"></i> Pending</span>
+            <span class="column-count">0</span>
+        </div>
+        <div class="kanban-column-body">
+            <div class="kanban-column-empty">
+                <i class="fas fa-inbox"></i>
+                <span>No tasks in queue — system is idle</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 2 - Running -->
+    <div class="kanban-column" data-column="running" data-status="running">
+        <div class="kanban-column-header">
+            <span class="column-title"><i class="fas fa-spinner fa-spin"></i> Running</span>
+            <span class="column-count">0</span>
+        </div>
+        <div class="kanban-column-body">
+            <div class="kanban-column-empty">
+                <i class="fas fa-play"></i>
+                <span>No tasks currently running</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 3 - Completed -->
+    <div class="kanban-column" data-column="completed" data-status="completed">
+        <div class="kanban-column-header">
+            <span class="column-title"><i class="fas fa-check-circle"></i> Completed</span>
+            <span class="column-count">0</span>
+        </div>
+        <div class="kanban-column-body">
+            <div class="kanban-column-empty">
+                <i class="fas fa-check-circle"></i>
+                <span>No completed tasks yet</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 4 - Failed -->
+    <div class="kanban-column" data-column="failed" data-status="failed">
+        <div class="kanban-column-header">
+            <span class="column-title"><i class="fas fa-exclamation-triangle"></i> Failed</span>
+            <span class="column-count">0</span>
+        </div>
+        <div class="kanban-column-body">
+            <div class="kanban-column-empty">
+                <i class="fas fa-check"></i>
+                <span>No failed tasks — all clear!</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide-in Detail Panel -->
+<div class="detail-panel-overlay" id="detail-overlay"></div>
+<div class="detail-slide-panel" id="detail-panel">
+    <div class="panel-header">
+        <h3>Task Detail</h3>
+        <button class="panel-close-btn" id="panel-close-btn">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="panel-tabs">
+        <button class="panel-tab active" data-tab="basic">Basic Info</button>
+        <button class="panel-tab" data-tab="execution">Execution</button>
+        <button class="panel-tab" data-tab="results">Results</button>
+        <button class="panel-tab" data-tab="logs">Logs</button>
+        <button class="panel-tab" data-tab="diagnosis">Diagnosis</button>
+    </div>
+    <div class="panel-body">
+        <div class="panel-content active" id="panel-basic"></div>
+        <div class="panel-content" id="panel-execution"></div>
+        <div class="panel-content" id="panel-results"></div>
+        <div class="panel-content" id="panel-logs"></div>
+        <div class="panel-content" id="panel-diagnosis"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/mission-control.js') }}"></script>
+<script>
+// Helper functions
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        'pending': 'Pending',
+        'running': 'Running',
+        'completed': 'Completed',
+        'failed': 'Failed',
+        'timeout': 'Timeout',
+        'cancelled': 'Cancelled'
+    };
+    return labels[status] || status || 'Unknown';
+}
+
+function getPriorityLabel(priority) {
+    const labels = {
+        '3': 'Critical',
+        '2': 'High',
+        '1': 'Normal',
+        '0': 'Low'
+    };
+    return labels[String(priority)] || 'Normal';
+}
+
+function formatTime(isoTime) {
+    if (!isoTime) return '—';
+    try {
+        return new Date(isoTime).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    } catch (e) {
+        return isoTime;
+    }
+}
+
+function formatDuration(seconds) {
+    if (!seconds && seconds !== 0) return '—';
+    const s = Math.round(seconds);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const remS = s % 60;
+    if (m < 60) return remS > 0 ? `${m}m ${remS}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
+}
+
+function formatLogTime(isoTime) {
+    if (!isoTime) return '—';
+    try {
+        const d = new Date(isoTime);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        const ms = String(d.getMilliseconds()).padStart(3, '0');
+        return `${hh}:${mm}:${ss}.${ms}`;
+    } catch (e) {
+        return isoTime;
+    }
+}
+
+// Panel content renderers
+window.renderPanelBasic = function(task) {
+    const container = document.getElementById('panel-basic');
+    if (!container) return;
+
+    const statusBadge = `task-status-badge status-${task.status || 'unknown'}`;
+    const statusText = getStatusLabel(task.status);
+
+    container.innerHTML = `
+        <div class="panel-hero">
+            <div class="hero-name">${escapeHtml(task.name || 'Unknown Task')}</div>
+            <div class="hero-meta">
+                <span class="${statusBadge}">${statusText}</span>
+                <span class="hero-task-id">ID: ${escapeHtml(task.id || '—')}</span>
+            </div>
+        </div>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Status</span>
+                <span class="info-value">${statusText}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Tool</span>
+                <span class="info-value">${escapeHtml(task.task_type || task.category || '—').toUpperCase()}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Created</span>
+                <span class="info-value">${formatTime(task.created_at)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Priority</span>
+                <span class="info-value">${getPriorityLabel(task.priority)}</span>
+            </div>
+            ${task.created_by ? `
+            <div class="info-item">
+                <span class="info-label">Creator</span>
+                <span class="info-value">${escapeHtml(task.created_by)}</span>
+            </div>
+            ` : ''}
+            ${task.category ? `
+            <div class="info-item">
+                <span class="info-label">Category</span>
+                <span class="info-value">${escapeHtml(task.category)}</span>
+            </div>
+            ` : ''}
+        </div>
+    `;
+};
+
+window.renderPanelExecution = function(task) {
+    const container = document.getElementById('panel-execution');
+    if (!container) return;
+
+    const exec = task.execution || {};
+    container.innerHTML = `
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Started</span>
+                <span class="info-value">${formatTime(exec.started_at)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Completed</span>
+                <span class="info-value">${formatTime(exec.completed_at)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Duration</span>
+                <span class="info-value">${formatDuration(exec.duration)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Retry Count</span>
+                <span class="info-value">${exec.retry_count ?? 0} / ${exec.max_retries ?? '—'}</span>
+            </div>
+        </div>
+        ${task.error_message ? `
+        <div class="error-section">
+            <div class="error-title"><i class="fas fa-exclamation-circle"></i> Error Message</div>
+            <div class="error-message">${escapeHtml(task.error_message)}</div>
+        </div>
+        ` : ''}
+    `;
+};
+
+window.renderPanelResults = function(task) {
+    const container = document.getElementById('panel-results');
+    if (!container) return;
+
+    const summary = task.result_summary || {};
+    const passRate = summary.pass_rate || (summary.total > 0
+        ? Math.round((summary.passed / summary.total) * 100) + '%'
+        : '—');
+
+    container.innerHTML = `
+        <div class="result-summary-grid">
+            <div class="summary-item">
+                <span class="summary-value">${summary.total ?? 0}</span>
+                <span class="summary-label">Total</span>
+            </div>
+            <div class="summary-item passed">
+                <span class="summary-value">${summary.passed ?? 0}</span>
+                <span class="summary-label">Passed</span>
+            </div>
+            <div class="summary-item failed">
+                <span class="summary-value">${summary.failed ?? 0}</span>
+                <span class="summary-label">Failed</span>
+            </div>
+            <div class="summary-item blocked">
+                <span class="summary-value">${summary.blocked ?? 0}</span>
+                <span class="summary-label">Blocked</span>
+            </div>
+            <div class="summary-item pass-rate">
+                <span class="summary-value">${passRate}</span>
+                <span class="summary-label">Pass Rate</span>
+            </div>
+        </div>
+        ${task.test_results && task.test_results.length > 0 ? `
+        <div class="test-results-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Test Case</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${task.test_results.map(r => `
+                    <tr>
+                        <td>${escapeHtml(r.name || r.test_case_no || '—')}</td>
+                        <td><span class="result-badge ${r.status || 'unknown'}">${getStatusLabel(r.status)}</span></td>
+                        <td>${formatDuration(r.duration)}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : '<div class="no-results">No test results available</div>'}
+    `;
+};
+
+window.renderPanelLogs = function(task) {
+    const container = document.getElementById('panel-logs');
+    if (!container) return;
+
+    const logStats = task.log_stats || {};
+    const logs = task.recent_logs || [];
+
+    container.innerHTML = `
+        <div class="log-stats-bar">
+            <span class="log-stat">
+                <span class="log-stat-label">Total:</span>
+                <span class="log-stat-value">${logStats.total || 0}</span>
+            </span>
+            <span class="log-stat info">
+                <span class="log-stat-label">INFO:</span>
+                <span class="log-stat-value">${logStats.INFO || 0}</span>
+            </span>
+            <span class="log-stat warning">
+                <span class="log-stat-label">WARNING:</span>
+                <span class="log-stat-value">${logStats.WARNING || 0}</span>
+            </span>
+            <span class="log-stat error">
+                <span class="log-stat-label">ERROR:</span>
+                <span class="log-stat-value">${logStats.ERROR || 0}</span>
+            </span>
+        </div>
+        ${logs.length > 0 ? `
+        <div class="panel-log-list">
+            ${logs.map(log => `
+            <div class="log-entry log-${(log.level || 'INFO').toLowerCase()}">
+                <span class="log-time">${formatLogTime(log.timestamp)}</span>
+                <span class="log-level">${escapeHtml(log.level || 'INFO')}</span>
+                <span class="log-message">${escapeHtml(log.message || '')}</span>
+            </div>
+            `).join('')}
+        </div>
+        ` : '<div class="no-logs">No logs available</div>'}
+    `;
+};
+
+window.renderPanelDiagnosis = function(task) {
+    const container = document.getElementById('panel-diagnosis');
+    if (!container) return;
+
+    const logStats = task.log_stats || {};
+    const params = task.params || {};
+    const metadata = task.metadata || {};
+
+    container.innerHTML = `
+        <div class="diagnosis-grid">
+            <div class="diagnosis-item">
+                <span class="diagnosis-label">Can Retry</span>
+                <span class="diagnosis-value">${task.can_retry ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-secondary">No</span>'}</span>
+            </div>
+            <div class="diagnosis-item">
+                <span class="diagnosis-label">Log Count</span>
+                <span class="diagnosis-value">${logStats.total || 0}</span>
+            </div>
+            <div class="diagnosis-item">
+                <span class="diagnosis-label">Creator</span>
+                <span class="diagnosis-value">${escapeHtml(task.created_by || '—')}</span>
+            </div>
+            <div class="diagnosis-item">
+                <span class="diagnosis-label">Category</span>
+                <span class="diagnosis-value">${escapeHtml(task.category || '—')}</span>
+            </div>
+        </div>
+        ${Object.keys(params).length > 0 ? `
+        <div class="diagnosis-section">
+            <div class="diagnosis-section-title">Parameters</div>
+            <pre class="json-block">${escapeHtml(JSON.stringify(params, null, 2))}</pre>
+        </div>
+        ` : ''}
+        ${Object.keys(metadata).length > 0 ? `
+        <div class="diagnosis-section">
+            <div class="diagnosis-section-title">Metadata</div>
+            <pre class="json-block">${escapeHtml(JSON.stringify(metadata, null, 2))}</pre>
+        </div>
+        ` : ''}
+    `;
+};
+
+window.renderPanelContent = function(task) {
+    window.renderPanelBasic(task);
+    window.renderPanelExecution(task);
+    window.renderPanelResults(task);
+    window.renderPanelLogs(task);
+    window.renderPanelDiagnosis(task);
+    // Switch to basic tab
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('.panel-tab[data-tab="basic"]').classList.add('active');
+    document.getElementById('panel-basic').classList.add('active');
+};
+</script>
+{% endblock %}
