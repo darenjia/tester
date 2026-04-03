@@ -710,6 +710,11 @@ class TSMasterAdapter(BaseTestAdapter):
         Returns:
             Dict with report_path, testdata_path, passed, failed, total
             Returns None if not connected or error
+
+        TODO: 当前只返回统计数字(passed/failed/total)，缺失 results 详细用例列表。
+              后续需要解析 XML 报告文件，提取每个 <TestCase> 的 name/verdict/duration
+              等属性，组装为: "results": [{"name": "TC01", "verdict": "PASS", ...}, ...]
+              对接 tsmaster_strategy.py 的预期格式。
         """
         if not self.is_connected:
             self._set_error("TSMaster未连接，无法获取测试报告信息")
