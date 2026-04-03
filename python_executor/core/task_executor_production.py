@@ -20,6 +20,7 @@ from utils.report_client import ReportClient
 from config.settings import get_config as get_runtime_config
 from models.task import Task, TaskStatus, TestToolType, TestResult, TaskResult
 from models.result import CaseResult, ExecutionResult, ExecutionOutcome
+from models.task_log import task_log_manager
 from models.executor_task import task_queue as global_task_queue, TaskStatus as ExecutorTaskStatus
 from core.result_collector import ResultCollector
 from core.config_manager import TestConfigManager
@@ -823,6 +824,19 @@ class TaskExecutorProduction:
                 "summary": summary
             }
 
+        # 同步 ResultCollector 中的日志到 task_log_manager（供 API 详情页使用）
+        if self.current_collector and self.current_collector.logs:
+            for log_entry in self.current_collector.logs:
+                from models.task_log import TaskLog
+                task_log = TaskLog(
+                    task_id=task_id,
+                    level=log_entry.level,
+                    message=log_entry.message,
+                    timestamp=log_entry.timestamp.isoformat() if isinstance(log_entry.timestamp, datetime) else log_entry.timestamp,
+                    details=log_entry.details
+                )
+                task_log_manager.add_log(task_log)
+
         # 上报最终结果到WebSocket客户端
         self._report_final_result(task_id, task_result)
 
@@ -933,6 +947,18 @@ class TaskExecutorProduction:
                 "results": results_list,
                 "summary": summary
             }
+
+            # 同步 ResultCollector 中的日志到 task_log_manager（供 API 详情页使用）
+            for log_entry in self.current_collector.logs:
+                from models.task_log import TaskLog
+                task_log = TaskLog(
+                    task_id=task_id,
+                    level=log_entry.level,
+                    message=log_entry.message,
+                    timestamp=log_entry.timestamp.isoformat() if isinstance(log_entry.timestamp, datetime) else log_entry.timestamp,
+                    details=log_entry.details
+                )
+                task_log_manager.add_log(task_log)
 
             # 上报到远端服务器
             logger.info(f"[_fail_task] 开始调用远端上报")
