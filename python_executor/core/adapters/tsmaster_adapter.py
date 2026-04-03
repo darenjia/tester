@@ -82,6 +82,7 @@ class TSMasterAdapter(BaseTestAdapter):
         self.start_timeout = self.config.get("start_timeout", self.DEFAULT_START_TIMEOUT)
         self.stop_timeout = self.config.get("stop_timeout", self.DEFAULT_STOP_TIMEOUT)
         self.operation_timeout = self.config.get("operation_timeout", self.DEFAULT_OPERATION_TIMEOUT)
+        self._current_task_no = None
         self.use_rpc = self.config.get("use_rpc", True)
         self.rpc_app_name = self.config.get("rpc_app_name", None)
         self.fallback_to_traditional = self.config.get("fallback_to_traditional", True)
@@ -110,8 +111,9 @@ class TSMasterAdapter(BaseTestAdapter):
             "tsmaster_execution",
             TSMasterExecutionCapability(
                 build_case_selection=self.build_case_selection,
-                start_execution=lambda selected_cases: self.start_test_execution(
+                start_execution=lambda selected_cases, task_no=None: self.start_test_execution(
                     test_cases=selected_cases,
+                    task_no=task_no,
                     wait_for_complete=False,
                     timeout=self.operation_timeout,
                 ),
@@ -507,6 +509,7 @@ class TSMasterAdapter(BaseTestAdapter):
             return False
 
     def start_test_execution(self, test_cases: Optional[str] = None,
+                            task_no: Optional[str] = None,
                             wait_for_complete: bool = True,
                             timeout: Optional[int] = None) -> bool:
         """
@@ -520,6 +523,9 @@ class TSMasterAdapter(BaseTestAdapter):
         Returns:
             启动成功返回True，否则返回False
         """
+        if task_no:
+            self._current_task_no = task_no
+
         if not self.is_connected:
             self._set_error("TSMaster未连接，无法执行测试")
             return False
